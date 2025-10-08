@@ -2,9 +2,20 @@ name: Build and Deploy Backend
 
 on:
   push:
-    branches: [main, dev, stage]
+    branches: [dev, stage]
   pull_request:
     branches: [main, dev, stage]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+        - production
+        - staging
+        - development
 
 env:
   DOTNET_VERSION: '8.0.x'
@@ -146,7 +157,7 @@ jobs:
   deploy-prod:
     needs: build
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production'
     
     steps:
       - name: Download build artifacts
