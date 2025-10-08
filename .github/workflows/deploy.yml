@@ -57,7 +57,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+          aws-region: eu-north-1
 
       - name: Login to Amazon ECR
         id: login-ecr
@@ -66,23 +66,31 @@ jobs:
       - name: Build, tag, and push image to Amazon ECR
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: amesa-backend-dev
-          IMAGE_TAG: ${{ github.sha }}
+          ECR_REPOSITORY: amesabe
+          IMAGE_TAG: dev-${{ github.sha }}
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          echo "🐳 Building Docker image for dev environment..."
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG ./AmesaBackend
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:dev-latest
+          echo "📤 Pushing to ECR..."
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:dev-latest
           echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+          echo "✅ Docker image pushed successfully!"
 
-      - name: Deploy to ECS
+      - name: Update ECS Task Definition
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: amesa-backend-dev
-          IMAGE_TAG: ${{ github.sha }}
+          ECR_REPOSITORY: amesabe
+          IMAGE_TAG: dev-${{ github.sha }}
         run: |
+          echo "🔄 Updating ECS service for dev environment..."
           aws ecs update-service \
             --cluster ${{ secrets.DEV_ECS_CLUSTER }} \
             --service ${{ secrets.DEV_ECS_SERVICE }} \
-            --force-new-deployment
+            --force-new-deployment \
+            --region eu-north-1
+          echo "✅ ECS service updated successfully!"
 
   deploy-stage:
     needs: build
@@ -101,7 +109,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+          aws-region: eu-north-1
 
       - name: Login to Amazon ECR
         id: login-ecr
@@ -110,22 +118,30 @@ jobs:
       - name: Build, tag, and push image to Amazon ECR
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: amesa-backend-stage
-          IMAGE_TAG: ${{ github.sha }}
+          ECR_REPOSITORY: amesabe
+          IMAGE_TAG: stage-${{ github.sha }}
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          echo "🐳 Building Docker image for stage environment..."
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG ./AmesaBackend
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:stage-latest
+          echo "📤 Pushing to ECR..."
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:stage-latest
+          echo "✅ Docker image pushed successfully!"
 
-      - name: Deploy to ECS
+      - name: Update ECS Task Definition
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: amesa-backend-stage
-          IMAGE_TAG: ${{ github.sha }}
+          ECR_REPOSITORY: amesabe
+          IMAGE_TAG: stage-${{ github.sha }}
         run: |
+          echo "🔄 Updating ECS service for stage environment..."
           aws ecs update-service \
             --cluster ${{ secrets.STAGE_ECS_CLUSTER }} \
             --service ${{ secrets.STAGE_ECS_SERVICE }} \
-            --force-new-deployment
+            --force-new-deployment \
+            --region eu-north-1
+          echo "✅ ECS service updated successfully!"
 
   deploy-prod:
     needs: build
@@ -144,7 +160,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+          aws-region: eu-north-1
 
       - name: Login to Amazon ECR
         id: login-ecr
@@ -153,19 +169,29 @@ jobs:
       - name: Build, tag, and push image to Amazon ECR
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: amesa-backend-prod
-          IMAGE_TAG: ${{ github.sha }}
+          ECR_REPOSITORY: amesabe
+          IMAGE_TAG: prod-${{ github.sha }}
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          echo "🐳 Building Docker image for production environment..."
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG ./AmesaBackend
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:prod-latest
+          echo "📤 Pushing to ECR..."
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:prod-latest
+          echo "✅ Docker image pushed successfully!"
 
-      - name: Deploy to ECS
+      - name: Update ECS Task Definition
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: amesa-backend-prod
-          IMAGE_TAG: ${{ github.sha }}
+          ECR_REPOSITORY: amesabe
+          IMAGE_TAG: prod-${{ github.sha }}
         run: |
+          echo "🔄 Updating ECS service for production environment..."
           aws ecs update-service \
             --cluster ${{ secrets.PROD_ECS_CLUSTER }} \
             --service ${{ secrets.PROD_ECS_SERVICE }} \
-            --force-new-deployment
+            --force-new-deployment \
+            --region eu-north-1
+          echo "✅ ECS service updated successfully!"
