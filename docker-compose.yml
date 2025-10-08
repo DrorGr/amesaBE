@@ -1,0 +1,132 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: amesa-postgres
+    environment:
+      POSTGRES_DB: amesa_lottery
+      POSTGRES_USER: amesa_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-secure_password_here}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database-schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - amesa-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U amesa_user -d amesa_lottery"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: amesa-redis
+    command: redis-server --requirepass ${REDIS_PASSWORD:-redis_password_here}
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - amesa-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Amesa Backend API
+  api:
+    build:
+      context: ./AmesaBackend
+      dockerfile: Dockerfile
+    container_name: amesa-api
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - DB_HOST=postgres
+      - DB_NAME=amesa_lottery
+      - DB_USER=amesa_user
+      - DB_PASSWORD=${DB_PASSWORD:-secure_password_here}
+      - DB_PORT=5432
+      - REDIS_CONNECTION_STRING=redis:6379,password=${REDIS_PASSWORD:-redis_password_here}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-key-that-is-at-least-32-characters-long-change-this-in-production}
+      - JWT_ISSUER=AmesaLottery
+      - JWT_AUDIENCE=AmesaLotteryUsers
+      - FRONTEND_URL=${FRONTEND_URL:-https://amesa.com}
+      - FRONTEND_URL_WWW=${FRONTEND_URL_WWW:-https://www.amesa.com}
+      - API_URL=${API_URL:-https://api.amesa.com}
+      - SMTP_SERVER=${SMTP_SERVER:-smtp.gmail.com}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USERNAME=${SMTP_USERNAME:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - FROM_EMAIL=${FROM_EMAIL:-noreply@amesa.com}
+      - FROM_NAME=${FROM_NAME:-Amesa Lottery}
+      - STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY:-}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
+      - PAYPAL_CLIENT_ID=${PAYPAL_CLIENT_ID:-}
+      - PAYPAL_CLIENT_SECRET=${PAYPAL_CLIENT_SECRET:-}
+      - PAYPAL_ENVIRONMENT=${PAYPAL_ENVIRONMENT:-production}
+      - FILE_STORAGE_PROVIDER=${FILE_STORAGE_PROVIDER:-AWS}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - AWS_S3_BUCKET=${AWS_S3_BUCKET:-amesa-uploads}
+      - QR_CODE_SECRET_KEY=${QR_CODE_SECRET_KEY:-your-qr-code-secret-key-change-this-in-production-make-it-very-long-and-secure}
+    ports:
+      - "5000:80"
+    volumes:
+      - api_logs:/app/logs
+      - api_uploads:/app/wwwroot/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - amesa-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: amesa-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - api_uploads:/var/www/uploads:ro
+    depends_on:
+      - api
+    networks:
+      - amesa-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  api_logs:
+    driver: local
+  api_uploads:
+    driver: local
+
+networks:
+  amesa-network:
+    driver: bridge
+

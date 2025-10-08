@@ -1,0 +1,88 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database for Development
+  postgres-dev:
+    image: postgres:15-alpine
+    container_name: amesa-postgres-dev
+    environment:
+      POSTGRES_DB: amesa_lottery_dev
+      POSTGRES_USER: amesa_user
+      POSTGRES_PASSWORD: dev_password_123
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    networks:
+      - amesa-dev-network
+    restart: unless-stopped
+
+  # Redis Cache for Development
+  redis-dev:
+    image: redis:7-alpine
+    container_name: amesa-redis-dev
+    command: redis-server --requirepass dev_redis_password
+    volumes:
+      - redis_dev_data:/data
+    ports:
+      - "6380:6379"
+    networks:
+      - amesa-dev-network
+    restart: unless-stopped
+
+  # Amesa Backend API for Development
+  api-dev:
+    build:
+      context: ./AmesaBackend
+      dockerfile: Dockerfile
+    container_name: amesa-api-dev
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - DB_HOST=postgres-dev
+      - DB_NAME=amesa_lottery_dev
+      - DB_USER=amesa_user
+      - DB_PASSWORD=dev_password_123
+      - DB_PORT=5432
+      - REDIS_CONNECTION_STRING=redis-dev:6379,password=dev_redis_password
+      - JWT_SECRET_KEY=dev-jwt-secret-key-for-development-only-not-for-production
+      - JWT_ISSUER=AmesaLottery
+      - JWT_AUDIENCE=AmesaLotteryUsers
+      - FRONTEND_URL=http://localhost:4200
+      - FRONTEND_URL_WWW=http://localhost:4201
+      - API_URL=http://localhost:5000
+      - SMTP_SERVER=localhost
+      - SMTP_PORT=1025
+      - SMTP_USERNAME=
+      - SMTP_PASSWORD=
+      - FROM_EMAIL=noreply@amesa.dev
+      - FROM_NAME=Amesa Lottery Dev
+      - STRIPE_PUBLISHABLE_KEY=pk_test_dev_key
+      - STRIPE_SECRET_KEY=sk_test_dev_key
+      - STRIPE_WEBHOOK_SECRET=whsec_dev_secret
+      - PAYPAL_CLIENT_ID=dev_paypal_client_id
+      - PAYPAL_CLIENT_SECRET=dev_paypal_client_secret
+      - PAYPAL_ENVIRONMENT=sandbox
+      - FILE_STORAGE_PROVIDER=Local
+      - QR_CODE_SECRET_KEY=dev-qr-code-secret-key-for-development-only
+    ports:
+      - "5001:80"
+    volumes:
+      - ./AmesaBackend/logs:/app/logs
+      - ./AmesaBackend/wwwroot/uploads:/app/wwwroot/uploads
+    depends_on:
+      - postgres-dev
+      - redis-dev
+    networks:
+      - amesa-dev-network
+    restart: unless-stopped
+
+volumes:
+  postgres_dev_data:
+    driver: local
+  redis_dev_data:
+    driver: local
+
+networks:
+  amesa-dev-network:
+    driver: bridge
+
