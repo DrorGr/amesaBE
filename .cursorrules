@@ -1,0 +1,303 @@
+# AmesaBE Project - Cursor Rules
+
+## Project Overview
+AmesaBE is the backend API for the Amesa lottery management system. Built with .NET 8.0 and ASP.NET Core, it provides RESTful APIs, real-time communication via SignalR, and integrates with Aurora PostgreSQL for data persistence.
+
+## Repository Structure
+- **AmesaBackend**: Main .NET 8.0 API project → Docker + ECS
+- **AmesaBackend.Tests**: Unit and integration tests
+- **Related Repos**: amesaFE (Frontend), amesaDevOps (Infrastructure)
+
+## Technology Stack
+- **Backend**: .NET 8.0, ASP.NET Core, Entity Framework Core
+- **Database**: Aurora PostgreSQL Serverless v2, SQLite (dev)
+- **Real-time**: SignalR for live lottery updates
+- **Authentication**: JWT Bearer tokens, OAuth 2.0
+- **Payment**: Stripe integration
+- **Caching**: Redis (planned)
+- **Infrastructure**: AWS (ECS Fargate, ECR, ALB, Aurora)
+- **CI/CD**: GitHub Actions
+- **Version Control**: Git with GitHub repository
+- **Package Management**: NuGet
+
+## Current Status (2025-10-10)
+- **Repository**: https://github.com/DrorGr/amesaBE
+- **Main branch**: Stable, manual deployment only
+- **Dev/Stage branches**: Auto-deploy on push
+- **Current Branch**: main
+- **Working Tree**: Has uncommitted workflow changes
+- **Deployment**: ECS Fargate with Docker containers
+
+## Environment Configuration
+
+### Development Environment
+- **ECS Cluster**: Amesa (dev service)
+- **Database**: amesadbmain-stage (shared with staging)
+- **ALB**: amesa-backend-stage-alb-467028641.eu-north-1.elb.amazonaws.com
+- **ECR Image Tag**: dev-{sha}, dev-latest
+- **Deployment**: Auto on push to dev branch
+
+### Staging Environment
+- **ECS Cluster**: Amesa (stage service)
+- **Database**: amesadbmain-stage
+- **ALB**: amesa-backend-stage-alb-467028641.eu-north-1.elb.amazonaws.com
+- **ECR Image Tag**: stage-{sha}, stage-latest
+- **Deployment**: Auto on push to stage branch
+
+### Production Environment
+- **ECS Cluster**: Amesa (prod service)
+- **Database**: amesadbmain
+- **ALB**: amesa-backend-alb-509078867.eu-north-1.elb.amazonaws.com
+- **ECR Image Tag**: prod-{sha}, latest, prod-latest
+- **Deployment**: Manual via workflow_dispatch only
+
+## AWS Infrastructure
+- **Region**: eu-north-1 (Stockholm)
+- **Account**: 129394705401
+- **ECR Repository**: amesabe
+- **ECS Cluster**: Amesa (all environments)
+- **Aurora PostgreSQL**: Serverless v2 with separate prod/stage clusters
+- **ALB**: Application Load Balancers for staging and production
+- **CloudWatch**: Logs and monitoring
+
+## API Structure
+
+### Core Endpoints
+- **Health**: `/health` - Service health check
+- **Auth**: `/api/v1/auth/*` - Authentication and user management
+- **Houses**: `/api/v1/houses/*` - Lottery properties and tickets
+- **Translations**: `/api/v1/translations/*` - Internationalization
+- **Lottery Results**: `/api/v1/lottery-results/*` - Draw results
+
+### Real-time Hubs (SignalR)
+- **LotteryHub**: Live lottery updates, ticket purchases
+- **NotificationHub**: Real-time notifications
+
+## Coding Standards
+
+### .NET/C# Best Practices
+- Use .NET 8.0 features and patterns
+- Follow async/await patterns for all I/O operations
+- Implement proper dependency injection
+- Use Entity Framework Core with migrations
+- Follow RESTful API design principles
+- Implement comprehensive error handling
+- Use structured logging with Serilog
+
+### API Design
+- Versioned endpoints (`/api/v1/`)
+- Consistent response format (success/error wrapping)
+- Proper HTTP status codes
+- Request/response DTOs for all endpoints
+- Swagger/OpenAPI documentation
+- Input validation with FluentValidation
+- Rate limiting and throttling
+
+### Security
+- JWT Bearer authentication
+- Role-based authorization
+- CORS configuration
+- Security headers middleware
+- Input sanitization
+- SQL injection prevention (parameterized queries)
+- Secrets management via AWS Secrets Manager
+
+### Database
+- PostgreSQL in production/staging
+- SQLite for local development
+- Entity Framework Core migrations
+- Connection pooling and retry logic
+- Database seeding for initial data
+
+## Project Structure Guidelines
+
+### Controllers
+- Thin controllers, business logic in services
+- Action-level authorization attributes
+- Comprehensive XML documentation comments
+- Proper model validation
+
+### Services
+- Interface-based service pattern
+- Scoped/Singleton lifetime management
+- Async methods for I/O operations
+- Dependency injection
+
+### DTOs
+- Separate request/response models
+- AutoMapper for entity mapping
+- Validation attributes
+
+### Middleware
+- Error handling middleware (global exception handler)
+- Request logging middleware
+- Security headers middleware
+- Authentication/authorization middleware
+
+## Docker Configuration
+- **Base Image**: mcr.microsoft.com/dotnet/aspnet:8.0
+- **Port**: 8080 (HTTP)
+- **Health Check**: `/health` endpoint
+- **Non-root user**: app user for security
+- **Multi-stage build**: Separate build and runtime stages
+
+## Deployment Flow
+
+### Automatic Deployment
+1. **Dev Branch** → Push → GitHub Actions → ECR → ECS Dev
+2. **Stage Branch** → Push → GitHub Actions → ECR → ECS Stage
+3. **Main Branch** → Manual workflow_dispatch → ECR → ECS Prod
+
+### GitHub Secrets Required
+- `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
+- `DEV_ECS_CLUSTER`, `DEV_ECS_SERVICE`
+- `STAGE_ECS_CLUSTER`, `STAGE_ECS_SERVICE`
+- `PROD_ECS_CLUSTER`, `PROD_ECS_SERVICE`
+- `DEV_DB_CONNECTION_STRING`, `STAGE_DB_CONNECTION_STRING`, `PROD_DB_CONNECTION_STRING`
+- `DEV_JWT_SECRET_KEY`, `STAGE_JWT_SECRET_KEY`, `PROD_JWT_SECRET_KEY`
+
+## Common Commands
+
+### Local Development
+```bash
+# Restore dependencies
+dotnet restore
+
+# Build solution
+dotnet build
+
+# Run tests
+dotnet test
+
+# Run application
+dotnet run --project AmesaBackend
+
+# Run with database seeding
+dotnet run --project AmesaBackend -- --seeder
+
+# Watch mode (auto-reload)
+dotnet watch run --project AmesaBackend
+```
+
+### Database Operations
+```bash
+# Add migration
+dotnet ef migrations add MigrationName --project AmesaBackend
+
+# Update database
+dotnet ef database update --project AmesaBackend
+
+# Rollback migration
+dotnet ef database update PreviousMigrationName --project AmesaBackend
+
+# Generate SQL script
+dotnet ef migrations script --project AmesaBackend
+```
+
+### Docker Operations
+```bash
+# Build Docker image
+docker build -t amesa-backend:dev ./AmesaBackend
+
+# Run Docker container
+docker run -p 8080:8080 amesa-backend:dev
+
+# Docker Compose (development)
+docker-compose -f docker-compose.dev.yml up
+
+# Docker Compose (production-like)
+docker-compose up
+```
+
+### AWS Operations
+```bash
+# List ECS services
+aws ecs list-services --cluster Amesa --region eu-north-1
+
+# Describe ECS service
+aws ecs describe-services --cluster Amesa --services amesa-backend-service --region eu-north-1
+
+# View service logs
+aws logs tail /ecs/amesa-backend --follow --region eu-north-1
+
+# List ECR images
+aws ecr describe-images --repository-name amesabe --region eu-north-1
+
+# Database cluster info
+aws rds describe-db-clusters --db-cluster-identifier amesadbmain --region eu-north-1
+```
+
+### Git Operations
+```bash
+# Check status
+git status
+
+# View recent commits
+git log --oneline -5
+
+# Switch branches
+git checkout dev
+git checkout stage
+git checkout main
+```
+
+## Context Files to Maintain
+- `CONTEXT_QUICK_REFERENCE.md` - Essential project info
+- `CURRENT_WORK.md` - Current tasks and status
+- `CURRENT_STATUS_SUMMARY.md` - Latest status overview
+- `DEPLOYMENT_STATUS_REPORT.md` - Environment status
+- `TROUBLESHOOTING.md` - Common issues and solutions
+- `API-Design.md` - API endpoint documentation
+- `README.md` - Project documentation
+- `GITHUB_SECRETS_SETUP.md` - Secrets configuration guide
+
+## Agent Instructions
+- Always check context files for current project status
+- Update relevant context files when making changes
+- Follow .NET 8.0 and ASP.NET Core best practices
+- Maintain RESTful API design principles
+- Document API changes in Swagger/OpenAPI
+- Test changes with unit and integration tests
+- Ensure database migrations are properly created
+- **CRITICAL**: If any changes relate to API design, database schema, deployment, or infrastructure, update the appropriate context files and this .cursorrules file
+
+## Architecture Overview
+
+### System Architecture
+```
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│   Frontend      │───▶│     Backend      │───▶│    Database     │
+│                 │    │                  │    │                 │
+│ Angular 20.2.1  │    │ .NET 8.0         │    │ Aurora PostgreSQL│
+│ S3 + CloudFront │    │ ECS Fargate      │    │ Serverless v2   │
+└─────────────────┘    │ Docker + ALB     │    └─────────────────┘
+                       │ SignalR Hubs     │
+                       └──────────────────┘
+```
+
+### Request Flow
+```
+Client → CloudFront /api/* → ALB → ECS Task → .NET API → Aurora PostgreSQL
+                                              → SignalR Hub → WebSocket Connection
+```
+
+## Business Context
+- **4Wins Model**: Property lottery platform
+- **Legal Compliance**: Gaming regulations, responsible gambling
+- **Payment Processing**: Secure Stripe integration
+- **Multi-language**: Internationalization support
+- **Real-time Features**: Live lottery updates via SignalR
+- **Identity Verification**: KYC/AML compliance
+
+## Recent Major Work (2025-10-08)
+- ✅ Configured GitHub Actions CI/CD pipeline
+- ✅ Set up ECS/ECR deployment flow
+- ✅ Implemented multi-environment strategy
+- ✅ Added health check endpoints
+- ✅ Configured database authentication
+- ✅ Set up comprehensive translations
+
+---
+**Last Updated**: 2025-10-10
+**Note**: This file should be updated whenever API design, database schema, deployment processes, or infrastructure changes.
+

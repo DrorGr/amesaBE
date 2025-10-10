@@ -2,6 +2,19 @@
 
 This is the backend API for the Amesa Lottery system, built with .NET 8 and ASP.NET Core.
 
+## 📚 Documentation Quick Links
+
+For comprehensive information about the project, see these context files:
+
+- **[.cursorrules](.cursorrules)** - Complete project context and coding standards
+- **[CONTEXT_QUICK_REFERENCE.md](CONTEXT_QUICK_REFERENCE.md)** - Quick reference for new sessions
+- **[CURRENT_WORK.md](CURRENT_WORK.md)** - Current development status and tasks
+- **[CURRENT_STATUS_SUMMARY.md](CURRENT_STATUS_SUMMARY.md)** - Overall system status
+- **[DEPLOYMENT_STATUS_REPORT.md](DEPLOYMENT_STATUS_REPORT.md)** - Detailed deployment information
+- **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - Common issues and solutions
+- **[API-Design.md](API-Design.md)** - Complete API endpoint documentation
+- **[GITHUB_SECRETS_SETUP.md](GITHUB_SECRETS_SETUP.md)** - GitHub secrets configuration guide
+
 ## Environment Configuration
 
 The application supports multiple environments: development, dev, stage, and production. Environment-specific configurations are managed through GitHub Secrets and environment variables.
