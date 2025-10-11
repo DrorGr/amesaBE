@@ -1,10 +1,11 @@
-# Quick Reference for New Chat Sessions
+# Quick Reference for New Chat Sessions - Backend
 
 ## Essential Information
 - **Project**: AmesaBE (Backend API for Amesa Lottery Platform)
 - **Business Model**: Property lottery with 4Wins Model (community support)
-- **Repository**: https://github.com/DrorGr/amesaBE
-- **Current Repo**: amesaBE (Backend)
+- **Workspace**: AmesaBase-Monorepo at `C:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\`
+- **This Repository**: BE/ (Backend) → https://github.com/DrorGr/amesaBE
+- **Frontend Repository**: FE/ → https://github.com/DrorGr/amesaFE
 - **Current Branch**: main
 - **Architecture**: .NET 8.0 + ASP.NET Core + Aurora PostgreSQL
 - **Deployment**: AWS (ECS Fargate + ECR + ALB)
@@ -132,15 +133,22 @@ git checkout main
 - **AWS Secrets Manager** for sensitive configuration
 
 ## When Starting New Chat
-1. Share `.cursorrules` file
-2. Share `CONTEXT_QUICK_REFERENCE.md`
-3. Share `CURRENT_WORK.md`
-4. Share `CURRENT_STATUS_SUMMARY.md`
-5. Share `DEPLOYMENT_STATUS_REPORT.md`
-6. Share `API-Design.md`
-7. Share `README.md`
-8. Mention current repo, branch, and recent changes
+1. **Mention monorepo structure** - This is BE/ in AmesaBase-Monorepo
+2. Share `BE/.cursorrules` - Backend context
+3. Share `BE/CONTEXT_QUICK_REFERENCE.md` - This file
+4. Share `BE/CURRENT_WORK.md` - Current status
+5. Share `BE/API-Design.md` - API documentation
+6. Reference `../MetaData/Documentation/` for cross-cutting docs
+7. Reference `../MetaData/Reference/ENVIRONMENT_URLS_GRID.csv` for URLs
+8. Mention current branch and recent changes
 9. Describe what you need help with
+
+## Monorepo Navigation
+- **Backend work**: You're here in `BE/`
+- **Frontend work**: Switch to `../FE/`
+- **Documentation**: Check `../MetaData/Documentation/`
+- **Scripts**: Check `../MetaData/Scripts/`
+- **Configs**: Check `../MetaData/Configs/`
 
 ## Important Notes
 - **Production deployments** require manual workflow_dispatch

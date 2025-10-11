@@ -1,7 +1,14 @@
-# AmesaBE Project - Cursor Rules
+# AmesaBE Project - Backend - Cursor Rules
 
 ## Project Overview
 AmesaBE is the backend API for the Amesa lottery management system. Built with .NET 8.0 and ASP.NET Core, it provides RESTful APIs, real-time communication via SignalR, and integrates with Aurora PostgreSQL for data persistence.
+
+## Workspace Structure
+**⚠️ This repository is part of the AmesaBase-Monorepo workspace**
+- **Monorepo Root**: `C:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\`
+- **Frontend (FE/)**: Angular frontend → https://github.com/DrorGr/amesaFE
+- **This Repository (BE/)**: .NET 8.0 backend → https://github.com/DrorGr/amesaBE
+- **MetaData/**: Cross-cutting docs, scripts, and configs
 
 ## Repository Structure
 - **AmesaBackend**: Main .NET 8.0 API project → Docker + ECS
@@ -242,14 +249,22 @@ git checkout main
 ```
 
 ## Context Files to Maintain
-- `CONTEXT_QUICK_REFERENCE.md` - Essential project info
-- `CURRENT_WORK.md` - Current tasks and status
-- `CURRENT_STATUS_SUMMARY.md` - Latest status overview
-- `DEPLOYMENT_STATUS_REPORT.md` - Environment status
-- `TROUBLESHOOTING.md` - Common issues and solutions
+
+### In This Repository (BE/):
+- `CONTEXT_QUICK_REFERENCE.md` - Backend quick reference
+- `CURRENT_WORK.md` - Backend current tasks and status
+- `CURRENT_STATUS_SUMMARY.md` - Backend latest status overview
+- `DEPLOYMENT_STATUS_REPORT.md` - Backend deployment status
+- `TROUBLESHOOTING.md` - Backend troubleshooting
 - `API-Design.md` - API endpoint documentation
 - `README.md` - Project documentation
-- `GITHUB_SECRETS_SETUP.md` - Secrets configuration guide
+
+### In Monorepo MetaData/ (Cross-cutting):
+- `../MetaData/Documentation/AWS_INFRASTRUCTURE_DETAILS.md` - Infrastructure details
+- `../MetaData/Documentation/ENVIRONMENT_URLS_REFERENCE.md` - Comprehensive URLs
+- `../MetaData/Reference/ENVIRONMENT_URLS_GRID.csv` - CSV for team sharing
+- `../MetaData/Scripts/` - Deployment and utility scripts
+- `../MetaData/Configs/` - ECS task definitions and configs
 
 ## Agent Instructions
 - Always check context files for current project status
