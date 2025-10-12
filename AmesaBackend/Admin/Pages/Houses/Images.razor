@@ -1,0 +1,206 @@
+@page "/admin/houses/images/{HouseId:guid}"
+@inject IAdminDatabaseService DatabaseService
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>Manage Images - Amesa Admin</PageTitle>
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h1 class="display-6">
+                <i class="fas fa-images"></i> Manage House Images
+            </h1>
+            <p class="text-muted">@house?.Title</p>
+        </div>
+        <div class="col-auto">
+            <a href="/admin/houses" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back to Houses
+            </a>
+        </div>
+    </div>
+
+    @if (house == null)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary"></div>
+            <p class="mt-3">Loading...</p>
+        </div>
+    }
+    else
+    {
+        <!-- Upload New Image -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title"><i class="fas fa-upload"></i> Upload New Image</h5>
+                <EditForm Model="@uploadModel" OnValidSubmit="HandleUpload">
+                    <div class="row g-3">
+                        <div class="col-md-8">
+                            <label class="form-label">Image URL</label>
+                            <InputText class="form-control" @bind-Value="uploadModel.ImageUrl" 
+                                       placeholder="https://images.unsplash.com/..." />
+                            <small class="text-muted">Enter image URL (e.g., from Unsplash)</small>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Alt Text</label>
+                            <InputText class="form-control" @bind-Value="uploadModel.AltText" 
+                                       placeholder="Image description" />
+                        </div>
+                        <div class="col-12">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-plus"></i> Add Image
+                            </button>
+                        </div>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+
+        <!-- Existing Images -->
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title"><i class="fas fa-th"></i> Current Images</h5>
+                
+                @if (!images.Any())
+                {
+                    <p class="text-muted">No images uploaded yet.</p>
+                }
+                else
+                {
+                    <div class="row g-3">
+                        @foreach (var image in images.OrderBy(i => i.DisplayOrder))
+                        {
+                            <div class="col-md-3">
+                                <div class="card">
+                                    <img src="@image.ImageUrl" class="card-img-top" alt="@image.AltText" 
+                                         style="height: 200px; object-fit: cover;" />
+                                    <div class="card-body">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div>
+                                                @if (image.IsPrimary)
+                                                {
+                                                    <span class="badge bg-success">Primary</span>
+                                                }
+                                                <small class="d-block text-muted">Order: @image.DisplayOrder</small>
+                                            </div>
+                                            <div class="btn-group btn-group-sm">
+                                                @if (!image.IsPrimary)
+                                                {
+                                                    <button class="btn btn-outline-success" 
+                                                            @onclick="() => SetPrimary(image.Id)" title="Set as Primary">
+                                                        <i class="fas fa-star"></i>
+                                                    </button>
+                                                }
+                                                <button class="btn btn-outline-danger" 
+                                                        @onclick="() => DeleteImage(image.Id)" title="Delete">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <small class="text-muted d-block mt-2">@image.AltText</small>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public Guid HouseId { get; set; }
+
+    private House? house;
+    private List<HouseImage> images = new();
+    private UploadModel uploadModel = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        var dbContext = await DatabaseService.GetDbContextAsync();
+        house = await dbContext.Houses.FindAsync(HouseId);
+        if (house != null)
+        {
+            images = await dbContext.HouseImages
+                .Where(i => i.HouseId == HouseId)
+                .ToListAsync();
+        }
+    }
+
+    private async Task HandleUpload()
+    {
+        if (house != null && !string.IsNullOrWhiteSpace(uploadModel.ImageUrl))
+        {
+            var newImage = new HouseImage
+            {
+                Id = Guid.NewGuid(),
+                HouseId = house.Id,
+                ImageUrl = uploadModel.ImageUrl,
+                AltText = uploadModel.AltText ?? "House image",
+                DisplayOrder = images.Count,
+                IsPrimary = images.Count == 0, // First image is primary
+                MediaType = MediaType.Image,
+                FileSize = 0,
+                Width = 800,
+                Height = 600,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            var dbContext = await DatabaseService.GetDbContextAsync();
+            dbContext.HouseImages.Add(newImage);
+            await dbContext.SaveChangesAsync();
+
+            uploadModel = new UploadModel();
+            await LoadDataAsync();
+        }
+    }
+
+    private async Task SetPrimary(Guid imageId)
+    {
+        // Unset all primary flags
+        foreach (var img in images)
+        {
+            img.IsPrimary = false;
+        }
+
+        // Set selected as primary
+        var selectedImage = images.FirstOrDefault(i => i.Id == imageId);
+        if (selectedImage != null)
+        {
+            selectedImage.IsPrimary = true;
+        }
+
+        var dbContext = await DatabaseService.GetDbContextAsync();
+        await dbContext.SaveChangesAsync();
+        await LoadDataAsync();
+    }
+
+    private async Task DeleteImage(Guid imageId)
+    {
+        if (await JS.InvokeAsync<bool>("confirm", "Delete this image?"))
+        {
+            var image = images.FirstOrDefault(i => i.Id == imageId);
+            if (image != null)
+            {
+                var dbContext = await DatabaseService.GetDbContextAsync();
+                dbContext.HouseImages.Remove(image);
+                await dbContext.SaveChangesAsync();
+                await LoadDataAsync();
+            }
+        }
+    }
+
+    private class UploadModel
+    {
+        public string ImageUrl { get; set; } = string.Empty;
+        public string? AltText { get; set; }
+    }
+}
+

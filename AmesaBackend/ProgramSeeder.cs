@@ -13,12 +13,19 @@ namespace AmesaBackend
 
             // Get database connection string from environment variables
             var connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING") 
-                ?? "Host=amesadbmain1.cruuae28ob7m.eu-north-1.rds.amazonaws.com;Database=amesa_lottery;Username=dror;Password=aAXa406L6qdqfTU6o8vr;Port=5432;";
+                ?? "Data Source=amesa.db"; // Fallback to SQLite for local development
 
             Console.WriteLine($"🔗 Connecting to database...");
-            Console.WriteLine($"   Host: amesadbmain1.cruuae28ob7m.eu-north-1.rds.amazonaws.com");
-            Console.WriteLine($"   Database: amesa_lottery");
-            Console.WriteLine($"   Username: dror");
+            
+            // Determine if using PostgreSQL or SQLite
+            if (connectionString.Contains("Host=", StringComparison.OrdinalIgnoreCase))
+            {
+                Console.WriteLine($"   Using PostgreSQL (connection from environment)");
+            }
+            else
+            {
+                Console.WriteLine($"   Using SQLite (local development)");
+            }
             Console.WriteLine();
 
             try

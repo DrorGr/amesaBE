@@ -1,0 +1,62 @@
+@inject IAdminDatabaseService DatabaseService
+
+<div class="environment-display">
+    <div class="d-flex align-items-center">
+        <i class="fas fa-server text-primary me-2"></i>
+        <span class="text-muted small me-2">Environment:</span>
+        <span class="badge @GetEnvironmentBadgeClass()">@GetEnvironmentDisplayName()</span>
+    </div>
+    <small class="text-white-50 d-block mt-1">
+        <i class="fas fa-database"></i> Database: <strong>@GetDatabaseDisplayName()</strong>
+    </small>
+    <small class="text-white-50 d-block">
+        <i class="fas fa-globe"></i> Backend: <strong>@GetBackendDisplayName()</strong>
+    </small>
+</div>
+
+@code {
+    private string GetEnvironmentDisplayName()
+    {
+        var env = DatabaseService.GetCurrentEnvironment();
+        return env switch
+        {
+            "Development" => "Development / Staging",
+            "Production" => "Production",
+            _ => "Unknown"
+        };
+    }
+
+    private string GetEnvironmentBadgeClass()
+    {
+        var env = DatabaseService.GetCurrentEnvironment();
+        return env switch
+        {
+            "Development" => "bg-info",
+            "Production" => "bg-danger",
+            _ => "bg-secondary"
+        };
+    }
+
+    private string GetDatabaseDisplayName()
+    {
+        var env = DatabaseService.GetCurrentEnvironment();
+        return env switch
+        {
+            "Development" => "amesadbmain-stage",
+            "Production" => "amesadbmain",
+            _ => "Unknown database"
+        };
+    }
+
+    private string GetBackendDisplayName()
+    {
+        var env = DatabaseService.GetCurrentEnvironment();
+        return env switch
+        {
+            "Development" => "amesa-backend-stage-service",
+            "Production" => "amesa-backend-service",
+            _ => "Unknown service"
+        };
+    }
+}
+

@@ -4,12 +4,16 @@ Write-Host "=============================" -ForegroundColor Green
 Write-Host ""
 
 # Set environment variables for database connection
-$env:DB_CONNECTION_STRING = "Host=amesadbmain1.cruuae28ob7m.eu-north-1.rds.amazonaws.com;Database=amesa_lottery;Username=dror;Password=aAXa406L6qdqfTU6o8vr;Port=5432;"
+# SECURITY: Use environment variable or prompt for connection string
+if (-not $env:DB_CONNECTION_STRING) {
+    Write-Host "⚠️  DB_CONNECTION_STRING environment variable not set!" -ForegroundColor Yellow
+    Write-Host "Please set the environment variable or run:" -ForegroundColor Yellow
+    Write-Host "   `$env:DB_CONNECTION_STRING = 'Host=your-host;Database=amesa_lottery;Username=your-user;Password=your-password;Port=5432;'" -ForegroundColor Gray
+    Write-Host ""
+    exit 1
+}
 
-Write-Host "Database Connection Details:" -ForegroundColor Yellow
-Write-Host "   Host: amesadbmain1.cruuae28ob7m.eu-north-1.rds.amazonaws.com" -ForegroundColor Gray
-Write-Host "   Database: amesa_lottery" -ForegroundColor Gray
-Write-Host "   Username: dror" -ForegroundColor Gray
+Write-Host "Using database connection from environment variable" -ForegroundColor Yellow
 Write-Host "   Port: 5432" -ForegroundColor Gray
 Write-Host ""
 

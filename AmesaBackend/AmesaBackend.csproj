@@ -33,6 +33,9 @@
     <PackageReference Include="MimeKit" Version="4.3.0" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="7.0.3" />
     <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
+    <!-- Blazor Server packages for Admin Panel -->
+    <PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="8.0.0" />
+    <PackageReference Include="AWSSDK.S3" Version="3.7.400" />
   </ItemGroup>
 
   <ItemGroup>

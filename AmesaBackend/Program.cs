@@ -80,7 +80,9 @@ builder.Services.AddSwaggerGen(c =>
 // Configure Entity Framework with database provider based on environment
 builder.Services.AddDbContext<AmesaDbContext>(options =>
 {
-    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+    // Get connection string from environment variables first, then configuration
+    var connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING") ?? 
+                          builder.Configuration.GetConnectionString("DefaultConnection");
     
     // Use PostgreSQL in production, SQLite in development
     if (builder.Environment.IsProduction())
@@ -175,6 +177,25 @@ builder.Services.AddScoped<IFileService, FileService>();
 builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
 builder.Services.AddScoped<IQRCodeService, QRCodeService>();
 
+// Add Admin Panel Services
+builder.Services.AddScoped<IAdminAuthService, AdminAuthService>();
+builder.Services.AddScoped<IAdminDatabaseService, AdminDatabaseService>();
+builder.Services.AddHttpContextAccessor();
+
+// Add Session for Admin Panel
+builder.Services.AddDistributedMemoryCache();
+builder.Services.AddSession(options =>
+{
+    options.IdleTimeout = TimeSpan.FromHours(2);
+    options.Cookie.HttpOnly = true;
+    options.Cookie.IsEssential = true;
+    options.Cookie.Name = "AmesaAdmin.Session";
+});
+
+// Add Blazor Server for Admin Panel
+builder.Services.AddRazorPages();
+builder.Services.AddServerSideBlazor();
+
 // Add Background Services
 builder.Services.AddHostedService<LotteryDrawService>();
 builder.Services.AddHostedService<NotificationBackgroundService>();
@@ -185,18 +206,14 @@ builder.Services.AddSignalR();
 // Add Memory Cache
 builder.Services.AddMemoryCache();
 
-// Add Distributed Cache (Redis in production)
-if (builder.Environment.IsProduction())
-{
-    builder.Services.AddStackExchangeRedisCache(options =>
-    {
-        options.Configuration = builder.Configuration.GetConnectionString("Redis");
-    });
-}
-else
-{
-    builder.Services.AddDistributedMemoryCache();
-}
+// Add Distributed Cache (Redis in production) - Disabled for local development
+// if (builder.Environment.IsProduction())
+// {
+//     builder.Services.AddStackExchangeRedisCache(options =>
+//     {
+//         options.Configuration = builder.Configuration.GetConnectionString("Redis");
+//     });
+// }
 
 // Add Health Checks
 builder.Services.AddHealthChecks();
@@ -233,9 +250,18 @@ app.UseResponseCompression();
 // Add CORS
 app.UseCors("AllowFrontend");
 
+// Add routing first (required for Blazor Server)
+app.UseRouting();
+
 // Add authentication and authorization
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Add Session (after routing for Blazor Server compatibility)
+app.UseSession();
+
+// Serve static files for Blazor
+app.UseStaticFiles();
 
 // Add health checks endpoint
 app.MapHealthChecks("/health");
@@ -247,25 +273,35 @@ app.MapControllers();
 // app.MapHub<LotteryHub>("/ws/lottery");
 // app.MapHub<NotificationHub>("/ws/notifications");
 
-// Ensure database is created and migrated
-using (var scope = app.Services.CreateScope())
+// Map Blazor Admin Panel
+app.MapBlazorHub();
+app.MapRazorPages(); // This is needed for Razor Pages
+app.MapFallbackToPage("/admin", "/Admin/App");
+app.MapFallbackToPage("/admin/{*path:nonfile}", "/Admin/App");
+
+// Ensure database is created and migrated (only for SQLite local development)
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+if (connectionString != null && connectionString.Contains("Data Source="))
 {
-    var context = scope.ServiceProvider.GetRequiredService<AmesaDbContext>();
-    try
+    using (var scope = app.Services.CreateScope())
     {
-                await context.Database.EnsureCreatedAsync();
-                await DataSeedingService.SeedDatabaseAsync(context);
-                await TranslationSeedingService.SeedTranslationsAsync(context);
-                
-                // Seed lottery results with sample data
-                var qrCodeService = scope.ServiceProvider.GetRequiredService<IQRCodeService>();
-                await LotteryResultsSeedingService.SeedLotteryResultsAsync(context, qrCodeService);
-                
-                Log.Information("Database setup and seeding completed successfully");
-    }
-    catch (Exception ex)
-    {
-        Log.Error(ex, "An error occurred while setting up the database");
+        var context = scope.ServiceProvider.GetRequiredService<AmesaDbContext>();
+        try
+        {
+            await context.Database.EnsureCreatedAsync();
+            await DataSeedingService.SeedDatabaseAsync(context);
+            await TranslationSeedingService.SeedTranslationsAsync(context);
+            
+            // Seed lottery results with sample data
+            var qrCodeService = scope.ServiceProvider.GetRequiredService<IQRCodeService>();
+            await LotteryResultsSeedingService.SeedLotteryResultsAsync(context, qrCodeService);
+            
+            Log.Information("Database setup and seeding completed successfully");
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "An error occurred while setting up the database");
+        }
     }
 }
 
@@ -298,12 +334,19 @@ static async Task RunDatabaseSeeder()
 
     // Get database connection string from environment variables
     var connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING") 
-        ?? "Host=amesadbmain1.cruuae28ob7m.eu-north-1.rds.amazonaws.com;Database=amesa_lottery;Username=dror;Password=aAXa406L6qdqfTU6o8vr;Port=5432;";
+        ?? "Data Source=amesa.db"; // Fallback to SQLite for local development
 
     Console.WriteLine($"🔗 Connecting to database...");
-    Console.WriteLine($"   Host: amesadbmain1.cruuae28ob7m.eu-north-1.rds.amazonaws.com");
-    Console.WriteLine($"   Database: amesa_lottery");
-    Console.WriteLine($"   Username: dror");
+    
+    // Determine if using PostgreSQL or SQLite
+    if (connectionString.Contains("Host=", StringComparison.OrdinalIgnoreCase))
+    {
+        Console.WriteLine($"   Using PostgreSQL (connection from environment)");
+    }
+    else
+    {
+        Console.WriteLine($"   Using SQLite (local development)");
+    }
     Console.WriteLine();
 
     try

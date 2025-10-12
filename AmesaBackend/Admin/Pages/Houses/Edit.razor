@@ -1,0 +1,147 @@
+@page "/admin/houses/edit/{HouseId:guid}"
+@inject IAdminDatabaseService DatabaseService
+@inject NavigationManager Navigation
+
+<PageTitle>Edit House - Amesa Admin</PageTitle>
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h1 class="display-6">
+                <i class="fas fa-edit"></i> Edit House
+            </h1>
+            <p class="text-muted">Update lottery property details</p>
+        </div>
+    </div>
+
+    @if (house == null)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary"></div>
+            <p class="mt-3">Loading house...</p>
+        </div>
+    }
+    else
+    {
+        <div class="card">
+            <div class="card-body">
+                <EditForm Model="@house" OnValidSubmit="HandleSubmit">
+                    <DataAnnotationsValidator />
+
+                    <div class="row g-3">
+                        <!-- Same form fields as Create page -->
+                        <div class="col-md-6">
+                            <label class="form-label">Title *</label>
+                            <InputText class="form-control" @bind-Value="house.Title" />
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Property Type *</label>
+                            <InputText class="form-control" @bind-Value="house.PropertyType" />
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label">Description *</label>
+                            <InputTextArea class="form-control" rows="4" @bind-Value="house.Description" />
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Location *</label>
+                            <InputText class="form-control" @bind-Value="house.Location" />
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Address *</label>
+                            <InputText class="form-control" @bind-Value="house.Address" />
+                        </div>
+
+                        <div class="col-md-3">
+                            <label class="form-label">Bedrooms</label>
+                            <InputNumber class="form-control" @bind-Value="house.Bedrooms" />
+                        </div>
+
+                        <div class="col-md-3">
+                            <label class="form-label">Bathrooms</label>
+                            <InputNumber class="form-control" @bind-Value="house.Bathrooms" />
+                        </div>
+
+                        <div class="col-md-3">
+                            <label class="form-label">Square Feet</label>
+                            <InputNumber class="form-control" @bind-Value="house.SquareFeet" />
+                        </div>
+
+                        <div class="col-md-3">
+                            <label class="form-label">Year Built</label>
+                            <InputNumber class="form-control" @bind-Value="house.YearBuilt" />
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label">Price ($)</label>
+                            <InputNumber class="form-control" @bind-Value="house.Price" />
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label">Total Tickets</label>
+                            <InputNumber class="form-control" @bind-Value="house.TotalTickets" />
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label">Ticket Price ($)</label>
+                            <InputNumber class="form-control" @bind-Value="house.TicketPrice" />
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Status</label>
+                            <InputSelect class="form-select" @bind-Value="house.Status">
+                                <option value="@LotteryStatus.Upcoming">Upcoming</option>
+                                <option value="@LotteryStatus.Active">Active</option>
+                                <option value="@LotteryStatus.Ended">Ended</option>
+                                <option value="@LotteryStatus.Cancelled">Cancelled</option>
+                                <option value="@LotteryStatus.Completed">Completed</option>
+                            </InputSelect>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Min Participation (%)</label>
+                            <InputNumber class="form-control" @bind-Value="house.MinimumParticipationPercentage" />
+                        </div>
+                    </div>
+
+                    <div class="mt-4">
+                        <button type="submit" class="btn btn-primary me-2">
+                            <i class="fas fa-save"></i> Save Changes
+                        </button>
+                        <a href="/admin/houses" class="btn btn-secondary">
+                            <i class="fas fa-times"></i> Cancel
+                        </a>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public Guid HouseId { get; set; }
+
+    private House? house;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var dbContext = await DatabaseService.GetDbContextAsync();
+        house = await dbContext.Houses.FindAsync(HouseId);
+    }
+
+    private async Task HandleSubmit()
+    {
+        if (house != null)
+        {
+            var dbContext = await DatabaseService.GetDbContextAsync();
+            house.UpdatedAt = DateTime.UtcNow;
+            await dbContext.SaveChangesAsync();
+            Navigation.NavigateTo("/admin/houses");
+        }
+    }
+}
+

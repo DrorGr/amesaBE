@@ -1,0 +1,229 @@
+@page "/admin"
+@page "/admin/dashboard"
+@inject IAdminDatabaseService DatabaseService
+
+<PageTitle>Dashboard - Amesa Admin</PageTitle>
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h1 class="display-5">
+                <i class="fas fa-tachometer-alt"></i> Dashboard
+            </h1>
+            <p class="text-muted">Welcome to the Amesa Admin Panel</p>
+        </div>
+    </div>
+
+    <!-- Database Info Alert -->
+    <div class="alert alert-info mb-4">
+        <i class="fas fa-database"></i> 
+        <strong>Current Database:</strong> @DatabaseService.GetCurrentEnvironment()
+        @if (DatabaseService.GetCurrentEnvironment() == "Development")
+        {
+            <span class="badge bg-warning ms-2">Dev + Stage Shared</span>
+        }
+        else
+        {
+            <span class="badge bg-danger ms-2">Production</span>
+        }
+    </div>
+
+    <!-- Loading State -->
+    @if (isLoading)
+    {
+        <div class="d-flex justify-content-center align-items-center" style="min-height: 300px;">
+            <div class="text-center">
+                <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <div class="mt-3">
+                    <h5 class="text-muted">Loading Dashboard Data...</h5>
+                    <p class="text-muted small">Connecting to @DatabaseService.GetCurrentEnvironment() database</p>
+                </div>
+            </div>
+        </div>
+    }
+    else if (stats.TotalHouses == -1)
+    {
+        <!-- Database Connection Error -->
+        <div class="alert alert-danger" role="alert">
+            <h4 class="alert-heading">❌ Database Connection Failed</h4>
+            <p><strong>Environment:</strong> @DatabaseService.GetCurrentEnvironment()</p>
+            <p><strong>Error:</strong> Unable to connect to PostgreSQL database.</p>
+            <p><strong>Possible Solutions:</strong></p>
+            <ul>
+                <li>Check your network connection</li>
+                <li>Verify PostgreSQL server is running and accessible</li>
+                <li>Check firewall settings</li>
+                <li>Ensure database credentials are correct</li>
+            </ul>
+            <hr>
+            <p class="mb-0">Please check the console logs for detailed error information.</p>
+        </div>
+    }
+    else
+    {
+        <!-- Stats Cards -->
+        <div class="row g-4 mb-4">
+        <div class="col-md-3">
+            <div class="card text-white bg-primary">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-subtitle mb-2">Total Houses</h6>
+                            <h2 class="card-title mb-0">@stats.TotalHouses</h2>
+                        </div>
+                        <div>
+                            <i class="fas fa-home fa-3x opacity-50"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card text-white bg-success">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-subtitle mb-2">Active Lotteries</h6>
+                            <h2 class="card-title mb-0">@stats.ActiveLotteries</h2>
+                        </div>
+                        <div>
+                            <i class="fas fa-play-circle fa-3x opacity-50"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card text-white bg-info">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-subtitle mb-2">Total Users</h6>
+                            <h2 class="card-title mb-0">@stats.TotalUsers</h2>
+                        </div>
+                        <div>
+                            <i class="fas fa-users fa-3x opacity-50"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card text-white bg-warning">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-subtitle mb-2">Languages</h6>
+                            <h2 class="card-title mb-0">@stats.TotalLanguages</h2>
+                        </div>
+                        <div>
+                            <i class="fas fa-language fa-3x opacity-50"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="row g-4">
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body text-center">
+                    <i class="fas fa-home fa-3x text-primary mb-3"></i>
+                    <h5 class="card-title">Manage Houses</h5>
+                    <p class="card-text text-muted">Add, edit, or remove lottery properties</p>
+                    <a href="/admin/houses" class="btn btn-primary">
+                        <i class="fas fa-arrow-right"></i> Go to Houses
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body text-center">
+                    <i class="fas fa-language fa-3x text-success mb-3"></i>
+                    <h5 class="card-title">Manage Translations</h5>
+                    <p class="card-text text-muted">Edit multi-language content</p>
+                    <a href="/admin/translations" class="btn btn-success">
+                        <i class="fas fa-arrow-right"></i> Go to Translations
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body text-center">
+                    <i class="fas fa-users fa-3x text-info mb-3"></i>
+                    <h5 class="card-title">Manage Users</h5>
+                    <p class="card-text text-muted">View and edit user accounts</p>
+                    <a href="/admin/users" class="btn btn-info">
+                        <i class="fas fa-arrow-right"></i> Go to Users
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    }
+</div>
+
+@code {
+    private DashboardStats stats = new();
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadStatsAsync();
+    }
+
+            private async Task LoadStatsAsync()
+            {
+                try
+                {
+                    isLoading = true;
+                    StateHasChanged();
+                    
+                    using var dbContext = await DatabaseService.GetDbContextAsync();
+                    
+                    stats.TotalHouses = await dbContext.Houses.CountAsync();
+                    
+                    stats.ActiveLotteries = await dbContext.Houses
+                        .CountAsync(h => h.Status == LotteryStatus.Active);
+                    
+                    stats.TotalUsers = await dbContext.Users.CountAsync();
+                    
+                    stats.TotalLanguages = await dbContext.Languages.CountAsync();
+                    
+                }
+                catch (Exception ex)
+                {
+                    
+                    // Set error state
+                    stats.TotalHouses = -1; // Use -1 to indicate error state
+                    stats.ActiveLotteries = -1;
+                    stats.TotalUsers = -1;
+                    stats.TotalLanguages = -1;
+                }
+                finally
+                {
+                    isLoading = false;
+                    StateHasChanged();
+                }
+            }
+
+    private class DashboardStats
+    {
+        public int TotalHouses { get; set; }
+        public int ActiveLotteries { get; set; }
+        public int TotalUsers { get; set; }
+        public int TotalLanguages { get; set; }
+    }
+}
+

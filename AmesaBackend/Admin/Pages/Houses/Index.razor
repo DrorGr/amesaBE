@@ -1,0 +1,162 @@
+@page "/admin/houses"
+@inject IAdminDatabaseService DatabaseService
+@inject NavigationManager Navigation
+
+<PageTitle>Houses - Amesa Admin</PageTitle>
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h1 class="display-6">
+                <i class="fas fa-home"></i> Manage Houses
+            </h1>
+            <p class="text-muted">View and manage lottery properties</p>
+        </div>
+        <div class="col-auto">
+            <a href="/admin/houses/create" class="btn btn-primary">
+                <i class="fas fa-plus"></i> Add New House
+            </a>
+        </div>
+    </div>
+
+    @if (houses == null)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-3">Loading houses...</p>
+        </div>
+    }
+    else if (!houses.Any())
+    {
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle"></i> No houses found. Click "Add New House" to create one.
+        </div>
+    }
+    else
+    {
+        <div class="card">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Image</th>
+                                <th>Title</th>
+                                <th>Location</th>
+                                <th>Price</th>
+                                <th>Status</th>
+                                <th>Tickets</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var house in houses)
+                            {
+                                <tr>
+                                    <td>
+                                        @if (house.Images.Any())
+                                        {
+                                            <img src="@house.Images.First().ImageUrl" alt="@house.Title" 
+                                                 class="img-thumbnail" style="width: 60px; height: 60px; object-fit: cover;" />
+                                        }
+                                        else
+                                        {
+                                            <div class="bg-secondary text-white d-flex align-items-center justify-content-center" 
+                                                 style="width: 60px; height: 60px;">
+                                                <i class="fas fa-image"></i>
+                                            </div>
+                                        }
+                                    </td>
+                                    <td>
+                                        <strong>@house.Title</strong><br />
+                                        <small class="text-muted">@house.PropertyType</small>
+                                    </td>
+                                    <td>@house.Location</td>
+                                    <td>
+                                        <strong>$@house.Price.ToString("N0")</strong>
+                                    </td>
+                                    <td>
+                                        <span class="badge @GetStatusBadgeClass(house.Status)">
+                                            @house.Status
+                                        </span>
+                                    </td>
+                                    <td>
+                                        @house.TotalTickets tickets<br />
+                                        <small class="text-muted">@house.TicketPrice.ToString("C") each</small>
+                                    </td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            <a href="/admin/houses/edit/@house.Id" class="btn btn-outline-primary" title="Edit">
+                                                <i class="fas fa-edit"></i>
+                                            </a>
+                                            <a href="/admin/houses/images/@house.Id" class="btn btn-outline-info" title="Manage Images">
+                                                <i class="fas fa-images"></i>
+                                            </a>
+                                            <button class="btn btn-outline-danger" title="Delete" 
+                                                    @onclick="() => DeleteHouse(house.Id)">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private List<House>? houses;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadHousesAsync();
+    }
+
+    private async Task LoadHousesAsync()
+    {
+        var dbContext = await DatabaseService.GetDbContextAsync();
+        houses = await dbContext.Houses
+            .Include(h => h.Images)
+            .OrderByDescending(h => h.CreatedAt)
+            .ToListAsync();
+    }
+
+    private string GetStatusBadgeClass(LotteryStatus status)
+    {
+        return status switch
+        {
+            LotteryStatus.Active => "bg-success",
+            LotteryStatus.Upcoming => "bg-info",
+            LotteryStatus.Ended => "bg-secondary",
+            LotteryStatus.Cancelled => "bg-danger",
+            LotteryStatus.Completed => "bg-primary",
+            _ => "bg-secondary"
+        };
+    }
+
+    private async Task DeleteHouse(Guid houseId)
+    {
+        // Simple confirmation (in production, use a modal)
+        if (await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to delete this house?"))
+        {
+            var dbContext = await DatabaseService.GetDbContextAsync();
+            var house = await dbContext.Houses.FindAsync(houseId);
+            if (house != null)
+            {
+                dbContext.Houses.Remove(house);
+                await dbContext.SaveChangesAsync();
+                await LoadHousesAsync();
+            }
+        }
+    }
+
+    [Inject]
+    private IJSRuntime JSRuntime { get; set; } = default!;
+}
+

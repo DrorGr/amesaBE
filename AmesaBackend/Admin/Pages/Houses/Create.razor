@@ -1,0 +1,172 @@
+@page "/admin/houses/create"
+@inject IAdminDatabaseService DatabaseService
+@inject NavigationManager Navigation
+
+<PageTitle>Create House - Amesa Admin</PageTitle>
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h1 class="display-6">
+                <i class="fas fa-plus"></i> Create New House
+            </h1>
+            <p class="text-muted">Add a new lottery property</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <EditForm Model="@house" OnValidSubmit="HandleSubmit">
+                <DataAnnotationsValidator />
+
+                <div class="row g-3">
+                    <!-- Basic Information -->
+                    <div class="col-md-6">
+                        <label class="form-label">Title *</label>
+                        <InputText class="form-control" @bind-Value="house.Title" />
+                        <ValidationMessage For="@(() => house.Title)" />
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Property Type *</label>
+                        <InputText class="form-control" @bind-Value="house.PropertyType" 
+                                   placeholder="Villa, Apartment, Penthouse, etc." />
+                        <ValidationMessage For="@(() => house.PropertyType)" />
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label">Description *</label>
+                        <InputTextArea class="form-control" rows="4" @bind-Value="house.Description" />
+                        <ValidationMessage For="@(() => house.Description)" />
+                    </div>
+
+                    <!-- Location -->
+                    <div class="col-md-6">
+                        <label class="form-label">Location *</label>
+                        <InputText class="form-control" @bind-Value="house.Location" 
+                                   placeholder="City, Country" />
+                        <ValidationMessage For="@(() => house.Location)" />
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Address *</label>
+                        <InputText class="form-control" @bind-Value="house.Address" />
+                        <ValidationMessage For="@(() => house.Address)" />
+                    </div>
+
+                    <!-- Property Details -->
+                    <div class="col-md-3">
+                        <label class="form-label">Bedrooms *</label>
+                        <InputNumber class="form-control" @bind-Value="house.Bedrooms" />
+                        <ValidationMessage For="@(() => house.Bedrooms)" />
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label">Bathrooms *</label>
+                        <InputNumber class="form-control" @bind-Value="house.Bathrooms" />
+                        <ValidationMessage For="@(() => house.Bathrooms)" />
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label">Square Feet *</label>
+                        <InputNumber class="form-control" @bind-Value="house.SquareFeet" />
+                        <ValidationMessage For="@(() => house.SquareFeet)" />
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label">Year Built</label>
+                        <InputNumber class="form-control" @bind-Value="house.YearBuilt" />
+                    </div>
+
+                    <!-- Pricing -->
+                    <div class="col-md-4">
+                        <label class="form-label">House Price ($) *</label>
+                        <InputNumber class="form-control" @bind-Value="house.Price" />
+                        <ValidationMessage For="@(() => house.Price)" />
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label">Total Tickets *</label>
+                        <InputNumber class="form-control" @bind-Value="house.TotalTickets" />
+                        <ValidationMessage For="@(() => house.TotalTickets)" />
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label">Ticket Price ($) *</label>
+                        <InputNumber class="form-control" @bind-Value="house.TicketPrice" />
+                        <ValidationMessage For="@(() => house.TicketPrice)" />
+                    </div>
+
+                    <!-- Lottery Dates -->
+                    <div class="col-md-4">
+                        <label class="form-label">Lottery Start Date *</label>
+                        <InputDate class="form-control" @bind-Value="house.LotteryStartDate" />
+                        <ValidationMessage For="@(() => house.LotteryStartDate)" />
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label">Lottery End Date *</label>
+                        <InputDate class="form-control" @bind-Value="house.LotteryEndDate" />
+                        <ValidationMessage For="@(() => house.LotteryEndDate)" />
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label">Draw Date</label>
+                        <InputDate class="form-control" @bind-Value="house.DrawDate" />
+                    </div>
+
+                    <!-- Status -->
+                    <div class="col-md-6">
+                        <label class="form-label">Status *</label>
+                        <InputSelect class="form-select" @bind-Value="house.Status">
+                            <option value="@LotteryStatus.Upcoming">Upcoming</option>
+                            <option value="@LotteryStatus.Active">Active</option>
+                            <option value="@LotteryStatus.Ended">Ended</option>
+                            <option value="@LotteryStatus.Cancelled">Cancelled</option>
+                            <option value="@LotteryStatus.Completed">Completed</option>
+                        </InputSelect>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Minimum Participation (%) *</label>
+                        <InputNumber class="form-control" @bind-Value="house.MinimumParticipationPercentage" />
+                        <small class="text-muted">Minimum % of tickets that must be sold</small>
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="mt-4">
+                    <button type="submit" class="btn btn-primary me-2">
+                        <i class="fas fa-save"></i> Create House
+                    </button>
+                    <a href="/admin/houses" class="btn btn-secondary">
+                        <i class="fas fa-times"></i> Cancel
+                    </a>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+</div>
+
+@code {
+    private House house = new()
+    {
+        Id = Guid.NewGuid(),
+        Status = LotteryStatus.Upcoming,
+        MinimumParticipationPercentage = 75.0m,
+        CreatedAt = DateTime.UtcNow,
+        UpdatedAt = DateTime.UtcNow,
+        Features = Array.Empty<string>(),
+        LotteryStartDate = DateTime.UtcNow,
+        LotteryEndDate = DateTime.UtcNow.AddDays(30)
+    };
+
+    private async Task HandleSubmit()
+    {
+        var dbContext = await DatabaseService.GetDbContextAsync();
+        dbContext.Houses.Add(house);
+        await dbContext.SaveChangesAsync();
+        Navigation.NavigateTo("/admin/houses");
+    }
+}
+

@@ -1,0 +1,96 @@
+@inherits LayoutComponentBase
+@inject IAdminAuthService AuthService
+@inject NavigationManager Navigation
+
+@if (!AuthService.IsAuthenticated())
+{
+    <div class="container mt-5">
+        <div class="row justify-content-center">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-body">
+                        <h3 class="card-title text-center mb-4">
+                            <i class="fas fa-lock"></i> Admin Access Required
+                        </h3>
+                        <p class="text-center text-muted">Please log in to access the admin panel.</p>
+                        <div class="text-center">
+                            <a href="/admin/login" class="btn btn-primary">
+                                <i class="fas fa-sign-in-alt"></i> Login
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+else
+{
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <nav class="col-md-2 d-md-block sidebar">
+                <div class="position-sticky pt-3">
+                    <div class="text-center mb-4">
+                        <h4><i class="fas fa-crown"></i> Amesa Admin</h4>
+                        <small class="d-block mt-2">@AuthService.GetCurrentAdminEmail()</small>
+                    </div>
+
+                    <!-- Database Selector -->
+                    <DatabaseSelector />
+
+                    <hr style="border-color: rgba(255,255,255,0.2);" />
+
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link" href="/admin">
+                                <i class="fas fa-tachometer-alt me-2"></i> Dashboard
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/admin/houses">
+                                <i class="fas fa-home me-2"></i> Houses
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/admin/translations">
+                                <i class="fas fa-language me-2"></i> Translations
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/admin/users">
+                                <i class="fas fa-users me-2"></i> Users
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/admin/content">
+                                <i class="fas fa-file-alt me-2"></i> Content
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/admin/promotions">
+                                <i class="fas fa-tag me-2"></i> Promotions
+                            </a>
+                        </li>
+                    </ul>
+
+                    <hr style="border-color: rgba(255,255,255,0.2);" />
+
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link" href="/admin/logout">
+                                <i class="fas fa-sign-out-alt me-2"></i> Logout
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </nav>
+
+            <!-- Main Content -->
+            <main class="col-md-10 ms-sm-auto main-content">
+                @Body
+            </main>
+        </div>
+    </div>
+}
+
