@@ -26,6 +26,10 @@ RUN dotnet publish "AmesaBackend.csproj" -c Release -o /app/publish /p:UseAppHos
 FROM base AS final
 WORKDIR /app
 
+# Install curl for health checks (before switching to non-root user)
+USER root
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
 # Copy the published application
 COPY --from=publish /app/publish .
 
