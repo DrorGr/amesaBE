@@ -12,6 +12,13 @@ All backend environments are fully functional with complete CI/CD pipeline deplo
 - **Production**: http://amesa-backend-alb-509078867.eu-north-1.elb.amazonaws.com/admin
 - **Status**: ✅ Fully operational with login, database selector, and management features
 
+### 🔧 NEW: Staging API Issue Resolved!
+- **Issue**: Staging environment was returning 500 Internal Server Error for API endpoints
+- **Root Cause**: Database configuration using SQLite instead of PostgreSQL for staging environment
+- **Fix Applied**: Updated Program.cs to use PostgreSQL for both staging and production environments
+- **Result**: ✅ All staging API endpoints now working correctly (200 status)
+- **Impact**: Staging frontend and API are now fully functional
+
 ---
 
 ## 📊 Environment Status
@@ -27,14 +34,15 @@ All backend environments are fully functional with complete CI/CD pipeline deplo
 - **Last Deploy**: 2025-10-12 (with admin panel)
 
 ### ✅ Staging Environment
-- **Status**: Fully Operational
+- **Status**: Fully Operational (API Issue Fixed!)
 - **ECS Service**: Running on Amesa cluster (amesa-backend-stage-service, shared with dev)
-- **Database**: amesadbmain-stage
+- **Database**: amesadbmain-stage (PostgreSQL - correctly configured)
 - **ALB**: amesa-backend-stage-alb-467028641.eu-north-1.elb.amazonaws.com
 - **Admin Panel**: ✅ http://amesa-backend-stage-alb-467028641.eu-north-1.elb.amazonaws.com/admin
+- **API Endpoints**: ✅ All working (houses, translations, etc.)
 - **Health Check**: `/health` endpoint responding
 - **Deployment**: Auto-deploy on push to stage branch
-- **Last Deploy**: 2025-10-12 (with admin panel)
+- **Last Deploy**: 2025-10-12 (database configuration fix)
 
 ### ✅ Production Environment
 - **Status**: Fully Operational
@@ -163,7 +171,15 @@ Code Push → GitHub Actions → Build & Test → Docker Build → ECR Push → 
 6. ✅ **Translation System** - Comprehensive Polish and English data
 7. ✅ **Logging Infrastructure** - Structured logging with Serilog
 
-### Latest Achievement (2025-10-12): 🎉 ADMIN PANEL DEPLOYED
+### Latest Achievement (2025-10-12): 🔧 STAGING API ISSUE RESOLVED
+1. ✅ **Root Cause Identified** - Staging environment using SQLite instead of PostgreSQL
+2. ✅ **Database Configuration Fixed** - Updated Program.cs to use PostgreSQL for staging and production
+3. ✅ **API Endpoints Restored** - All staging API endpoints now returning 200 status
+4. ✅ **Staging Frontend Working** - Frontend now properly communicating with backend API
+5. ✅ **Admin Panel Functional** - Staging admin panel fully operational
+6. ✅ **Deployment Successful** - Fix deployed and verified across all endpoints
+
+### Previous Achievement: 🎉 ADMIN PANEL DEPLOYED
 1. ✅ **Blazor Server Admin Panel** - Full management interface deployed to all environments
 2. ✅ **Database Selector** - Runtime switching between dev/stage and production databases
 3. ✅ **Authentication System** - Email/password login with session management
