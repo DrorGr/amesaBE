@@ -84,8 +84,8 @@ builder.Services.AddDbContext<AmesaDbContext>(options =>
     var connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING") ?? 
                           builder.Configuration.GetConnectionString("DefaultConnection");
     
-    // Use PostgreSQL in production, SQLite in development
-    if (builder.Environment.IsProduction())
+    // Use PostgreSQL in production and staging, SQLite in development
+    if (builder.Environment.IsProduction() || builder.Environment.IsStaging())
     {
         options.UseNpgsql(connectionString, npgsqlOptions =>
         {
