@@ -1,0 +1,199 @@
+﻿{
+    "taskDefinitionArn":  "arn:aws:ecs:eu-north-1:129394705401:task-definition/amesa-backend-staging:10",
+    "containerDefinitions":  [
+                                 {
+                                     "name":  "amesa-backend-stage",
+                                     "image":  "129394705401.dkr.ecr.eu-north-1.amazonaws.com/amesa-backend:latest-with-curl",
+                                     "cpu":  512,
+                                     "memory":  1024,
+                                     "portMappings":  [
+                                                          {
+                                                              "containerPort":  8080,
+                                                              "hostPort":  8080,
+                                                              "protocol":  "tcp"
+                                                          }
+                                                      ],
+                                     "essential":  true,
+                                     "environment":  [
+                                                         {
+                                                             "name":  "JWT_AUDIENCE",
+                                                             "value":  "AmesaLotteryUsers"
+                                                         },
+                                                         {
+                                                             "name":  "AWS_REGION",
+                                                             "value":  "eu-north-1"
+                                                         },
+                                                         {
+                                                             "name":  "ConnectionStrings:DefaultConnection",
+                                                             "value":  "Host=amesadbmain1-stage.cruuae28ob7m.eu-north-1.rds.amazonaws.com;Database=amesa_lottery;Username=postgres;Password=u1fwn3s9;Port=5432"
+                                                         },
+                                                         {
+                                                             "name":  "API_URL",
+                                                             "value":  "http://amesa-backend-alb-509078867.eu-north-1.elb.amazonaws.com"
+                                                         },
+                                                         {
+                                                             "name":  "ASPNETCORE_ENVIRONMENT",
+                                                             "value":  "Staging"
+                                                         },
+                                                         {
+                                                             "name":  "DB_PORT",
+                                                             "value":  "5432"
+                                                         },
+                                                         {
+                                                             "name":  "DB_USER",
+                                                             "value":  "postgres"
+                                                         },
+                                                         {
+                                                             "name":  "FROM_NAME",
+                                                             "value":  "Amesa Lottery"
+                                                         },
+                                                         {
+                                                             "name":  "FILE_STORAGE_PROVIDER",
+                                                             "value":  "AWS"
+                                                         },
+                                                         {
+                                                             "name":  "JWT_ISSUER",
+                                                             "value":  "AmesaLottery"
+                                                         },
+                                                         {
+                                                             "name":  "DB_NAME",
+                                                             "value":  "amesa_lottery"
+                                                         },
+                                                         {
+                                                             "name":  "DB_HOST",
+                                                             "value":  "amesadbmain1-stage.cruuae28ob7m.eu-north-1.rds.amazonaws.com"
+                                                         },
+                                                         {
+                                                             "name":  "JWT_SECRET_KEY",
+                                                             "value":  "your-staging-secret-key-that-is-at-least-32-characters-long"
+                                                         },
+                                                         {
+                                                             "name":  "FROM_EMAIL",
+                                                             "value":  "noreply@amesa.com"
+                                                         },
+                                                         {
+                                                             "name":  "FRONTEND_URL",
+                                                             "value":  "https://dev.amesa.com"
+                                                         },
+                                                         {
+                                                             "name":  "PAYPAL_ENVIRONMENT",
+                                                             "value":  "sandbox"
+                                                         },
+                                                         {
+                                                             "name":  "SMTP_PORT",
+                                                             "value":  "587"
+                                                         },
+                                                         {
+                                                             "name":  "FRONTEND_URL_WWW",
+                                                             "value":  "https://www.dev.amesa.com"
+                                                         },
+                                                         {
+                                                             "name":  "AWS_S3_BUCKET",
+                                                             "value":  "amesa-uploads"
+                                                         },
+                                                         {
+                                                             "name":  "ASPNETCORE_URLS",
+                                                             "value":  "http://+:8080"
+                                                         },
+                                                         {
+                                                             "name":  "REDIS_CONNECTION_STRING",
+                                                             "value":  "YOUR_ELASTICACHE_ENDPOINT:6379"
+                                                         },
+                                                         {
+                                                             "name":  "SMTP_SERVER",
+                                                             "value":  "smtp.gmail.com"
+                                                         },
+                                                         {
+                                                             "name":  "QR_CODE_SECRET_KEY",
+                                                             "value":  "your-qr-code-secret-key-staging"
+                                                         },
+                                                         {
+                                                             "name":  "DB_PASSWORD",
+                                                             "value":  "u1fwn3s9"
+                                                         }
+                                                     ],
+                                     "mountPoints":  [
+
+                                                     ],
+                                     "volumesFrom":  [
+
+                                                     ],
+                                     "secrets":  [
+
+                                                 ],
+                                     "logConfiguration":  {
+                                                              "logDriver":  "awslogs",
+                                                              "options":  {
+                                                                              "awslogs-group":  "/ecs/amesa-backend-staging",
+                                                                              "awslogs-region":  "eu-north-1",
+                                                                              "awslogs-stream-prefix":  "ecs"
+                                                                          }
+                                                          },
+                                     "healthCheck":  {
+                                                         "command":  [
+                                                                         "CMD-SHELL",
+                                                                         "curl -f http://localhost:8080/health || exit 1"
+                                                                     ],
+                                                         "interval":  30,
+                                                         "timeout":  5,
+                                                         "retries":  3,
+                                                         "startPeriod":  60
+                                                     },
+                                     "systemControls":  [
+
+                                                        ]
+                                 }
+                             ],
+    "family":  "amesa-backend-staging",
+    "executionRoleArn":  "arn:aws:iam::129394705401:role/ecsTaskExecutionRole",
+    "networkMode":  "awsvpc",
+    "revision":  10,
+    "volumes":  [
+
+                ],
+    "status":  "ACTIVE",
+    "requiresAttributes":  [
+                               {
+                                   "name":  "com.amazonaws.ecs.capability.logging-driver.awslogs"
+                               },
+                               {
+                                   "name":  "ecs.capability.execution-role-awslogs"
+                               },
+                               {
+                                   "name":  "com.amazonaws.ecs.capability.ecr-auth"
+                               },
+                               {
+                                   "name":  "com.amazonaws.ecs.capability.docker-remote-api.1.19"
+                               },
+                               {
+                                   "name":  "ecs.capability.container-health-check"
+                               },
+                               {
+                                   "name":  "ecs.capability.execution-role-ecr-pull"
+                               },
+                               {
+                                   "name":  "com.amazonaws.ecs.capability.docker-remote-api.1.18"
+                               },
+                               {
+                                   "name":  "ecs.capability.task-eni"
+                               },
+                               {
+                                   "name":  "com.amazonaws.ecs.capability.docker-remote-api.1.29"
+                               }
+                           ],
+    "placementConstraints":  [
+
+                             ],
+    "compatibilities":  [
+                            "EC2",
+                            "FARGATE",
+                            "MANAGED_INSTANCES"
+                        ],
+    "requiresCompatibilities":  [
+                                    "FARGATE"
+                                ],
+    "cpu":  "512",
+    "memory":  "1024",
+    "registeredAt":  1760121644.573,
+    "registeredBy":  "arn:aws:iam::129394705401:user/DrorDeploy"
+}

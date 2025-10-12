@@ -62,9 +62,6 @@ jobs:
     if: github.ref == 'refs/heads/dev'
     
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
@@ -91,9 +88,11 @@ jobs:
           echo "🐳 Building Docker image for dev environment..."
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG ./AmesaBackend
           docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:dev-latest
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/amesa-backend:latest-with-curl
           echo "📤 Pushing to ECR..."
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:dev-latest
+          docker push $ECR_REGISTRY/amesa-backend:latest-with-curl
           echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
           echo "✅ Docker image pushed successfully!"
 
@@ -117,9 +116,6 @@ jobs:
     if: github.ref == 'refs/heads/stage'
     
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
@@ -146,9 +142,11 @@ jobs:
           echo "🐳 Building Docker image for stage environment..."
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG ./AmesaBackend
           docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:stage-latest
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/amesa-backend:latest-with-curl
           echo "📤 Pushing to ECR..."
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:stage-latest
+          docker push $ECR_REGISTRY/amesa-backend:latest-with-curl
           echo "✅ Docker image pushed successfully!"
 
       - name: Update ECS Task Definition
@@ -171,9 +169,6 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production'
     
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
