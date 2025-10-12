@@ -402,3 +402,6 @@ static async Task RunDatabaseSeeder()
         Environment.Exit(1);
     }
 }
+
+// Make Program class accessible to test projects
+public partial class Program { }

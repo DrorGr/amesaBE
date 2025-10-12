@@ -34,10 +34,14 @@ jobs:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
       - name: Restore dependencies
-        run: dotnet restore AmesaBackend/AmesaBackend.csproj
+        run: |
+          dotnet restore AmesaBackend/AmesaBackend.csproj
+          dotnet restore AmesaBackend.Tests/AmesaBackend.Tests.csproj
 
       - name: Build
-        run: dotnet build AmesaBackend/AmesaBackend.csproj --configuration Release --no-restore
+        run: |
+          dotnet build AmesaBackend/AmesaBackend.csproj --configuration Release --no-restore
+          dotnet build AmesaBackend.Tests/AmesaBackend.Tests.csproj --configuration Release --no-restore
 
       - name: Test
         run: dotnet test AmesaBackend.Tests/AmesaBackend.Tests.csproj --configuration Release --no-build --verbosity normal
