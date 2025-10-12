@@ -17,9 +17,10 @@ AmesaBE is the backend API for the Amesa lottery management system. Built with .
 
 ## Technology Stack
 - **Backend**: .NET 8.0, ASP.NET Core, Entity Framework Core
+- **Admin Panel**: Blazor Server (integrated monolith) ✅ NEW
 - **Database**: Aurora PostgreSQL Serverless v2, SQLite (dev)
 - **Real-time**: SignalR for live lottery updates
-- **Authentication**: JWT Bearer tokens, OAuth 2.0
+- **Authentication**: JWT Bearer tokens (API), Email/Password (Admin Panel)
 - **Payment**: Stripe integration
 - **Caching**: Redis (planned)
 - **Infrastructure**: AWS (ECS Fargate, ECR, ALB, Aurora)
@@ -27,34 +28,37 @@ AmesaBE is the backend API for the Amesa lottery management system. Built with .
 - **Version Control**: Git with GitHub repository
 - **Package Management**: NuGet
 
-## Current Status (2025-10-10)
+## Current Status (2025-10-12)
 - **Repository**: https://github.com/DrorGr/amesaBE
-- **Main branch**: Stable, manual deployment only
-- **Dev/Stage branches**: Auto-deploy on push
-- **Current Branch**: main
-- **Working Tree**: Has uncommitted workflow changes
+- **Main branch**: Stable, deployed with admin panel ✅
+- **Dev/Stage branches**: Auto-deploy on push ✅
+- **Admin Panel**: Blazor Server admin panel deployed to all environments ✅
 - **Deployment**: ECS Fargate with Docker containers
+- **Latest**: Admin panel fully operational on dev, stage, and production
 
 ## Environment Configuration
 
 ### Development Environment
-- **ECS Cluster**: Amesa (dev service)
+- **ECS Cluster**: Amesa (dev service: amesa-backend-stage-service)
 - **Database**: amesadbmain-stage (shared with staging)
 - **ALB**: amesa-backend-stage-alb-467028641.eu-north-1.elb.amazonaws.com
-- **ECR Image Tag**: dev-{sha}, dev-latest
+- **Admin Panel**: http://amesa-backend-stage-alb-467028641.eu-north-1.elb.amazonaws.com/admin ✅
+- **ECR Image Tag**: dev-{sha}, dev-latest, latest-with-curl
 - **Deployment**: Auto on push to dev branch
 
 ### Staging Environment
-- **ECS Cluster**: Amesa (stage service)
+- **ECS Cluster**: Amesa (stage service: amesa-backend-stage-service, shared with dev)
 - **Database**: amesadbmain-stage
 - **ALB**: amesa-backend-stage-alb-467028641.eu-north-1.elb.amazonaws.com
-- **ECR Image Tag**: stage-{sha}, stage-latest
+- **Admin Panel**: http://amesa-backend-stage-alb-467028641.eu-north-1.elb.amazonaws.com/admin ✅
+- **ECR Image Tag**: stage-{sha}, stage-latest, latest-with-curl
 - **Deployment**: Auto on push to stage branch
 
 ### Production Environment
-- **ECS Cluster**: Amesa (prod service)
+- **ECS Cluster**: Amesa (prod service: amesa-backend-service)
 - **Database**: amesadbmain
 - **ALB**: amesa-backend-alb-509078867.eu-north-1.elb.amazonaws.com
+- **Admin Panel**: http://amesa-backend-alb-509078867.eu-north-1.elb.amazonaws.com/admin ✅
 - **ECR Image Tag**: prod-{sha}, latest, prod-latest
 - **Deployment**: Manual via workflow_dispatch only
 
@@ -75,6 +79,13 @@ AmesaBE is the backend API for the Amesa lottery management system. Built with .
 - **Houses**: `/api/v1/houses/*` - Lottery properties and tickets
 - **Translations**: `/api/v1/translations/*` - Internationalization
 - **Lottery Results**: `/api/v1/lottery-results/*` - Draw results
+
+### Admin Panel (NEW - 2025-10-12) ✅
+- **URL**: `/admin` - Blazor Server admin interface
+- **Features**: Houses, Users, Translations, Promotions, Content management
+- **Database Selector**: Switch between dev/stage and production databases at runtime
+- **Authentication**: Email/password login with session management
+- **Documentation**: See `ADMIN_PANEL_GUIDE.md`, `ADMIN_PANEL_DEPLOYED_SUCCESS.md`
 
 ### Real-time Hubs (SignalR)
 - **LotteryHub**: Live lottery updates, ticket purchases
