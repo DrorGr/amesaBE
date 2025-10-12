@@ -33,9 +33,10 @@ AmesaBE is the backend API for the Amesa lottery management system. Built with .
 - **Main branch**: Stable, deployed with admin panel ✅
 - **Dev/Stage branches**: Auto-deploy on push ✅
 - **Admin Panel**: Blazor Server admin panel deployed to all environments ✅
+- **Dev Frontend API**: ✅ **ISSUE RESOLVED** - CloudFront configuration fixed
 - **Staging API**: ✅ **ISSUE RESOLVED** - All API endpoints working (200 status)
 - **Deployment**: ECS Fargate with Docker containers
-- **Latest**: Admin panel fully operational + staging API issue fixed
+- **Latest**: All environments fully operational with admin panel
 
 ## Environment Configuration
 
