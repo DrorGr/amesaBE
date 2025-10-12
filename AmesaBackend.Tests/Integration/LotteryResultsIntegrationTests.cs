@@ -300,9 +300,8 @@ namespace AmesaBackend.Tests.Integration
             Assert.True(result.Success);
             Assert.All(result.Data.Results, r => 
             {
-                var resultDate = DateTime.Parse(r.ResultDate);
-                Assert.True(resultDate >= DateTime.Parse(fromDate));
-                Assert.True(resultDate <= DateTime.Parse(toDate));
+                Assert.True(r.ResultDate >= DateTime.Parse(fromDate));
+                Assert.True(r.ResultDate <= DateTime.Parse(toDate));
             });
         }
 
@@ -359,7 +358,7 @@ namespace AmesaBackend.Tests.Integration
             Assert.Equal(result.Id, specificResult.Data.Id);
 
             // 3. Validate QR code
-            var validateResponse = await _client.PostAsJsonAsync("/api/v1/lotteryresults/validate-qr", specificResult.Data.QrCodeData);
+            var validateResponse = await _client.PostAsJsonAsync("/api/v1/lotteryresults/validate-qr", specificResult.Data.QRCodeData);
             var validateContent = await validateResponse.Content.ReadAsStringAsync();
             var validation = JsonSerializer.Deserialize<ApiResponse<QRCodeValidationDto>>(validateContent, new JsonSerializerOptions
             {
@@ -373,7 +372,7 @@ namespace AmesaBackend.Tests.Integration
             // 4. Claim prize
             var claimRequest = new ClaimPrizeRequest
             {
-                ResultId = Guid.Parse(specificResult.Data.Id),
+                ResultId = specificResult.Data.Id,
                 ClaimNotes = "Integration test claim"
             };
 
@@ -392,7 +391,7 @@ namespace AmesaBackend.Tests.Integration
             {
                 var deliveryRequest = new CreatePrizeDeliveryRequest
                 {
-                    LotteryResultId = Guid.Parse(claimResult.Data.Id),
+                    LotteryResultId = claimResult.Data.Id,
                     RecipientName = "Integration Test Recipient",
                     AddressLine1 = "123 Integration Test Street",
                     City = "Test City",

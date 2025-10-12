@@ -236,7 +236,7 @@ namespace AmesaBackend.Tests.Controllers
             response.EnsureSuccessStatusCode();
             Assert.NotNull(result);
             Assert.True(result.Success);
-            Assert.Equal(lotteryResult.Id.ToString(), result.Data.Id);
+            Assert.Equal(lotteryResult.Id, result.Data.Id);
         }
 
         [Fact]
