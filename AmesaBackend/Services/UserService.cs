@@ -1,4 +1,8 @@
 using Microsoft.EntityFrameworkCore;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
+using Microsoft.IdentityModel.Tokens;
 using AmesaBackend.Data;
 using AmesaBackend.DTOs;
 using AmesaBackend.Models;
@@ -9,11 +13,13 @@ namespace AmesaBackend.Services
     {
         private readonly AmesaDbContext _context;
         private readonly ILogger<UserService> _logger;
+        private readonly IConfiguration _configuration;
 
-        public UserService(AmesaDbContext context, ILogger<UserService> logger)
+        public UserService(AmesaDbContext context, ILogger<UserService> logger, IConfiguration configuration)
         {
             _context = context;
             _logger = logger;
+            _configuration = configuration;
         }
 
         public async Task<UserDto> GetUserProfileAsync(Guid userId)
@@ -277,6 +283,142 @@ namespace AmesaBackend.Services
                 RejectionReason = document.RejectionReason,
                 CreatedAt = document.CreatedAt
             };
+        }
+
+        // OAuth methods
+        public async Task<User> FindOrCreateOAuthUserAsync(string email, string name, AuthProvider provider, string providerId)
+        {
+            try
+            {
+                // Check if user exists with this email
+                var existingUser = await _context.Users
+                    .FirstOrDefaultAsync(u => u.Email == email);
+
+                if (existingUser != null)
+                {
+                    // Update OAuth info if not set
+                    if (string.IsNullOrEmpty(existingUser.ProviderId))
+                    {
+                        existingUser.AuthProvider = provider;
+                        existingUser.ProviderId = providerId;
+                        existingUser.EmailVerified = true; // OAuth emails are pre-verified
+                        existingUser.UpdatedAt = DateTime.UtcNow;
+                        existingUser.LastLoginAt = DateTime.UtcNow;
+                        await _context.SaveChangesAsync();
+                        _logger.LogInformation("Updated existing user {Email} with OAuth provider {Provider}", email, provider);
+                    }
+                    else
+                    {
+                        // Just update last login
+                        existingUser.LastLoginAt = DateTime.UtcNow;
+                        await _context.SaveChangesAsync();
+                    }
+                    return existingUser;
+                }
+
+                // Create new user
+                var nameParts = name?.Split(' ', 2) ?? new[] { email, "" };
+                var newUser = new User
+                {
+                    Id = Guid.NewGuid(),
+                    Email = email,
+                    EmailVerified = true, // OAuth emails are pre-verified
+                    Username = email.Split('@')[0] + "_" + Guid.NewGuid().ToString().Substring(0, 6),
+                    FirstName = nameParts[0],
+                    LastName = nameParts.Length > 1 ? nameParts[1] : "",
+                    AuthProvider = provider,
+                    ProviderId = providerId,
+                    PasswordHash = null, // OAuth users don't have passwords
+                    Status = UserStatus.Active,
+                    VerificationStatus = UserVerificationStatus.EmailVerified,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow,
+                    LastLoginAt = DateTime.UtcNow
+                };
+
+                _context.Users.Add(newUser);
+                await _context.SaveChangesAsync();
+
+                _logger.LogInformation("Created new OAuth user {Email} with provider {Provider}", email, provider);
+                return newUser;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error finding or creating OAuth user for email {Email}", email);
+                throw;
+            }
+        }
+
+        public async Task<string> GenerateJwtTokenAsync(User user)
+        {
+            try
+            {
+                var tokenHandler = new JwtSecurityTokenHandler();
+                var key = Encoding.ASCII.GetBytes(_configuration["JwtSettings:SecretKey"]!);
+                var expiresAt = DateTime.UtcNow.AddMinutes(int.Parse(_configuration["JwtSettings:ExpiryInMinutes"]!));
+
+                var tokenDescriptor = new SecurityTokenDescriptor
+                {
+                    Subject = new ClaimsIdentity(new[]
+                    {
+                        new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+                        new Claim(ClaimTypes.Email, user.Email),
+                        new Claim(ClaimTypes.Name, user.Username),
+                        new Claim("firstName", user.FirstName),
+                        new Claim("lastName", user.LastName)
+                    }),
+                    Expires = expiresAt,
+                    Issuer = _configuration["JwtSettings:Issuer"],
+                    Audience = _configuration["JwtSettings:Audience"],
+                    SigningCredentials = new SigningCredentials(
+                        new SymmetricSecurityKey(key),
+                        SecurityAlgorithms.HmacSha256Signature)
+                };
+
+                var token = tokenHandler.CreateToken(tokenDescriptor);
+                var accessToken = tokenHandler.WriteToken(token);
+
+                _logger.LogInformation("Generated JWT token for user {UserId}", user.Id);
+                return accessToken;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error generating JWT token for user {UserId}", user.Id);
+                throw;
+            }
+        }
+
+        public async Task<string> GenerateRefreshTokenAsync(User user)
+        {
+            try
+            {
+                // Generate secure random token
+                var refreshToken = Convert.ToBase64String(Guid.NewGuid().ToByteArray()) + 
+                                   Convert.ToBase64String(Guid.NewGuid().ToByteArray());
+                var refreshExpiresAt = DateTime.UtcNow.AddDays(
+                    int.Parse(_configuration["JwtSettings:RefreshTokenExpiryInDays"]!));
+
+                // Save session
+                var session = new UserSession
+                {
+                    UserId = user.Id,
+                    SessionToken = refreshToken,
+                    ExpiresAt = refreshExpiresAt,
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                _context.UserSessions.Add(session);
+                await _context.SaveChangesAsync();
+
+                _logger.LogInformation("Generated refresh token for user {UserId}", user.Id);
+                return refreshToken;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error generating refresh token for user {UserId}", user.Id);
+                throw;
+            }
         }
     }
 }

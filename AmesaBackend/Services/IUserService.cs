@@ -1,4 +1,5 @@
 using AmesaBackend.DTOs;
+using AmesaBackend.Models;
 
 namespace AmesaBackend.Services
 {
@@ -15,5 +16,10 @@ namespace AmesaBackend.Services
         Task DeleteUserPhoneAsync(Guid userId, Guid phoneId);
         Task<IdentityDocumentDto> UploadIdentityDocumentAsync(Guid userId, UploadIdentityDocumentRequest request);
         Task<IdentityDocumentDto> GetIdentityDocumentAsync(Guid userId);
+        
+        // OAuth methods
+        Task<User> FindOrCreateOAuthUserAsync(string email, string name, AuthProvider provider, string providerId);
+        Task<string> GenerateJwtTokenAsync(User user);
+        Task<string> GenerateRefreshTokenAsync(User user);
     }
 }
