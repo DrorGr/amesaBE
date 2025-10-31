@@ -141,6 +141,26 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 return Task.CompletedTask;
             }
         };
+    })
+    .AddGoogle(options =>
+    {
+        options.ClientId = builder.Configuration["Authentication:Google:ClientId"] ?? "";
+        options.ClientSecret = builder.Configuration["Authentication:Google:ClientSecret"] ?? "";
+        options.CallbackPath = "/api/oauth/google-callback";
+        options.SaveTokens = true;
+        options.Scope.Add("email");
+        options.Scope.Add("profile");
+    })
+    .AddFacebook(options =>
+    {
+        options.AppId = builder.Configuration["Authentication:Facebook:AppId"] ?? "";
+        options.AppSecret = builder.Configuration["Authentication:Facebook:AppSecret"] ?? "";
+        options.CallbackPath = "/api/oauth/facebook-callback";
+        options.SaveTokens = true;
+        options.Fields.Add("name");
+        options.Fields.Add("email");
+        options.Scope.Add("email");
+        options.Scope.Add("public_profile");
     });
 
 // Configure Authorization
