@@ -217,7 +217,8 @@ builder.Services.AddRazorPages();
 builder.Services.AddServerSideBlazor();
 
 // Add Background Services
-builder.Services.AddHostedService<LotteryDrawService>();
+// AM-8: Removed lottery automation - lottery drawing should be manual
+// builder.Services.AddHostedService<LotteryDrawService>();
 builder.Services.AddHostedService<NotificationBackgroundService>();
 
 // Add SignalR for real-time updates
