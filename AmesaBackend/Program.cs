@@ -4,6 +4,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
 using Microsoft.Extensions.Configuration;
+using Microsoft.AspNetCore.HttpOverrides;
 using AmesaBackend.Configuration;
 using AmesaBackend.Data;
 using AmesaBackend.Services;
@@ -37,6 +38,12 @@ builder.Host.UseSerilog();
 // Add services to the container
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 
 // Load Google OAuth credentials from AWS Secrets Manager when configured
 var configurationManager = (ConfigurationManager)builder.Configuration;
@@ -277,6 +284,8 @@ app.UseSwaggerUI(c =>
 app.UseMiddleware<ErrorHandlingMiddleware>();
 app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseMiddleware<SecurityHeadersMiddleware>();
+
+app.UseForwardedHeaders();
 
 // Add response compression
 app.UseResponseCompression();
