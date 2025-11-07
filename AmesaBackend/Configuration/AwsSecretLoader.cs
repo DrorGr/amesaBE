@@ -3,7 +3,7 @@ using Amazon;
 using Amazon.SecretsManager;
 using Amazon.SecretsManager.Model;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
+using Serilog;
 
 namespace AmesaBackend.Configuration;
 
@@ -13,7 +13,7 @@ public static class AwsSecretLoader
         ConfigurationManager configuration,
         string? secretId,
         string? region,
-        ILogger? logger,
+        Serilog.ILogger? logger,
         params (string SecretField, string ConfigKey)[] mappings)
     {
         if (string.IsNullOrWhiteSpace(secretId) || mappings.Length == 0)
@@ -41,39 +41,39 @@ public static class AwsSecretLoader
 
             if (string.IsNullOrWhiteSpace(secretString))
             {
-                logger?.LogWarning("AWS secret {SecretId} returned an empty payload.", secretId);
+                logger?.Warning("AWS secret {SecretId} returned an empty payload.", secretId);
                 return;
             }
 
             var secretValues = JsonSerializer.Deserialize<Dictionary<string, string>>(secretString) ?? new Dictionary<string, string>();
             if (secretValues.Count == 0)
             {
-                logger?.LogWarning("AWS secret {SecretId} did not contain any key/value pairs.", secretId);
+                logger?.Warning("AWS secret {SecretId} did not contain any key/value pairs.", secretId);
                 return;
             }
 
-            var updates = new List<KeyValuePair<string, string>>();
+            var updates = new List<KeyValuePair<string, string?>>();
 
             foreach (var (secretField, configKey) in mappings)
             {
                 if (TryGetValueCaseInsensitive(secretValues, secretField, out var value) && !string.IsNullOrWhiteSpace(value))
                 {
-                    updates.Add(new KeyValuePair<string, string>(configKey, value));
+                    updates.Add(new KeyValuePair<string, string?>(configKey, value));
                 }
             }
 
             if (updates.Count == 0)
             {
-                logger?.LogWarning("AWS secret {SecretId} did not provide any mapped values.", secretId);
+                logger?.Warning("AWS secret {SecretId} did not provide any mapped values.", secretId);
                 return;
             }
 
             configuration.AddInMemoryCollection(updates);
-            logger?.LogInformation("Loaded {Count} values from AWS secret {SecretId}.", updates.Count, secretId);
+            logger?.Information("Loaded {Count} values from AWS secret {SecretId}.", updates.Count, secretId);
         }
         catch (Exception ex)
         {
-            logger?.LogError(ex, "Failed to load AWS secret {SecretId}.", secretId);
+            logger?.Error(ex, "Failed to load AWS secret {SecretId}.", secretId);
         }
     }
 
