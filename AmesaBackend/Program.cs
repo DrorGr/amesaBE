@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
+using Microsoft.Extensions.Configuration;
+using AmesaBackend.Configuration;
 using AmesaBackend.Data;
 using AmesaBackend.Services;
 using AmesaBackend.Middleware;
@@ -35,6 +37,19 @@ builder.Host.UseSerilog();
 // Add services to the container
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
+
+// Load Google OAuth credentials from AWS Secrets Manager when configured
+var configurationManager = (ConfigurationManager)builder.Configuration;
+var awsRegion = builder.Configuration["Aws:Region"] ?? Environment.GetEnvironmentVariable("AWS_REGION");
+var googleSecretId = builder.Configuration["Authentication:Google:SecretId"];
+
+AwsSecretLoader.TryLoadJsonSecret(
+    configurationManager,
+    googleSecretId,
+    awsRegion,
+    Log.Logger,
+    ("ClientId", "Authentication:Google:ClientId"),
+    ("ClientSecret", "Authentication:Google:ClientSecret"));
 
 // Configure Swagger/OpenAPI
 builder.Services.AddSwaggerGen(c =>

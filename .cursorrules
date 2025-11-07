@@ -37,6 +37,7 @@ AmesaBE is the backend API for the Amesa lottery management system. Built with .
 - **Staging API**: ✅ **ISSUE RESOLVED** - All API endpoints working (200 status)
 - **Deployment**: ECS Fargate with Docker containers
 - **Latest**: All environments fully operational with admin panel
+- **Google OAuth Config**: Credentials pulled from AWS Secrets Manager when `Authentication:Google:SecretId` is set (default secret `amesa-google_people_API` in eu-north-1)
 
 ## Environment Configuration
 
@@ -176,6 +177,7 @@ AmesaBE is the backend API for the Amesa lottery management system. Built with .
 - `PROD_ECS_CLUSTER`, `PROD_ECS_SERVICE`
 - `DEV_DB_CONNECTION_STRING`, `STAGE_DB_CONNECTION_STRING`, `PROD_DB_CONNECTION_STRING`
 - `DEV_JWT_SECRET_KEY`, `STAGE_JWT_SECRET_KEY`, `PROD_JWT_SECRET_KEY`
+- **AWS Secrets Manager**: Provide secret `amesa-google_people_API` (keys `ClientId`, `ClientSecret`) or set environment variables overriding `Authentication:Google:*`
 
 ## Common Commands
 
