@@ -5,6 +5,7 @@ using Microsoft.OpenApi.Models;
 using System.Text;
 using Microsoft.Extensions.Configuration;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.Extensions.Primitives;
 using AmesaBackend.Configuration;
 using AmesaBackend.Data;
 using AmesaBackend.Services;
@@ -286,6 +287,17 @@ app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseMiddleware<SecurityHeadersMiddleware>();
 
 app.UseForwardedHeaders();
+
+app.Use((context, next) =>
+{
+    if (context.Request.Headers.TryGetValue("CloudFront-Forwarded-Proto", out var proto) &&
+        !StringValues.IsNullOrEmpty(proto))
+    {
+        context.Request.Scheme = proto.ToString();
+    }
+
+    return next();
+});
 
 // Add response compression
 app.UseResponseCompression();
