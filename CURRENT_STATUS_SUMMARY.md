@@ -1,23 +1,25 @@
 # Current Status Summary - AmesaBE
 
-## Last Updated: 2025-10-12
+## Last Updated: 2025-11-08
 
 ## 🎯 Overall Status: **OPERATIONAL** ✅
 
 All backend environments are fully functional with complete CI/CD pipeline deployed.
 
-### 🎉 NEW: Admin Panel Deployed!
-- **Blazor Server Admin Panel** is now live on all environments
-- **Stage/Dev**: http://amesa-backend-stage-alb-467028641.eu-north-1.elb.amazonaws.com/admin
-- **Production**: http://amesa-backend-alb-509078867.eu-north-1.elb.amazonaws.com/admin
-- **Status**: ✅ Fully operational with login, database selector, and management features
+### 🎉 NEW (2025-11-08): Google OAuth Enabled
+- **Google Sign-In**: Backend now completes Google OAuth flow using credentials from AWS Secrets Manager (`amesa-google_people_API`)
+- **State Handling**: Added dedicated `External` authentication cookie (SameSite=None, secure) for OAuth callbacks
+- **CloudFront Forwarding**: Confirmed `CloudFront-Forwarded-Proto` header honoured to keep HTTPS redirect URIs
+- **Impact**: Stage dev users can authenticate with Google (pending client secret validity)
 
-### 🔧 NEW: Staging API Issue Resolved!
-- **Issue**: Staging environment was returning 500 Internal Server Error for API endpoints
-- **Root Cause**: Database configuration using SQLite instead of PostgreSQL for staging environment
-- **Fix Applied**: Updated Program.cs to use PostgreSQL for both staging and production environments
-- **Result**: ✅ All staging API endpoints now working correctly (200 status)
-- **Impact**: Staging frontend and API are now fully functional
+### 🔧 NEW (2025-11-08): Local Seeding Behind Build Flag
+- **Behavior change**: SQLite seeding logic removed from normal builds to avoid accidental seed runs in hosted environments
+- **How to seed**: Compile/run with `RUN_DATABASE_SEED` symbol (`dotnet run -c Debug /p:DefineConstants="RUN_DATABASE_SEED"`)
+- **Impact**: Production/stage tasks no longer execute seeders by default
+
+### 📌 Previous Milestones
+- **Blazor Admin Panel**: Deployed to all environments (2025-10-12) with DB selector and secure login
+- **Staging API Fix**: PostgreSQL configuration corrected (2025-10-12)
 
 ---
 
@@ -144,7 +146,7 @@ Code Push → GitHub Actions → Build & Test → Docker Build → ECR Push → 
 
 ### Authentication & Authorization: ✅ Configured
 - **JWT Tokens**: Bearer authentication implemented
-- **OAuth 2.0**: Prepared for social login integration
+- **OAuth 2.0**: Google provider live; state stored in `External` cookie
 - **Role-Based Access**: Authorization middleware configured
 - **CORS**: Configured for allowed origins
 
@@ -273,5 +275,5 @@ curl http://amesa-backend-alb-509078867.eu-north-1.elb.amazonaws.com/health
 
 **Status**: 🟢 **All Systems Operational**
 
-**Last Verified**: 2025-10-10
+**Last Verified**: 2025-11-08
 

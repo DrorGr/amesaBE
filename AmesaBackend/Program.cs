@@ -199,6 +199,11 @@ builder.Services.AddAuthentication(options =>
         options.SaveTokens = true;
         options.Scope.Add("email");
         options.Scope.Add("profile");
+        options.CorrelationCookie.HttpOnly = true;
+        options.CorrelationCookie.SecurePolicy = CookieSecurePolicy.Always;
+        options.CorrelationCookie.SameSite = SameSiteMode.None;
+        options.CorrelationCookie.Path = "/";
+        options.CorrelationCookie.Name = ".Amesa.Google.Correlation";
     })
     .AddFacebook(options =>
     {
@@ -211,6 +216,11 @@ builder.Services.AddAuthentication(options =>
         options.Fields.Add("email");
         options.Scope.Add("email");
         options.Scope.Add("public_profile");
+        options.CorrelationCookie.HttpOnly = true;
+        options.CorrelationCookie.SecurePolicy = CookieSecurePolicy.Always;
+        options.CorrelationCookie.SameSite = SameSiteMode.None;
+        options.CorrelationCookie.Path = "/";
+        options.CorrelationCookie.Name = ".Amesa.Facebook.Correlation";
     });
 
 // Configure Authorization

@@ -38,7 +38,8 @@ dotnet restore
 dotnet build
 dotnet test
 dotnet run --project AmesaBackend
-dotnet run --project AmesaBackend -- --seeder
+# Run with local SQLite seeding enabled (requires compile symbol)
+dotnet run --project AmesaBackend -c Debug /p:DefineConstants="RUN_DATABASE_SEED"
 
 # Database operations
 dotnet ef migrations add MigrationName --project AmesaBackend
@@ -68,11 +69,12 @@ git checkout main
 
 ## Current Status
 - **Working tree**: Clean, all changes committed
-- **Last activity**: 2025-10-12 - Admin Panel DEPLOYED to all environments ✅
-- **Current focus**: Admin Panel fully operational on dev, stage, and production
+- **Last activity**: 2025-11-08 - Google OAuth integration (Secrets Manager + staged ECS) ✅
+- **Current focus**: OAuth provider support and runtime infrastructure polish
 - **Environment**: All environments (dev/stage/prod) operational with admin panel
 - **Admin Panel**: ✅ LIVE on all environments with secure login and database switching
-- **Latest Deployment**: Production admin panel verified working (200 OK)
+- **OAuth**: Google sign-in uses AWS Secrets Manager credentials (`amesa-google_people_API`) and the backend `External` authentication cookie for state
+- **Latest Deployment**: Dev/stage redeploy with Google OAuth + seeding guard
 
 ## AWS Infrastructure
 - **Backend**: ECS Fargate + ECR (All environments operational ✅)

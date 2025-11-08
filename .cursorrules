@@ -20,7 +20,7 @@ AmesaBE is the backend API for the Amesa lottery management system. Built with .
 - **Admin Panel**: Blazor Server (integrated monolith) ✅ NEW
 - **Database**: Aurora PostgreSQL Serverless v2, SQLite (dev)
 - **Real-time**: SignalR for live lottery updates
-- **Authentication**: JWT Bearer tokens (API), Email/Password (Admin Panel)
+- **Authentication**: JWT Bearer tokens (API), External cookie + Google/Facebook OAuth, Email/Password (Admin Panel)
 - **Payment**: Stripe integration
 - **Caching**: Redis (planned)
 - **Infrastructure**: AWS (ECS Fargate, ECR, ALB, Aurora)
@@ -28,7 +28,7 @@ AmesaBE is the backend API for the Amesa lottery management system. Built with .
 - **Version Control**: Git with GitHub repository
 - **Package Management**: NuGet
 
-## Current Status (2025-10-12)
+## Current Status (2025-11-08)
 - **Repository**: https://github.com/DrorGr/amesaBE
 - **Main branch**: Stable, deployed with admin panel ✅
 - **Dev/Stage branches**: Auto-deploy on push ✅
@@ -36,8 +36,10 @@ AmesaBE is the backend API for the Amesa lottery management system. Built with .
 - **Dev Frontend API**: ✅ **ISSUE RESOLVED** - CloudFront configuration fixed
 - **Staging API**: ✅ **ISSUE RESOLVED** - All API endpoints working (200 status)
 - **Deployment**: ECS Fargate with Docker containers
-- **Latest**: All environments fully operational with admin panel
-- **Google OAuth Config**: Credentials pulled from AWS Secrets Manager when `Authentication:Google:SecretId` is set (default secret `amesa-google_people_API` in eu-north-1)
+- **Latest**:
+  - Google OAuth flow enabled for staging/production using credentials loaded from AWS Secrets Manager (`amesa-google_people_API`)
+  - OAuth state handled via dedicated `External` authentication cookie (SameSite=None, secure, short-lived)
+  - Local SQLite database seeding is now **compiled out by default**; wrap with `RUN_DATABASE_SEED` build symbol when seeding is required
 
 ## Environment Configuration
 
@@ -116,7 +118,8 @@ AmesaBE is the backend API for the Amesa lottery management system. Built with .
 - Rate limiting and throttling
 
 ### Security
-- JWT Bearer authentication
+- JWT Bearer authentication for APIs
+- External cookie authentication for OAuth callbacks (SameSite=None, secure, short-lived)
 - Role-based authorization
 - CORS configuration
 - Security headers middleware
@@ -129,7 +132,7 @@ AmesaBE is the backend API for the Amesa lottery management system. Built with .
 - SQLite for local development
 - Entity Framework Core migrations
 - Connection pooling and retry logic
-- Database seeding for initial data
+- Database seeding utilities (compile with `RUN_DATABASE_SEED` define when needed)
 
 ## Project Structure Guidelines
 
@@ -195,8 +198,8 @@ dotnet test
 # Run application
 dotnet run --project AmesaBackend
 
-# Run with database seeding
-dotnet run --project AmesaBackend -- --seeder
+# Run with SQLite seeding (requires RUN_DATABASE_SEED define)
+dotnet run --project AmesaBackend -c Debug /p:DefineConstants="RUN_DATABASE_SEED"
 
 # Watch mode (auto-reload)
 dotnet watch run --project AmesaBackend
@@ -320,7 +323,12 @@ Client → CloudFront /api/* → ALB → ECS Task → .NET API → Aurora Postgr
 - **Real-time Features**: Live lottery updates via SignalR
 - **Identity Verification**: KYC/AML compliance
 
-## Recent Major Work (2025-10-08)
+## Recent Major Work (2025-11-08)
+- ✅ Enabled Google OAuth flow via AWS Secrets Manager credentials (`amesa-google_people_API`)
+- ✅ Added dedicated `External` cookie authentication scheme for third-party OAuth state persistence
+- ✅ Wrapped SQLite seeding logic behind `RUN_DATABASE_SEED` compile symbol so hosted builds skip seeders
+
+## Previous Major Work (2025-10-08)
 - ✅ Configured GitHub Actions CI/CD pipeline
 - ✅ Set up ECS/ECR deployment flow
 - ✅ Implemented multi-environment strategy
@@ -329,6 +337,6 @@ Client → CloudFront /api/* → ALB → ECS Task → .NET API → Aurora Postgr
 - ✅ Set up comprehensive translations
 
 ---
-**Last Updated**: 2025-10-10
+**Last Updated**: 2025-11-08
 **Note**: This file should be updated whenever API design, database schema, deployment processes, or infrastructure changes.
 
