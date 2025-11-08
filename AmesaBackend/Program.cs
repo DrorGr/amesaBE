@@ -367,6 +367,7 @@ app.MapRazorPages(); // This is needed for Razor Pages
 app.MapFallbackToPage("/admin", "/Admin/App");
 app.MapFallbackToPage("/admin/{*path:nonfile}", "/Admin/App");
 
+#if RUN_DATABASE_SEED
 // Ensure database is created and migrated (only for SQLite local development)
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 if (connectionString != null && connectionString.Contains("Data Source="))
@@ -392,6 +393,7 @@ if (connectionString != null && connectionString.Contains("Data Source="))
         }
     }
 }
+#endif
 
 // Configure graceful shutdown
 app.Lifetime.ApplicationStopping.Register(() =>
