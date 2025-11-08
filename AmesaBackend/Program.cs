@@ -59,6 +59,16 @@ AwsSecretLoader.TryLoadJsonSecret(
     ("ClientId", "Authentication:Google:ClientId"),
     ("ClientSecret", "Authentication:Google:ClientSecret"));
 
+var googleClientId = builder.Configuration["Authentication:Google:ClientId"];
+if (string.IsNullOrWhiteSpace(googleClientId))
+{
+    Log.Warning("Google OAuth client ID is not configured.");
+}
+else
+{
+    Log.Information("Google OAuth client ID loaded. Length: {Length}", googleClientId.Length);
+}
+
 // Configure Swagger/OpenAPI
 builder.Services.AddSwaggerGen(c =>
 {
