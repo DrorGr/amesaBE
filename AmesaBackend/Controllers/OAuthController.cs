@@ -39,7 +39,7 @@ namespace AmesaBackend.Controllers
             {
                 var properties = new AuthenticationProperties
                 {
-                    RedirectUri = Url.Action(nameof(GoogleCallback)),
+                    RedirectUri = Url.Action(nameof(GoogleComplete)),
                     Items =
                     {
                         { "scheme", "Google" }
@@ -57,14 +57,14 @@ namespace AmesaBackend.Controllers
         }
 
         /// <summary>
-        /// Handle Google OAuth callback
+        /// Finalize Google OAuth login after remote handler completes
         /// </summary>
-        [HttpGet("google-callback")]
-        public async Task<IActionResult> GoogleCallback()
+        [HttpGet("google-complete")]
+        public async Task<IActionResult> GoogleComplete()
         {
             try
             {
-                var result = await HttpContext.AuthenticateAsync("Google");
+                var result = await HttpContext.AuthenticateAsync("External");
 
                 if (!result.Succeeded || result.Principal == null)
                 {
@@ -112,6 +112,7 @@ namespace AmesaBackend.Controllers
                 var redirectUrl = $"{_frontendUrl}/auth/callback?token={token}&refreshToken={refreshToken}&user={userJson}";
 
                 _logger.LogInformation("Redirecting to frontend with auth data for user: {UserId}", user.Id);
+                await HttpContext.SignOutAsync("External");
                 return Redirect(redirectUrl);
             }
             catch (Exception ex)
@@ -131,7 +132,7 @@ namespace AmesaBackend.Controllers
             {
                 var properties = new AuthenticationProperties
                 {
-                    RedirectUri = Url.Action(nameof(FacebookCallback)),
+                    RedirectUri = Url.Action(nameof(FacebookComplete)),
                     Items =
                     {
                         { "scheme", "Facebook" }
@@ -149,14 +150,14 @@ namespace AmesaBackend.Controllers
         }
 
         /// <summary>
-        /// Handle Facebook OAuth callback
+        /// Finalize Facebook OAuth login after remote handler completes
         /// </summary>
-        [HttpGet("facebook-callback")]
-        public async Task<IActionResult> FacebookCallback()
+        [HttpGet("facebook-complete")]
+        public async Task<IActionResult> FacebookComplete()
         {
             try
             {
-                var result = await HttpContext.AuthenticateAsync("Facebook");
+                var result = await HttpContext.AuthenticateAsync("External");
 
                 if (!result.Succeeded || result.Principal == null)
                 {
@@ -204,6 +205,7 @@ namespace AmesaBackend.Controllers
                 var redirectUrl = $"{_frontendUrl}/auth/callback?token={token}&refreshToken={refreshToken}&user={userJson}";
 
                 _logger.LogInformation("Redirecting to frontend with auth data for user: {UserId}", user.Id);
+                await HttpContext.SignOutAsync("External");
                 return Redirect(redirectUrl);
             }
             catch (Exception ex)

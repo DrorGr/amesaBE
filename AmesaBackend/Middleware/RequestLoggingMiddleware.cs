@@ -32,7 +32,10 @@ namespace AmesaBackend.Middleware
             try
             {
                 if (context.Request.Path.HasValue &&
-                    context.Request.Path.Value.Contains("google-callback", StringComparison.OrdinalIgnoreCase))
+                    (context.Request.Path.Value.Contains("google-callback", StringComparison.OrdinalIgnoreCase) ||
+                     context.Request.Path.Value.Contains("google-complete", StringComparison.OrdinalIgnoreCase) ||
+                     context.Request.Path.Value.Contains("facebook-callback", StringComparison.OrdinalIgnoreCase) ||
+                     context.Request.Path.Value.Contains("facebook-complete", StringComparison.OrdinalIgnoreCase)))
                 {
                     _logger.LogInformation(
                         "OAuth callback cookies: {Cookies}",

@@ -38,8 +38,10 @@
 ```
 
 #### 3. OAuth Controller Created
-- ✅ Google OAuth endpoints (`/api/oauth/google`, `/api/oauth/google-callback`)
-- ✅ Facebook OAuth endpoints (`/api/oauth/facebook`, `/api/oauth/facebook-callback`)
+- ✅ Google OAuth endpoints (`/api/oauth/google`, `/api/oauth/google-complete`)
+- ✅ Google OAuth callback path handled by middleware (`/api/oauth/google-callback`)
+- ✅ Facebook OAuth endpoints (`/api/oauth/facebook`, `/api/oauth/facebook-complete`)
+- ✅ Facebook OAuth callback path handled by middleware (`/api/oauth/facebook-callback`)
 - ✅ Secure authentication flow with error handling
 - ✅ JWT token generation for OAuth users
 - ✅ Redirect to frontend with token and user data
