@@ -31,6 +31,14 @@ namespace AmesaBackend.Middleware
 
             try
             {
+                if (context.Request.Path.HasValue &&
+                    context.Request.Path.Value.Contains("google-callback", StringComparison.OrdinalIgnoreCase))
+                {
+                    _logger.LogInformation(
+                        "OAuth callback cookies: {Cookies}",
+                        context.Request.Headers["Cookie"].ToString());
+                }
+
                 await _next(context);
             }
             finally
