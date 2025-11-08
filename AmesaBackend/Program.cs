@@ -295,6 +295,10 @@ app.Use((context, next) =>
     {
         context.Request.Scheme = proto.ToString();
     }
+    else if (context.Request.Host.Host.EndsWith("cloudfront.net", StringComparison.OrdinalIgnoreCase))
+    {
+        context.Request.Scheme = "https";
+    }
 
     return next();
 });
