@@ -1,0 +1,103 @@
+name: Build and Deploy to ECS
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'AmesaBackend.**'
+      - '.github/workflows/build-and-deploy.yml'
+  workflow_dispatch:
+
+env:
+  AWS_REGION: eu-north-1
+  AWS_ACCOUNT_ID: 129394705401
+  ECR_ROOT: ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
+  ECS_CLUSTER: Amesa
+
+jobs:
+  build-and-push:
+    name: Build and Push Docker Images
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - service: amesa-auth-service
+            dockerfile: AmesaBackend.Auth/Dockerfile
+          - service: amesa-content-service
+            dockerfile: AmesaBackend.Content/Dockerfile
+          - service: amesa-notification-service
+            dockerfile: AmesaBackend.Notification/Dockerfile
+          - service: amesa-payment-service
+            dockerfile: AmesaBackend.Payment/Dockerfile
+          - service: amesa-lottery-service
+            dockerfile: AmesaBackend.Lottery/Dockerfile
+          - service: amesa-lottery-results-service
+            dockerfile: AmesaBackend.LotteryResults/Dockerfile
+          - service: amesa-analytics-service
+            dockerfile: AmesaBackend.Analytics/Dockerfile
+          - service: amesa-admin-service
+            dockerfile: AmesaBackend.Admin/Dockerfile
+      fail-fast: false
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push ${{ matrix.service }}
+        working-directory: .
+        run: |
+          docker build -f ${{ matrix.dockerfile }} \
+            -t ${{ env.ECR_ROOT }}/${{ matrix.service }}:latest \
+            -t ${{ env.ECR_ROOT }}/${{ matrix.service }}:${{ github.sha }} .
+          docker push ${{ env.ECR_ROOT }}/${{ matrix.service }}:latest
+          docker push ${{ env.ECR_ROOT }}/${{ matrix.service }}:${{ github.sha }}
+
+  deploy:
+    name: Deploy to ECS
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    strategy:
+      matrix:
+        service:
+          - amesa-auth-service
+          - amesa-content-service
+          - amesa-notification-service
+          - amesa-payment-service
+          - amesa-lottery-service
+          - amesa-lottery-results-service
+          - amesa-analytics-service
+          - amesa-admin-service
+      fail-fast: false
+    
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Force new deployment for ${{ matrix.service }}
+        run: |
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service ${{ matrix.service }} \
+            --force-new-deployment \
+            --region ${{ env.AWS_REGION }}

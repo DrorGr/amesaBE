@@ -130,7 +130,7 @@ var frontendUrl = builder.Configuration["FrontendUrl"] ??
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var secretKey = jwtSettings["SecretKey"];
 
-builder.Services.AddAuthentication(options =>
+var authBuilder = builder.Services.AddAuthentication(options =>
 {
     options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
     options.DefaultSignInScheme = "Cookies";
@@ -179,17 +179,16 @@ builder.Services.AddAuthentication(options =>
                 return Task.CompletedTask;
             }
         };
-    })
-    .AddGoogle(options =>
-    {
-        var googleClientId = builder.Configuration["Authentication:Google:ClientId"];
-        var googleClientSecret = builder.Configuration["Authentication:Google:ClientSecret"];
+    });
 
-        if (string.IsNullOrWhiteSpace(googleClientId) || string.IsNullOrWhiteSpace(googleClientSecret))
-        {
-            Log.Warning("Google OAuth credentials not configured. Google login will not work.");
-            return;
-        }
+// Conditionally add Google OAuth only if credentials are configured
+var googleClientId = builder.Configuration["Authentication:Google:ClientId"];
+var googleClientSecret = builder.Configuration["Authentication:Google:ClientSecret"];
+
+if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(googleClientSecret))
+{
+    authBuilder.AddGoogle(options =>
+    {
 
         options.ClientId = googleClientId;
         options.ClientSecret = googleClientSecret;
@@ -291,19 +290,21 @@ builder.Services.AddAuthentication(options =>
             context.HandleResponse();
             return Task.CompletedTask;
         };
-    })
-    .AddFacebook(options =>
-    {
-        var metaAppId = builder.Configuration["Authentication:Meta:AppId"];
-        var metaAppSecret = builder.Configuration["Authentication:Meta:AppSecret"];
+    });
+}
+else
+{
+    Log.Warning("Google OAuth credentials not configured. Google login will not work.");
+}
 
-        if (string.IsNullOrWhiteSpace(metaAppId) || string.IsNullOrWhiteSpace(metaAppSecret))
-        {
-            Log.Warning("Meta OAuth credentials not configured. Meta login will not work.");
-            options.AppId = "NOT_CONFIGURED";
-            options.AppSecret = "NOT_CONFIGURED";
-            return;
-        }
+// Conditionally add Meta/Facebook OAuth only if credentials are configured
+var metaAppId = builder.Configuration["Authentication:Meta:AppId"];
+var metaAppSecret = builder.Configuration["Authentication:Meta:AppSecret"];
+
+if (!string.IsNullOrWhiteSpace(metaAppId) && !string.IsNullOrWhiteSpace(metaAppSecret))
+{
+    authBuilder.AddFacebook(options =>
+    {
 
         options.AppId = metaAppId;
         options.AppSecret = metaAppSecret;
@@ -314,6 +315,11 @@ builder.Services.AddAuthentication(options =>
         options.CorrelationCookie.SameSite = Microsoft.AspNetCore.Http.SameSiteMode.None;
         options.CorrelationCookie.SecurePolicy = Microsoft.AspNetCore.Http.CookieSecurePolicy.Always;
     });
+}
+else
+{
+    Log.Warning("Meta OAuth credentials not configured. Meta login will not work.");
+}
 
 // Configure Authorization
 builder.Services.AddAuthorization(options =>
