@@ -80,12 +80,15 @@ namespace AmesaBackend.Controllers
             }
             catch (UnauthorizedAccessException ex)
             {
+                // Check if it's a user not found error
+                var isUserNotFound = ex.Message.Contains("USER_NOT_FOUND");
+                
                 return Unauthorized(new ApiResponse<object>
                 {
                     Success = false,
                     Error = new ErrorResponse
                     {
-                        Code = "AUTHENTICATION_ERROR",
+                        Code = isUserNotFound ? "USER_NOT_FOUND" : "AUTHENTICATION_ERROR",
                         Message = ex.Message
                     }
                 });

@@ -1,0 +1,12 @@
+@page "/admin/logout"
+@inject IAdminAuthService AuthService
+@inject NavigationManager Navigation
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        await AuthService.SignOutAsync();
+        Navigation.NavigateTo("/admin/login", forceLoad: true);
+    }
+}
+

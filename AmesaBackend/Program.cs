@@ -1,15 +1,28 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authentication.Google;
+using Microsoft.AspNetCore.Authentication.Facebook;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
 using AmesaBackend.Data;
 using AmesaBackend.Services;
 using AmesaBackend.Middleware;
+using AmesaBackend.Configuration;
+using AmesaBackend.Models;
+using System.Security.Claims;
+using System.Security.Cryptography;
 using Serilog;
 using Npgsql;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Caching.Memory;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Debug: Log environment and configuration sources
+Console.WriteLine($"[Config] Environment: {builder.Environment.EnvironmentName}");
+Console.WriteLine($"[Config] Content Root: {builder.Environment.ContentRootPath}");
+Console.WriteLine($"[Config] IsDevelopment: {builder.Environment.IsDevelopment()}");
 
 // Configure Npgsql for dynamic JSON support
 NpgsqlConnection.GlobalTypeMapper.EnableDynamicJson();
@@ -80,13 +93,46 @@ builder.Services.AddSwaggerGen(c =>
 // Configure Entity Framework with database provider based on environment
 builder.Services.AddDbContext<AmesaDbContext>(options =>
 {
-    // Get connection string from environment variables first, then configuration
-    var connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING") ?? 
-                          builder.Configuration.GetConnectionString("DefaultConnection");
+    // Get connection string - prioritize environment variable, then Development config, then default
+    var connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING");
     
-    // Use PostgreSQL in production, SQLite in development
-    if (builder.Environment.IsProduction())
+    if (string.IsNullOrEmpty(connectionString))
     {
+        // In Development, explicitly load from appsettings.Development.json
+        if (builder.Environment.IsDevelopment())
+        {
+            var devConfig = new ConfigurationBuilder()
+                .SetBasePath(builder.Environment.ContentRootPath)
+                .AddJsonFile("appsettings.Development.json", optional: true, reloadOnChange: true)
+                .Build();
+            
+            var devConnectionString = devConfig.GetConnectionString("DefaultConnection");
+            if (!string.IsNullOrEmpty(devConnectionString))
+            {
+                connectionString = devConnectionString;
+                Console.WriteLine("[DB Config] ✅ Loaded connection string from appsettings.Development.json");
+            }
+        }
+        
+        // Fallback to base config if not found in Development config
+        if (string.IsNullOrEmpty(connectionString))
+        {
+            connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+        }
+    }
+    
+    // Debug output to console
+    var connectionPreview = connectionString != null && connectionString.Length > 50 
+        ? connectionString.Substring(0, 50) + "..." 
+        : connectionString ?? "NULL";
+    Console.WriteLine($"[DB Config] Connection string preview: {connectionPreview}");
+    
+    // Use PostgreSQL if connection string contains PostgreSQL format, otherwise SQLite
+    if (connectionString != null && (connectionString.Contains("Host=", StringComparison.OrdinalIgnoreCase) || 
+                                     connectionString.Contains("Server=", StringComparison.OrdinalIgnoreCase)))
+    {
+        // PostgreSQL connection string detected
+        Console.WriteLine("[DB Config] ✅ Using PostgreSQL database provider");
         options.UseNpgsql(connectionString, npgsqlOptions =>
         {
             npgsqlOptions.EnableRetryOnFailure(
@@ -97,7 +143,16 @@ builder.Services.AddDbContext<AmesaDbContext>(options =>
     }
     else
     {
-        options.UseSqlite(connectionString);
+        // SQLite connection string (fallback only - not recommended for production)
+        // Only use SQLite if explicitly requested via connection string format
+        if (builder.Environment.IsDevelopment() && string.IsNullOrEmpty(connectionString))
+        {
+            Console.WriteLine("[DB Config] ⚠️ WARNING: No connection string found. Using SQLite fallback.");
+            Console.WriteLine("[DB Config] ⚠️ For PostgreSQL, ensure appsettings.Development.json has correct connection string.");
+            connectionString = "Data Source=AmesaDB.db";
+        }
+        Console.WriteLine("[DB Config] ⚠️ Using SQLite database provider (PostgreSQL connection string not detected)");
+        options.UseSqlite(connectionString ?? "Data Source=AmesaDB.db");
     }
     
     // Enable sensitive data logging in development
@@ -108,11 +163,72 @@ builder.Services.AddDbContext<AmesaDbContext>(options =>
     }
 });
 
+// Load OAuth credentials from AWS Secrets Manager (only in Production)
+if (builder.Environment.IsProduction())
+{
+    var awsRegion = builder.Configuration["Aws:Region"] ?? Environment.GetEnvironmentVariable("AWS_REGION") ?? "eu-north-1";
+
+    // Load Google OAuth credentials
+    var googleSecretId = builder.Configuration["Authentication:Google:SecretId"];
+    AwsSecretLoader.TryLoadJsonSecret(
+        builder.Configuration,
+        googleSecretId,
+        awsRegion,
+        Log.Logger,
+        ("ClientId", "Authentication:Google:ClientId"),
+        ("ClientSecret", "Authentication:Google:ClientSecret"));
+
+    // Load Meta OAuth credentials
+    var metaSecretId = builder.Configuration["Authentication:Meta:SecretId"];
+    AwsSecretLoader.TryLoadJsonSecret(
+        builder.Configuration,
+        metaSecretId,
+        awsRegion,
+        Log.Logger,
+        ("AppId", "Authentication:Meta:AppId"),
+        ("AppSecret", "Authentication:Meta:AppSecret"));
+}
+else
+{
+    Console.WriteLine("[OAuth] Development mode - using credentials from appsettings.Development.json (skipping AWS Secrets Manager)");
+}
+
+// Get frontend URL for OAuth redirects
+var frontendUrl = builder.Configuration["FrontendUrl"] ?? 
+                  builder.Configuration["AllowedOrigins:0"] ?? 
+                  "https://dpqbvdgnenckf.cloudfront.net";
+
 // Configure JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var secretKey = jwtSettings["SecretKey"];
 
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
+    // Don't set DefaultChallengeScheme to JwtBearer - OAuth challenges need to use their specific scheme
+    // When Challenge() is called with a specific scheme (like Google), it will use that scheme
+    options.DefaultSignInScheme = "Cookies"; // Required for OAuth sign-in
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+    .AddCookie("Cookies", options =>
+    {
+        options.Cookie.HttpOnly = true;
+        options.Cookie.SecurePolicy = Microsoft.AspNetCore.Http.CookieSecurePolicy.SameAsRequest;
+        // Use Lax for localhost to allow cookies on redirects
+        // In production with HTTPS, this should be None with Secure
+        if (builder.Environment.IsDevelopment())
+        {
+            options.Cookie.SameSite = Microsoft.AspNetCore.Http.SameSiteMode.Lax;
+        }
+        else
+        {
+            options.Cookie.SameSite = Microsoft.AspNetCore.Http.SameSiteMode.None;
+            options.Cookie.SecurePolicy = Microsoft.AspNetCore.Http.CookieSecurePolicy.Always;
+        }
+        options.ExpireTimeSpan = TimeSpan.FromDays(7);
+        options.SlidingExpiration = true;
+        
+    })
     .AddJwtBearer(options =>
     {
         options.TokenValidationParameters = new TokenValidationParameters
@@ -141,6 +257,182 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 return Task.CompletedTask;
             }
         };
+    })
+    .AddGoogle(options =>
+    {
+        var googleClientId = builder.Configuration["Authentication:Google:ClientId"];
+        var googleClientSecret = builder.Configuration["Authentication:Google:ClientSecret"];
+
+        if (string.IsNullOrWhiteSpace(googleClientId) || string.IsNullOrWhiteSpace(googleClientSecret))
+        {
+            Log.Warning("Google OAuth credentials not configured. Google login will not work.");
+            return;
+        }
+
+        options.ClientId = googleClientId;
+        options.ClientSecret = googleClientSecret;
+        options.CallbackPath = "/api/v1/oauth/google-callback";
+        options.SignInScheme = "Cookies"; // Use cookies for OAuth sign-in
+        options.SaveTokens = true;
+        
+        // For local development, force HTTP redirect URI to match Google Cloud Console
+        // Google Cloud Console must have: http://localhost:5000/api/v1/oauth/google-callback
+        // Configure callback path - this should match what's in Google Cloud Console
+        // In development, use http://localhost:5000/api/v1/oauth/google-callback
+        options.CallbackPath = "/api/v1/oauth/google-callback";
+
+        // Log configuration for debugging
+        Console.WriteLine($"[OAuth] Google ClientId: {googleClientId?.Substring(0, Math.Min(30, googleClientId?.Length ?? 0))}...");
+        Console.WriteLine($"[OAuth] Google ClientSecret: {(string.IsNullOrWhiteSpace(googleClientSecret) ? "MISSING" : googleClientSecret.Substring(0, Math.Min(10, googleClientSecret.Length)) + "...")}");
+        Console.WriteLine($"[OAuth] Google CallbackPath: {options.CallbackPath}");
+        Console.WriteLine($"[OAuth] Frontend URL: {frontendUrl}");
+
+        // Configure OAuth cookie for state management
+        options.CorrelationCookie.Name = ".Amesa.Google.Correlation";
+        options.CorrelationCookie.HttpOnly = true;
+        options.CorrelationCookie.Path = "/";
+        options.CorrelationCookie.MaxAge = TimeSpan.FromMinutes(10);
+        
+        // For development (HTTP), use Lax. For production (HTTPS), use None with Secure
+        if (builder.Environment.IsDevelopment())
+        {
+            options.CorrelationCookie.SameSite = Microsoft.AspNetCore.Http.SameSiteMode.Lax;
+            options.CorrelationCookie.SecurePolicy = Microsoft.AspNetCore.Http.CookieSecurePolicy.SameAsRequest;
+        }
+        else
+        {
+            options.CorrelationCookie.SameSite = Microsoft.AspNetCore.Http.SameSiteMode.None;
+            options.CorrelationCookie.SecurePolicy = Microsoft.AspNetCore.Http.CookieSecurePolicy.Always;
+        }
+        
+        // Removed OnRedirectToAuthorizationEndpoint handler - let default redirect behavior work
+        // The default behavior will redirect to Google's OAuth page with a 302 status
+        
+        // Handle user creation when OAuth ticket is being created
+        // This event fires when the OAuth response is received and ticket is being constructed
+        // We create the user, generate JWT tokens, and set the redirect URI to frontend with temp token
+        options.Events.OnCreatingTicket = async context =>
+        {
+            try
+            {
+                // Get services from HttpContext
+                var serviceProvider = context.HttpContext.RequestServices;
+                var authService = serviceProvider.GetRequiredService<IAuthService>();
+                var memoryCache = serviceProvider.GetRequiredService<IMemoryCache>();
+                var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
+                
+                // Get user info from claims (these are populated from Google's OAuth response)
+                var claims = context.Principal?.Claims.ToList() ?? new List<Claim>();
+                var email = claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.Email)?.Value;
+                var googleId = claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                var firstName = claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.GivenName)?.Value;
+                var lastName = claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.Surname)?.Value;
+
+                if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(googleId))
+                {
+                    logger.LogWarning("Google OAuth ticket creation: missing email or ID");
+                    context.Fail("Missing email or Google ID");
+                    return;
+                }
+
+                logger.LogInformation("Google OAuth ticket being created for: {Email}", email);
+
+                // Create/update user and get JWT tokens
+                var (authResponse, isNewUser) = await authService.CreateOrUpdateOAuthUserAsync(
+                    email: email,
+                    providerId: googleId,
+                    provider: AuthProvider.Google,
+                    firstName: firstName,
+                    lastName: lastName
+                );
+
+                // Generate a temporary one-time token for token exchange with frontend
+                var tempToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+                
+                // Store JWT tokens in memory cache with 5 minute expiration, keyed by temp token
+                var cacheKey = $"oauth_token_{tempToken}";
+                memoryCache.Set(cacheKey, new OAuthTokenCache
+                {
+                    AccessToken = authResponse.AccessToken,
+                    RefreshToken = authResponse.RefreshToken,
+                    ExpiresAt = authResponse.ExpiresAt,
+                    IsNewUser = isNewUser,
+                    UserAlreadyExists = !isNewUser
+                }, TimeSpan.FromMinutes(5));
+
+                // Store temp token keyed by email so we can retrieve it after redirect
+                // Also store in properties as backup
+                var emailCacheKey = $"oauth_temp_token_{email}";
+                memoryCache.Set(emailCacheKey, tempToken, TimeSpan.FromMinutes(5));
+                context.Properties.Items["temp_token"] = tempToken;
+                
+                // Modify the RedirectUri to include the temp token
+                // This ensures it's available after the middleware redirects
+                var frontendUrl = builder.Configuration["FrontendUrl"] ?? "http://localhost:4200";
+                context.Properties.RedirectUri = $"{frontendUrl}/auth/callback?code={Uri.EscapeDataString(tempToken)}";
+                
+                logger.LogInformation("User created/updated and tokens cached for: {Email}, temp_token: {TempToken}", email, tempToken);
+            }
+            catch (Exception ex)
+            {
+                var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+                logger.LogError(ex, "Error in OnCreatingTicket for Google OAuth");
+                context.Fail("Error processing authentication");
+            }
+        };
+        
+        options.Events.OnRemoteFailure = context =>
+        {
+            var errorMessage = context.Failure?.Message ?? "Unknown error";
+            var innerException = context.Failure?.InnerException?.Message ?? "";
+            Log.Error("Google OAuth remote failure: {Error}, Inner: {Inner}", errorMessage, innerException);
+            Console.WriteLine($"[OAuth Error] {errorMessage}");
+            Console.WriteLine($"[OAuth Error Inner] {innerException}");
+            
+            // Redirect to frontend with error
+            var frontendUrl = builder.Configuration["FrontendUrl"] ?? "http://localhost:4200";
+            context.Response.Redirect($"{frontendUrl}/auth/callback?error={Uri.EscapeDataString(errorMessage)}");
+            context.HandleResponse();
+            
+            return Task.CompletedTask;
+        };
+        
+        options.Events.OnAccessDenied = context =>
+        {
+            Log.Warning("Google OAuth access denied");
+            Console.WriteLine("[OAuth] Access denied");
+            
+            // Redirect to frontend with error
+            var frontendUrl = builder.Configuration["FrontendUrl"] ?? "http://localhost:4200";
+            context.Response.Redirect($"{frontendUrl}/auth/callback?error={Uri.EscapeDataString("Access denied")}");
+            context.HandleResponse();
+            
+            return Task.CompletedTask;
+        };
+    })
+    .AddFacebook(options =>
+    {
+        var metaAppId = builder.Configuration["Authentication:Meta:AppId"];
+        var metaAppSecret = builder.Configuration["Authentication:Meta:AppSecret"];
+
+        if (string.IsNullOrWhiteSpace(metaAppId) || string.IsNullOrWhiteSpace(metaAppSecret))
+        {
+            Log.Warning("Meta OAuth credentials not configured. Meta login will not work.");
+            // Set dummy values to prevent validation error, but scheme won't be used
+            options.AppId = "NOT_CONFIGURED";
+            options.AppSecret = "NOT_CONFIGURED";
+            return;
+        }
+
+        options.AppId = metaAppId;
+        options.AppSecret = metaAppSecret;
+        options.CallbackPath = "/api/v1/oauth/meta-callback";
+        options.SaveTokens = true;
+
+        // Configure OAuth cookie for state management
+        options.CorrelationCookie.Name = ".Amesa.Meta.Correlation";
+        options.CorrelationCookie.SameSite = Microsoft.AspNetCore.Http.SameSiteMode.None;
+        options.CorrelationCookie.SecurePolicy = Microsoft.AspNetCore.Http.CookieSecurePolicy.Always;
     });
 
 // Configure Authorization
@@ -155,10 +447,13 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins(builder.Configuration.GetSection("AllowedOrigins").Get<string[]>() ?? new[] { "http://localhost:4201" })
+        var allowedOrigins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>() ?? new[] { "http://localhost:4200" };
+        Log.Information("CORS allowed origins: {Origins}", string.Join(", ", allowedOrigins));
+        policy.WithOrigins(allowedOrigins)
               .AllowAnyMethod()
               .AllowAnyHeader()
-              .AllowCredentials();
+              .AllowCredentials()
+              .SetPreflightMaxAge(TimeSpan.FromHours(24));
     });
 });
 
@@ -226,6 +521,21 @@ builder.Services.AddResponseCompression(options =>
     options.EnableForHttps = true;
 });
 
+// Configure Kestrel to use HTTPS in development (required for OAuth)
+if (builder.Environment.IsDevelopment())
+{
+    builder.WebHost.UseKestrel(options =>
+    {
+        // Listen on HTTPS port 5001
+        options.ListenLocalhost(5001, listenOptions =>
+        {
+            listenOptions.UseHttps();
+        });
+        // Also listen on HTTP port 5000 for backwards compatibility
+        options.ListenLocalhost(5000);
+    });
+}
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline
@@ -237,6 +547,11 @@ app.UseSwaggerUI(c =>
     c.RoutePrefix = "swagger";
 });
 
+// Add CORS early in pipeline (before other middleware)
+// Must be before UseRouting() for preflight requests to work
+// CORS must be before error handling to ensure headers are sent on errors
+app.UseCors("AllowFrontend");
+
 // Add custom middleware
 app.UseMiddleware<ErrorHandlingMiddleware>();
 app.UseMiddleware<RequestLoggingMiddleware>();
@@ -246,9 +561,6 @@ app.UseMiddleware<SecurityHeadersMiddleware>();
 app.UseResponseCompression();
 
 // Rate limiting will be added later when needed
-
-// Add CORS
-app.UseCors("AllowFrontend");
 
 // Add routing first (required for Blazor Server)
 app.UseRouting();
@@ -279,15 +591,24 @@ app.MapRazorPages(); // This is needed for Razor Pages
 app.MapFallbackToPage("/admin", "/Admin/App");
 app.MapFallbackToPage("/admin/{*path:nonfile}", "/Admin/App");
 
-// Ensure database is created and migrated (only for SQLite local development)
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-if (connectionString != null && connectionString.Contains("Data Source="))
+// Ensure database is created and migrated
+// Check which database provider is actually being used
+using (var scope = app.Services.CreateScope())
 {
-    using (var scope = app.Services.CreateScope())
+    var context = scope.ServiceProvider.GetRequiredService<AmesaDbContext>();
+    try
     {
-        var context = scope.ServiceProvider.GetRequiredService<AmesaDbContext>();
-        try
+        // Get the actual connection string being used
+        var actualConnectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+        var envConnectionString = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING");
+        var connectionString = envConnectionString ?? actualConnectionString;
+        
+        // Determine if using SQLite or PostgreSQL based on connection string
+        bool isSqlite = connectionString == null || connectionString.Contains("Data Source=", StringComparison.OrdinalIgnoreCase);
+        
+        if (isSqlite)
         {
+            Log.Information("Ensuring SQLite database is created and seeded...");
             await context.Database.EnsureCreatedAsync();
             await DataSeedingService.SeedDatabaseAsync(context);
             await TranslationSeedingService.SeedTranslationsAsync(context);
@@ -296,12 +617,34 @@ if (connectionString != null && connectionString.Contains("Data Source="))
             var qrCodeService = scope.ServiceProvider.GetRequiredService<IQRCodeService>();
             await LotteryResultsSeedingService.SeedLotteryResultsAsync(context, qrCodeService);
             
-            Log.Information("Database setup and seeding completed successfully");
+            Log.Information("SQLite database setup and seeding completed successfully");
         }
-        catch (Exception ex)
+        else
         {
-            Log.Error(ex, "An error occurred while setting up the database");
+            // For PostgreSQL in development, create tables if they don't exist
+            // In production, use migrations instead
+            if (builder.Environment.IsDevelopment())
+            {
+                Log.Information("Ensuring PostgreSQL database tables are created and seeded (Development mode)...");
+                await context.Database.EnsureCreatedAsync();
+                await DataSeedingService.SeedDatabaseAsync(context);
+                await TranslationSeedingService.SeedTranslationsAsync(context);
+                
+                // Seed lottery results with sample data
+                var qrCodeService = scope.ServiceProvider.GetRequiredService<IQRCodeService>();
+                await LotteryResultsSeedingService.SeedLotteryResultsAsync(context, qrCodeService);
+                
+                Log.Information("PostgreSQL database setup and seeding completed successfully");
+            }
+            else
+            {
+                Log.Information("Using PostgreSQL database - skipping automatic table creation (use migrations in production)");
+            }
         }
+    }
+    catch (Exception ex)
+    {
+        Log.Error(ex, "An error occurred while setting up the database");
     }
 }
 

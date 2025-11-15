@@ -14,7 +14,7 @@
 - **amesaBE**: .NET backend API → Docker + ECS Fargate
 - **amesaFE**: Angular frontend → S3 + CloudFront
 - **amesaDevOps**: Infrastructure as Code (recommended)
-- **Database**: Aurora PostgreSQL (separate clusters: prod/stage)
+- **Database**: Aurora PostgreSQL (production cluster)
 - **Secrets**: GitHub repository secrets for AWS credentials
 - **Configuration**: Environment-specific via GitHub Secrets
 - **CLI Tools**: .NET CLI, AWS CLI, Docker, GitHub CLI
@@ -45,9 +45,9 @@ dotnet ef migrations add MigrationName --project AmesaBackend
 dotnet ef database update --project AmesaBackend
 
 # Docker
-docker build -t amesa-backend:dev ./AmesaBackend
+docker build -t amesa-backend:local ./AmesaBackend
 docker-compose up
-docker-compose -f docker-compose.dev.yml up
+docker-compose -f docker-compose.yml up
 
 # AWS operations
 aws ecs describe-services --cluster Amesa --services amesa-backend-service --region eu-north-1
@@ -61,27 +61,25 @@ gh secret set SECRET_NAME --body "value"
 # Git (all repos)
 git status
 git log --oneline -5
-git checkout dev
-git checkout stage
 git checkout main
 ```
 
 ## Current Status
 - **Working tree**: Clean, all changes committed
-- **Last activity**: 2025-10-12 - Admin Panel DEPLOYED to all environments ✅
-- **Current focus**: Admin Panel fully operational on dev, stage, and production
-- **Environment**: All environments (dev/stage/prod) operational with admin panel
-- **Admin Panel**: ✅ LIVE on all environments with secure login and database switching
-- **Latest Deployment**: Production admin panel verified working (200 OK)
+- **Last activity**: 2025-10-31 - Context files updated, OAuth integration plan created
+- **Current focus**: Admin Panel fully operational on production
+- **Environment**: Production operational with admin panel
+- **Admin Panel**: ✅ LIVE on production with secure login
+- **Latest Update**: Context files updated, production-only setup (2025-10-31)
 
 ## AWS Infrastructure
-- **Backend**: ECS Fargate + ECR (All environments operational ✅)
+- **Backend**: ECS Fargate + ECR (Production operational ✅)
 - **Database**: Aurora PostgreSQL Serverless v2 ✅
-- **Load Balancers**: ALB for staging and production ✅
+- **Load Balancer**: ALB for production ✅
 - **Container Registry**: ECR (amesabe repository) ✅
-- **Environments**: dev, stage, prod (All working ✅)
+- **Environments**: Production (Working ✅)
 - **Secrets**: GitHub repository secrets + AWS Secrets Manager
-- **Recent Setup**: Complete CI/CD pipeline with Docker deployments (2025-10-08)
+- **Recent Update**: Context files updated, production-only setup (2025-10-31)
 
 ## API Endpoints
 
@@ -99,28 +97,19 @@ git checkout main
 - **Database Switching**: Built-in database selector in admin panel
 
 ### Environment URLs:
-- **Development**: 
-  - API: amesa-backend-stage-alb-467028641.eu-north-1.elb.amazonaws.com
-  - Admin: http://amesa-backend-stage-alb-467028641.eu-north-1.elb.amazonaws.com/admin ✅
-- **Staging**: 
-  - API: amesa-backend-stage-alb-467028641.eu-north-1.elb.amazonaws.com (shared with dev)
-  - Admin: http://amesa-backend-stage-alb-467028641.eu-north-1.elb.amazonaws.com/admin ✅
+- **Local Development**: 
+  - API: http://localhost:5000
+  - Admin: http://localhost:5000/admin
 - **Production**: 
   - API: amesa-backend-alb-509078867.eu-north-1.elb.amazonaws.com
   - Admin: http://amesa-backend-alb-509078867.eu-north-1.elb.amazonaws.com/admin ✅
 
 ## Deployment Strategy
 
-### Automatic Deployments:
-- **Dev branch** → Push → Auto-deploy to dev environment
-- **Stage branch** → Push → Auto-deploy to staging environment
-
-### Manual Deployment:
-- **Main branch** → workflow_dispatch only → Production deployment
+### Automatic Deployment:
+- **Main branch** → Push → Auto-deploy to production
 
 ### Docker Image Tags:
-- **Development**: `dev-{sha}`, `dev-latest`
-- **Staging**: `stage-{sha}`, `stage-latest`
 - **Production**: `prod-{sha}`, `latest`, `prod-latest`
 
 ## Tech Stack Details
@@ -137,7 +126,7 @@ git checkout main
 - **FluentValidation** for input validation (planned)
 
 ### Database:
-- **Aurora PostgreSQL** Serverless v2 (prod/stage)
+- **Aurora PostgreSQL** Serverless v2 (production)
 - **SQLite** for local development
 - **EF Core Migrations** for schema management
 

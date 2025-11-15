@@ -1,0 +1,310 @@
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Google;
+using Microsoft.AspNetCore.Authentication.Facebook;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Hosting;
+using AmesaBackend.Services;
+using AmesaBackend.Models;
+using System.Security.Claims;
+using Microsoft.Extensions.Caching.Memory;
+using System.Security.Cryptography;
+
+namespace AmesaBackend.Controllers
+{
+    [ApiController]
+    [Route("api/v1/oauth")]
+    public class OAuthController : ControllerBase
+    {
+        private readonly IAuthService _authService;
+        private readonly IConfiguration _configuration;
+        private readonly ILogger<OAuthController> _logger;
+        private readonly IMemoryCache _memoryCache;
+        private readonly IWebHostEnvironment _environment;
+
+        public OAuthController(
+            IAuthService authService,
+            IConfiguration configuration,
+            ILogger<OAuthController> logger,
+            IMemoryCache memoryCache,
+            IWebHostEnvironment environment)
+        {
+            _authService = authService;
+            _configuration = configuration;
+            _logger = logger;
+            _memoryCache = memoryCache;
+            _environment = environment;
+        }
+
+        /// <summary>
+        /// Initiate Google OAuth login
+        /// </summary>
+        [HttpGet("google")]
+        public IActionResult GoogleLogin()
+        {
+            try
+            {
+                var frontendUrl = _configuration["FrontendUrl"] ?? 
+                                 _configuration.GetSection("AllowedOrigins").Get<string[]>()?[0] ?? 
+                                 "https://dpqbvdgnenckf.cloudfront.net";
+
+                _logger.LogInformation("Initiating Google OAuth login");
+                
+                // Challenge should return a ChallengeResult that triggers a 302 redirect
+                // The RedirectUri will be set in OnCreatingTicket to redirect to frontend after OAuth completes
+                var properties = new AuthenticationProperties
+                {
+                    RedirectUri = $"{frontendUrl}/auth/callback", // Where to go after OAuth completes
+                    AllowRefresh = true
+                };
+                
+                return Challenge(properties, GoogleDefaults.AuthenticationScheme);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error initiating Google OAuth");
+                var frontendUrl = _configuration["FrontendUrl"] ?? "https://dpqbvdgnenckf.cloudfront.net";
+                return Redirect($"{frontendUrl}/auth/callback?error={Uri.EscapeDataString("Failed to initiate Google login")}");
+            }
+        }
+
+        /// <summary>
+        /// Handle Google OAuth callback
+        /// NOTE: This endpoint may not be reached because OAuth middleware intercepts the callback.
+        /// User creation now happens in OnCreatingTicket event in Program.cs.
+        /// This endpoint serves as a fallback if middleware redirects here.
+        /// </summary>
+        [HttpGet("google-callback")]
+        [AllowAnonymous]
+        public async Task<IActionResult> GoogleCallback()
+        {
+            try
+            {
+                var frontendUrl = _configuration["FrontendUrl"] ?? "http://localhost:4200";
+
+                // Try to authenticate with Google scheme (in case middleware didn't handle it)
+                var googleResult = await HttpContext.AuthenticateAsync(GoogleDefaults.AuthenticationScheme);
+                
+                if (!googleResult.Succeeded)
+                {
+                    _logger.LogWarning("Google OAuth callback: Google authentication failed or not authenticated");
+                    // If not authenticated via middleware, this is a fallback path
+                    // The middleware should have handled redirect already
+                    return Redirect($"{frontendUrl}/auth/callback?error={Uri.EscapeDataString("Google authentication failed")}");
+                }
+
+                // If we reach here, middleware handled it but redirected here
+                // Check if we have a temp token in the request (passed via query or session)
+                var tempToken = Request.Query["temp_token"].FirstOrDefault();
+                
+                if (!string.IsNullOrEmpty(tempToken))
+                {
+                    // Redirect to frontend with the temp token
+                    await HttpContext.SignOutAsync("Cookies");
+                    await HttpContext.SignOutAsync(GoogleDefaults.AuthenticationScheme);
+                    return Redirect($"{frontendUrl}/auth/callback?code={Uri.EscapeDataString(tempToken)}");
+                }
+
+                // Fallback: try to get user from authenticated principal
+                var email = googleResult.Principal?.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
+                if (!string.IsNullOrEmpty(email))
+                {
+                    _logger.LogInformation("Fallback: Processing Google OAuth callback for: {Email}", email);
+                    // This should not normally happen as OnCreatingTicket should handle it
+                    // But if it does, create user here as fallback
+                    var googleId = googleResult.Principal?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                    var firstName = googleResult.Principal?.FindFirst(System.Security.Claims.ClaimTypes.GivenName)?.Value;
+                    var lastName = googleResult.Principal?.FindFirst(System.Security.Claims.ClaimTypes.Surname)?.Value;
+
+                    if (!string.IsNullOrEmpty(googleId))
+                    {
+                        var authResponse = await _authService.CreateOrUpdateOAuthUserAsync(
+                            email: email,
+                            providerId: googleId,
+                            provider: AuthProvider.Google,
+                            firstName: firstName,
+                            lastName: lastName
+                        );
+
+                        var fallbackTempToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+                        var cacheKey = $"oauth_token_{fallbackTempToken}";
+                        _memoryCache.Set(cacheKey, new OAuthTokenCache
+                        {
+                            AccessToken = authResponse.AccessToken,
+                            RefreshToken = authResponse.RefreshToken,
+                            ExpiresAt = authResponse.ExpiresAt
+                        }, TimeSpan.FromMinutes(5));
+
+                        await HttpContext.SignOutAsync("Cookies");
+                        await HttpContext.SignOutAsync(GoogleDefaults.AuthenticationScheme);
+                        return Redirect($"{frontendUrl}/auth/callback?code={Uri.EscapeDataString(fallbackTempToken)}");
+                    }
+                }
+
+                _logger.LogWarning("Google OAuth callback: Could not process callback - redirecting to frontend with error");
+                await HttpContext.SignOutAsync("Cookies");
+                await HttpContext.SignOutAsync(GoogleDefaults.AuthenticationScheme);
+                return Redirect($"{frontendUrl}/auth/callback?error={Uri.EscapeDataString("Error processing authentication")}");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error processing Google OAuth callback");
+                var frontendUrl = _configuration["FrontendUrl"] ?? "http://localhost:4200";
+                return Redirect($"{frontendUrl}/auth/callback?error={Uri.EscapeDataString("Error processing authentication")}");
+            }
+        }
+
+        /// <summary>
+        /// Initiate Meta/Facebook OAuth login
+        /// </summary>
+        [HttpGet("meta")]
+        public IActionResult MetaLogin()
+        {
+            try
+            {
+                var frontendUrl = _configuration["FrontendUrl"] ?? 
+                                 _configuration.GetSection("AllowedOrigins").Get<string[]>()?[0] ?? 
+                                 "https://dpqbvdgnenckf.cloudfront.net";
+
+                var properties = new AuthenticationProperties
+                {
+                    RedirectUri = Url.Action(nameof(MetaCallback)),
+                    Items =
+                    {
+                        { "scheme", "Facebook" },
+                        { "returnUrl", frontendUrl }
+                    }
+                };
+
+                _logger.LogInformation("Initiating Meta OAuth login");
+                return Challenge(properties, FacebookDefaults.AuthenticationScheme);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error initiating Meta OAuth");
+                var frontendUrl = _configuration["FrontendUrl"] ?? "https://dpqbvdgnenckf.cloudfront.net";
+                return Redirect($"{frontendUrl}/auth/callback?error={Uri.EscapeDataString("Failed to initiate Meta login")}");
+            }
+        }
+
+        /// <summary>
+        /// Handle Meta/Facebook OAuth callback
+        /// </summary>
+        [HttpGet("meta-callback")]
+        public async Task<IActionResult> MetaCallback()
+        {
+            try
+            {
+                var frontendUrl = _configuration["FrontendUrl"] ?? 
+                                 _configuration.GetSection("AllowedOrigins").Get<string[]>()?[0] ?? 
+                                 "https://dpqbvdgnenckf.cloudfront.net";
+
+                var result = await HttpContext.AuthenticateAsync(FacebookDefaults.AuthenticationScheme);
+
+                if (!result.Succeeded)
+                {
+                    _logger.LogWarning("Meta authentication failed");
+                    return Redirect($"{frontendUrl}/auth/callback?error={Uri.EscapeDataString("Meta authentication failed")}");
+                }
+
+                var claims = result.Principal?.Claims.ToList() ?? new List<Claim>();
+                var email = claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value;
+                var metaId = claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+                var firstName = claims.FirstOrDefault(c => c.Type == ClaimTypes.GivenName)?.Value;
+                var lastName = claims.FirstOrDefault(c => c.Type == ClaimTypes.Surname)?.Value;
+
+                if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(metaId))
+                {
+                    _logger.LogWarning("Meta authentication: missing email or ID");
+                    return Redirect($"{frontendUrl}/auth/callback?error={Uri.EscapeDataString("Invalid Meta authentication data")}");
+                }
+
+                _logger.LogInformation("Meta authentication successful for email: {Email}", email);
+
+                // Create or update user
+                var authResponse = await _authService.CreateOrUpdateOAuthUserAsync(
+                    email: email,
+                    providerId: metaId,
+                    provider: AuthProvider.Meta,
+                    firstName: firstName,
+                    lastName: lastName
+                );
+
+                // Generate a temporary one-time token for token exchange
+                var tempToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+                
+                // Store tokens in memory cache with 5 minute expiration
+                var cacheKey = $"oauth_token_{tempToken}";
+                _memoryCache.Set(cacheKey, new OAuthTokenCache
+                {
+                    AccessToken = authResponse.AccessToken,
+                    RefreshToken = authResponse.RefreshToken,
+                    ExpiresAt = authResponse.ExpiresAt
+                }, TimeSpan.FromMinutes(5));
+
+                // Redirect to frontend with temporary token
+                return Redirect($"{frontendUrl}/auth/callback?code={Uri.EscapeDataString(tempToken)}");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error processing Meta OAuth callback");
+                var frontendUrl = _configuration["FrontendUrl"] ?? "https://dpqbvdgnenckf.cloudfront.net";
+                return Redirect($"{frontendUrl}/auth/callback?error={Uri.EscapeDataString("Error processing Meta authentication")}");
+            }
+        }
+
+        /// <summary>
+        /// Exchange temporary OAuth token for JWT tokens
+        /// </summary>
+        [HttpPost("exchange")]
+        [AllowAnonymous]
+        public IActionResult ExchangeToken([FromBody] ExchangeTokenRequest request)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(request.Code))
+                {
+                    return BadRequest(new { error = "Code is required" });
+                }
+
+                var cacheKey = $"oauth_token_{request.Code}";
+                _logger.LogInformation("Attempting to exchange token with cache key: {CacheKey}", cacheKey);
+                
+                if (!_memoryCache.TryGetValue(cacheKey, out OAuthTokenCache? cachedData) || cachedData == null)
+                {
+                    _logger.LogWarning("Invalid or expired OAuth exchange token. Code length: {CodeLength}, Code preview: {CodePreview}", 
+                        request.Code?.Length ?? 0, 
+                        request.Code?.Length > 10 ? request.Code.Substring(0, 10) + "..." : request.Code);
+                    return Unauthorized(new { error = "Invalid or expired token" });
+                }
+                
+                _logger.LogInformation("Successfully retrieved tokens from cache for code");
+
+                // Remove token from cache (one-time use)
+                _memoryCache.Remove(cacheKey);
+
+                return Ok(new
+                {
+                    accessToken = cachedData.AccessToken,
+                    refreshToken = cachedData.RefreshToken,
+                    expiresAt = cachedData.ExpiresAt,
+                    isNewUser = cachedData.IsNewUser,
+                    userAlreadyExists = cachedData.UserAlreadyExists
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error exchanging OAuth token");
+                return StatusCode(500, new { error = "Error exchanging token" });
+            }
+        }
+    }
+
+    public class ExchangeTokenRequest
+    {
+        public string Code { get; set; } = string.Empty;
+    }
+
+}
+

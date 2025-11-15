@@ -1,4 +1,5 @@
 using AmesaBackend.DTOs;
+using AmesaBackend.Models;
 
 namespace AmesaBackend.Services
 {
@@ -14,5 +15,6 @@ namespace AmesaBackend.Services
         Task VerifyPhoneAsync(VerifyPhoneRequest request);
         Task<bool> ValidateTokenAsync(string token);
         Task<UserDto> GetCurrentUserAsync(Guid userId);
+        Task<(AuthResponse Response, bool IsNewUser)> CreateOrUpdateOAuthUserAsync(string email, string providerId, AuthProvider provider, string? firstName = null, string? lastName = null);
     }
 }

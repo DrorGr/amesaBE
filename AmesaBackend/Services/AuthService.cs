@@ -97,7 +97,14 @@ namespace AmesaBackend.Services
                 var user = await _context.Users
                     .FirstOrDefaultAsync(u => u.Email == request.Email);
 
-                if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
+                // Check if user exists first - throw specific exception for user not found
+                if (user == null)
+                {
+                    throw new UnauthorizedAccessException("USER_NOT_FOUND: User does not exist. Please sign up first.");
+                }
+
+                // Verify password
+                if (!BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
                 {
                     throw new UnauthorizedAccessException("Invalid email or password");
                 }
@@ -347,6 +354,119 @@ namespace AmesaBackend.Services
             }
 
             return MapToUserDto(user);
+        }
+
+        public async Task<(AuthResponse Response, bool IsNewUser)> CreateOrUpdateOAuthUserAsync(string email, string providerId, AuthProvider provider, string? firstName = null, string? lastName = null)
+        {
+            try
+            {
+                // Check if user exists by email
+                var existingUser = await _context.Users
+                    .FirstOrDefaultAsync(u => u.Email == email);
+
+                User user;
+                bool isNewUser = false;
+
+                if (existingUser != null)
+                {
+                    // User exists - update provider info if needed
+                    user = existingUser;
+                    isNewUser = false;
+                    
+                    // If user was created with email auth, link OAuth account
+                    if (user.AuthProvider == AuthProvider.Email)
+                    {
+                        user.AuthProvider = provider;
+                        user.ProviderId = providerId;
+                        _logger.LogInformation("Linking OAuth provider {Provider} to existing email user {Email}", provider, email);
+                    }
+                    // If user already has this provider, just update last login
+                    else if (user.AuthProvider == provider)
+                    {
+                        // Update ProviderId if it's missing or different
+                        if (string.IsNullOrWhiteSpace(user.ProviderId) || user.ProviderId != providerId)
+                        {
+                            user.ProviderId = providerId;
+                        }
+                        _logger.LogInformation("OAuth login for existing {Provider} user {Email}", provider, email);
+                    }
+                    // If user has different provider, keep existing provider but log
+                    else
+                    {
+                        _logger.LogWarning("User {Email} attempted login with {Provider} but account uses {ExistingProvider}", 
+                            email, provider, user.AuthProvider);
+                    }
+
+                    // Update user info if provided
+                    if (!string.IsNullOrWhiteSpace(firstName) && string.IsNullOrWhiteSpace(user.FirstName))
+                    {
+                        user.FirstName = firstName;
+                    }
+                    if (!string.IsNullOrWhiteSpace(lastName) && string.IsNullOrWhiteSpace(user.LastName))
+                    {
+                        user.LastName = lastName;
+                    }
+
+                    user.LastLoginAt = DateTime.UtcNow;
+                    user.UpdatedAt = DateTime.UtcNow;
+                }
+                else
+                {
+                    // Create new user from OAuth
+                    // OAuth users don't have passwords, but database requires PasswordHash to be NOT NULL
+                    // Set a placeholder that will never be used for authentication
+                    user = new User
+                    {
+                        Username = email.Split('@')[0] + "_" + provider.ToString().ToLower(),
+                        Email = email,
+                        PasswordHash = "OAUTH_USER_NO_PASSWORD", // Placeholder - OAuth users don't have passwords but DB requires NOT NULL
+                        FirstName = firstName ?? string.Empty,
+                        LastName = lastName ?? string.Empty,
+                        AuthProvider = provider,
+                        ProviderId = providerId,
+                        Status = UserStatus.Active,
+                        VerificationStatus = UserVerificationStatus.EmailVerified, // OAuth emails are considered verified
+                        EmailVerified = true,
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow,
+                        LastLoginAt = DateTime.UtcNow
+                    };
+
+                    // Ensure username is unique
+                    var baseUsername = user.Username;
+                    var counter = 1;
+                    while (await _context.Users.AnyAsync(u => u.Username == user.Username))
+                    {
+                        user.Username = $"{baseUsername}{counter}";
+                        counter++;
+                    }
+
+                    _context.Users.Add(user);
+                    isNewUser = true;
+                    _logger.LogInformation("Created new user from OAuth {Provider}: {Email}", provider, email);
+                }
+
+                await _context.SaveChangesAsync();
+
+                // Generate tokens
+                var tokens = await GenerateTokensAsync(user);
+
+                var response = new AuthResponse
+                {
+                    AccessToken = tokens.AccessToken,
+                    RefreshToken = tokens.RefreshToken,
+                    ExpiresAt = tokens.ExpiresAt,
+                    User = MapToUserDto(user)
+                };
+                
+                // Return response with IsNewUser flag
+                return (response, isNewUser);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error creating/updating OAuth user for {Provider}: {Email}", provider, email);
+                throw;
+            }
         }
 
         private async Task<(string AccessToken, string RefreshToken, DateTime ExpiresAt)> GenerateTokensAsync(User user)
