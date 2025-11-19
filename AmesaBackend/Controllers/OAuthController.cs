@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Hosting;
 using AmesaBackend.Services;
 using AmesaBackend.Models;
+using AmesaBackend.DTOs;
 using System.Security.Claims;
 using Microsoft.Extensions.Caching.Memory;
 using System.Security.Cryptography;
@@ -48,6 +49,29 @@ namespace AmesaBackend.Controllers
                 var frontendUrl = _configuration["FrontendUrl"] ?? 
                                  _configuration.GetSection("AllowedOrigins").Get<string[]>()?[0] ?? 
                                  "https://dpqbvdgnenckf.cloudfront.net";
+
+                // Check if Google OAuth is configured
+                var googleClientId = _configuration["Authentication:Google:ClientId"];
+                var googleClientSecret = _configuration["Authentication:Google:ClientSecret"];
+                
+                if (string.IsNullOrWhiteSpace(googleClientId) || string.IsNullOrWhiteSpace(googleClientSecret))
+                {
+                    _logger.LogWarning("Google OAuth not configured - missing ClientId or ClientSecret");
+                    return BadRequest(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Error = new ErrorResponse
+                        {
+                            Code = "OAUTH_NOT_CONFIGURED",
+                            Message = "Google OAuth is not configured. Please configure ClientId and ClientSecret in appsettings.json or AWS Secrets Manager.",
+                            Details = new Dictionary<string, object>
+                            {
+                                { "provider", "Google" },
+                                { "missing", string.IsNullOrWhiteSpace(googleClientId) ? "ClientId" : "ClientSecret" }
+                            }
+                        }
+                    });
+                }
 
                 _logger.LogInformation("Initiating Google OAuth login");
                 
@@ -131,9 +155,9 @@ namespace AmesaBackend.Controllers
                         var cacheKey = $"oauth_token_{fallbackTempToken}";
                         _memoryCache.Set(cacheKey, new OAuthTokenCache
                         {
-                            AccessToken = authResponse.AccessToken,
-                            RefreshToken = authResponse.RefreshToken,
-                            ExpiresAt = authResponse.ExpiresAt
+                            AccessToken = authResponse.Response.AccessToken,
+                            RefreshToken = authResponse.Response.RefreshToken,
+                            ExpiresAt = authResponse.Response.ExpiresAt
                         }, TimeSpan.FromMinutes(5));
 
                         await HttpContext.SignOutAsync("Cookies");
@@ -166,6 +190,29 @@ namespace AmesaBackend.Controllers
                 var frontendUrl = _configuration["FrontendUrl"] ?? 
                                  _configuration.GetSection("AllowedOrigins").Get<string[]>()?[0] ?? 
                                  "https://dpqbvdgnenckf.cloudfront.net";
+
+                // Check if Meta OAuth is configured
+                var metaAppId = _configuration["Authentication:Meta:AppId"];
+                var metaAppSecret = _configuration["Authentication:Meta:AppSecret"];
+                
+                if (string.IsNullOrWhiteSpace(metaAppId) || string.IsNullOrWhiteSpace(metaAppSecret))
+                {
+                    _logger.LogWarning("Meta OAuth not configured - missing AppId or AppSecret");
+                    return BadRequest(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Error = new ErrorResponse
+                        {
+                            Code = "OAUTH_NOT_CONFIGURED",
+                            Message = "Meta OAuth is not configured. Please configure AppId and AppSecret in appsettings.json or AWS Secrets Manager.",
+                            Details = new Dictionary<string, object>
+                            {
+                                { "provider", "Meta" },
+                                { "missing", string.IsNullOrWhiteSpace(metaAppId) ? "AppId" : "AppSecret" }
+                            }
+                        }
+                    });
+                }
 
                 var properties = new AuthenticationProperties
                 {
@@ -238,9 +285,9 @@ namespace AmesaBackend.Controllers
                 var cacheKey = $"oauth_token_{tempToken}";
                 _memoryCache.Set(cacheKey, new OAuthTokenCache
                 {
-                    AccessToken = authResponse.AccessToken,
-                    RefreshToken = authResponse.RefreshToken,
-                    ExpiresAt = authResponse.ExpiresAt
+                    AccessToken = authResponse.Response.AccessToken,
+                    RefreshToken = authResponse.Response.RefreshToken,
+                    ExpiresAt = authResponse.Response.ExpiresAt
                 }, TimeSpan.FromMinutes(5));
 
                 // Redirect to frontend with temporary token

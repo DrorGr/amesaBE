@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authentication.Facebook;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
+using System.Linq;
 using AmesaBackend.Data;
 using AmesaBackend.Services;
 using AmesaBackend.Middleware;
@@ -163,13 +164,14 @@ builder.Services.AddDbContext<AmesaDbContext>(options =>
     }
 });
 
-// Load OAuth credentials from AWS Secrets Manager (only in Production)
-if (builder.Environment.IsProduction())
-{
-    var awsRegion = builder.Configuration["Aws:Region"] ?? Environment.GetEnvironmentVariable("AWS_REGION") ?? "eu-north-1";
+// Load OAuth credentials from AWS Secrets Manager (Production) or optionally from secrets in Development
+var awsRegion = builder.Configuration["Aws:Region"] ?? Environment.GetEnvironmentVariable("AWS_REGION") ?? "eu-north-1";
 
-    // Load Google OAuth credentials
-    var googleSecretId = builder.Configuration["Authentication:Google:SecretId"];
+// Load Google OAuth credentials
+var googleSecretId = builder.Configuration["Authentication:Google:SecretId"];
+if (!string.IsNullOrWhiteSpace(googleSecretId) && (builder.Environment.IsProduction() || builder.Environment.IsStaging()))
+{
+    // Load from AWS Secrets Manager in Production/Staging
     AwsSecretLoader.TryLoadJsonSecret(
         builder.Configuration,
         googleSecretId,
@@ -177,9 +179,28 @@ if (builder.Environment.IsProduction())
         Log.Logger,
         ("ClientId", "Authentication:Google:ClientId"),
         ("ClientSecret", "Authentication:Google:ClientSecret"));
+    Console.WriteLine("[OAuth] Loaded Google credentials from AWS Secrets Manager");
+}
+else
+{
+    // Use hardcoded values from appsettings in Development (will be replaced by secrets when deployed)
+    var devGoogleClientId = builder.Configuration["Authentication:Google:ClientId"];
+    var devGoogleClientSecret = builder.Configuration["Authentication:Google:ClientSecret"];
+    if (!string.IsNullOrWhiteSpace(devGoogleClientId) && !string.IsNullOrWhiteSpace(devGoogleClientSecret))
+    {
+        Console.WriteLine("[OAuth] Development mode - using Google credentials from appsettings.Development.json");
+    }
+    else
+    {
+        Console.WriteLine("[OAuth] Development mode - Google OAuth not configured (add ClientId and ClientSecret to appsettings.Development.json)");
+    }
+}
 
-    // Load Meta OAuth credentials
-    var metaSecretId = builder.Configuration["Authentication:Meta:SecretId"];
+// Load Meta OAuth credentials
+var metaSecretId = builder.Configuration["Authentication:Meta:SecretId"];
+if (!string.IsNullOrWhiteSpace(metaSecretId) && (builder.Environment.IsProduction() || builder.Environment.IsStaging()))
+{
+    // Load from AWS Secrets Manager in Production/Staging
     AwsSecretLoader.TryLoadJsonSecret(
         builder.Configuration,
         metaSecretId,
@@ -187,10 +208,21 @@ if (builder.Environment.IsProduction())
         Log.Logger,
         ("AppId", "Authentication:Meta:AppId"),
         ("AppSecret", "Authentication:Meta:AppSecret"));
+    Console.WriteLine("[OAuth] Loaded Meta credentials from AWS Secrets Manager");
 }
 else
 {
-    Console.WriteLine("[OAuth] Development mode - using credentials from appsettings.Development.json (skipping AWS Secrets Manager)");
+    // Use hardcoded values from appsettings in Development (will be replaced by secrets when deployed)
+    var metaAppId = builder.Configuration["Authentication:Meta:AppId"];
+    var metaAppSecret = builder.Configuration["Authentication:Meta:AppSecret"];
+    if (!string.IsNullOrWhiteSpace(metaAppId) && !string.IsNullOrWhiteSpace(metaAppSecret))
+    {
+        Console.WriteLine("[OAuth] Development mode - using Meta credentials from appsettings.Development.json");
+    }
+    else
+    {
+        Console.WriteLine("[OAuth] Development mode - Meta OAuth not configured (add AppId and AppSecret to appsettings.Development.json)");
+    }
 }
 
 // Get frontend URL for OAuth redirects
@@ -199,8 +231,37 @@ var frontendUrl = builder.Configuration["FrontendUrl"] ??
                   "https://dpqbvdgnenckf.cloudfront.net";
 
 // Configure JWT Authentication
+// In Production, JWT SecretKey is loaded from AWS SSM Parameter Store via ECS task definition secrets
+// (environment variable: JwtSettings__SecretKey -> config: JwtSettings:SecretKey)
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var secretKey = jwtSettings["SecretKey"];
+
+// Validate JWT SecretKey exists and is not a placeholder
+if (string.IsNullOrWhiteSpace(secretKey))
+{
+    throw new InvalidOperationException("JWT SecretKey is not configured. Set JwtSettings__SecretKey environment variable or configure JwtSettings:SecretKey in appsettings.");
+}
+
+// In Production, ensure we're not using placeholder values
+if (builder.Environment.IsProduction() || builder.Environment.IsStaging())
+{
+    var placeholderValues = new[] 
+    { 
+        "your-super-secret-key-for-jwt-tokens-min-32-chars",
+        "your-super-secret-key-that-is-at-least-32-characters-long"
+    };
+    
+    if (placeholderValues.Any(p => secretKey.Contains(p, StringComparison.OrdinalIgnoreCase)))
+    {
+        throw new InvalidOperationException("JWT SecretKey appears to be a placeholder. Ensure JwtSettings__SecretKey environment variable is set from AWS SSM Parameter Store.");
+    }
+    
+    Console.WriteLine("[JWT] Using SecretKey from environment variable (SSM Parameter Store)");
+}
+else
+{
+    Console.WriteLine("[JWT] Development mode - using SecretKey from appsettings.Development.json");
+}
 
 builder.Services.AddAuthentication(options =>
 {
@@ -257,29 +318,24 @@ builder.Services.AddAuthentication(options =>
                 return Task.CompletedTask;
             }
         };
-    })
-    .AddGoogle(options =>
-    {
-        var googleClientId = builder.Configuration["Authentication:Google:ClientId"];
-        var googleClientSecret = builder.Configuration["Authentication:Google:ClientSecret"];
+    });
 
-        if (string.IsNullOrWhiteSpace(googleClientId) || string.IsNullOrWhiteSpace(googleClientSecret))
-        {
-            Log.Warning("Google OAuth credentials not configured. Google login will not work.");
-            return;
-        }
+// Conditionally add OAuth providers only if credentials are available
+var googleClientId = builder.Configuration["Authentication:Google:ClientId"];
+var googleClientSecret = builder.Configuration["Authentication:Google:ClientSecret"];
+
+if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(googleClientSecret))
+{
+    // Get the existing authentication builder and chain OAuth providers
+    var authBuilder = builder.Services.AddAuthentication();
+    authBuilder.AddGoogle(options =>
+    {
 
         options.ClientId = googleClientId;
         options.ClientSecret = googleClientSecret;
         options.CallbackPath = "/api/v1/oauth/google-callback";
         options.SignInScheme = "Cookies"; // Use cookies for OAuth sign-in
         options.SaveTokens = true;
-        
-        // For local development, force HTTP redirect URI to match Google Cloud Console
-        // Google Cloud Console must have: http://localhost:5000/api/v1/oauth/google-callback
-        // Configure callback path - this should match what's in Google Cloud Console
-        // In development, use http://localhost:5000/api/v1/oauth/google-callback
-        options.CallbackPath = "/api/v1/oauth/google-callback";
 
         // Log configuration for debugging
         Console.WriteLine($"[OAuth] Google ClientId: {googleClientId?.Substring(0, Math.Min(30, googleClientId?.Length ?? 0))}...");
@@ -409,31 +465,36 @@ builder.Services.AddAuthentication(options =>
             
             return Task.CompletedTask;
         };
-    })
-    .AddFacebook(options =>
-    {
-        var metaAppId = builder.Configuration["Authentication:Meta:AppId"];
-        var metaAppSecret = builder.Configuration["Authentication:Meta:AppSecret"];
-
-        if (string.IsNullOrWhiteSpace(metaAppId) || string.IsNullOrWhiteSpace(metaAppSecret))
-        {
-            Log.Warning("Meta OAuth credentials not configured. Meta login will not work.");
-            // Set dummy values to prevent validation error, but scheme won't be used
-            options.AppId = "NOT_CONFIGURED";
-            options.AppSecret = "NOT_CONFIGURED";
-            return;
-        }
-
-        options.AppId = metaAppId;
-        options.AppSecret = metaAppSecret;
-        options.CallbackPath = "/api/v1/oauth/meta-callback";
-        options.SaveTokens = true;
-
-        // Configure OAuth cookie for state management
-        options.CorrelationCookie.Name = ".Amesa.Meta.Correlation";
-        options.CorrelationCookie.SameSite = Microsoft.AspNetCore.Http.SameSiteMode.None;
-        options.CorrelationCookie.SecurePolicy = Microsoft.AspNetCore.Http.CookieSecurePolicy.Always;
     });
+    
+    // Add Meta OAuth if credentials are available
+    var metaAppId = builder.Configuration["Authentication:Meta:AppId"];
+    var metaAppSecret = builder.Configuration["Authentication:Meta:AppSecret"];
+    
+    if (!string.IsNullOrWhiteSpace(metaAppId) && !string.IsNullOrWhiteSpace(metaAppSecret))
+    {
+        authBuilder.AddFacebook(options =>
+        {
+            options.AppId = metaAppId;
+            options.AppSecret = metaAppSecret;
+            options.CallbackPath = "/api/v1/oauth/meta-callback";
+            options.SaveTokens = true;
+
+            // Configure OAuth cookie for state management
+            options.CorrelationCookie.Name = ".Amesa.Meta.Correlation";
+            options.CorrelationCookie.SameSite = Microsoft.AspNetCore.Http.SameSiteMode.None;
+            options.CorrelationCookie.SecurePolicy = Microsoft.AspNetCore.Http.CookieSecurePolicy.Always;
+        });
+    }
+    else
+    {
+        Log.Warning("Meta OAuth credentials not configured. Meta login will not work.");
+    }
+}
+else
+{
+    Log.Warning("Google OAuth credentials not configured. Google login will not work.");
+}
 
 // Configure Authorization
 builder.Services.AddAuthorization(options =>

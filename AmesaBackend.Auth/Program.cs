@@ -17,6 +17,7 @@ using Npgsql;
 using Microsoft.Extensions.Caching.Memory;
 using System.Security.Claims;
 using System.Security.Cryptography;
+using System.Linq;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -127,8 +128,37 @@ var frontendUrl = builder.Configuration["FrontendUrl"] ??
                   "https://dpqbvdgnenckf.cloudfront.net";
 
 // Configure JWT Authentication
+// In Production, JWT SecretKey is loaded from AWS SSM Parameter Store via ECS task definition secrets
+// (environment variable: JwtSettings__SecretKey -> config: JwtSettings:SecretKey)
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var secretKey = jwtSettings["SecretKey"];
+
+// Validate JWT SecretKey exists and is not a placeholder
+if (string.IsNullOrWhiteSpace(secretKey))
+{
+    throw new InvalidOperationException("JWT SecretKey is not configured. Set JwtSettings__SecretKey environment variable or configure JwtSettings:SecretKey in appsettings.");
+}
+
+// In Production, ensure we're not using placeholder values
+if (builder.Environment.IsProduction() || builder.Environment.IsStaging())
+{
+    var placeholderValues = new[] 
+    { 
+        "your-super-secret-key-for-jwt-tokens-min-32-chars",
+        "your-super-secret-key-that-is-at-least-32-characters-long"
+    };
+    
+    if (placeholderValues.Any(p => secretKey.Contains(p, StringComparison.OrdinalIgnoreCase)))
+    {
+        throw new InvalidOperationException("JWT SecretKey appears to be a placeholder. Ensure JwtSettings__SecretKey environment variable is set from AWS SSM Parameter Store.");
+    }
+    
+    Console.WriteLine("[JWT] Using SecretKey from environment variable (SSM Parameter Store)");
+}
+else
+{
+    Console.WriteLine("[JWT] Development mode - using SecretKey from appsettings.Development.json");
+}
 
 var authBuilder = builder.Services.AddAuthentication(options =>
 {
