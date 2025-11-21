@@ -83,7 +83,13 @@ using (var scope = app.Services.CreateScope())
     {
         if (builder.Environment.IsDevelopment())
         {
+            Log.Information("Development mode: Ensuring Payment database tables are created...");
             await context.Database.EnsureCreatedAsync();
+            Log.Information("Payment database setup completed successfully");
+        }
+        else
+        {
+            Log.Information("Production mode: Skipping EnsureCreated (use migrations)");
         }
     }
     catch (Exception ex)

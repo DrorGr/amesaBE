@@ -1,0 +1,49 @@
+# Terraform Variables Configuration
+# Copy this file to terraform.tfvars and fill in the values
+
+environment = "prod"
+
+# VPC Configuration
+vpc_id = "vpc-0faeeb78eded33ccf"
+
+# Subnet IDs (replace with actual subnet IDs from your VPC)
+# Get these with: aws ec2 describe-subnets --filters "Name=vpc-id,Values=vpc-0faeeb78eded33ccf"
+private_subnet_ids = [
+  "subnet-xxxxxxxxx",  # Replace with actual private subnet IDs
+  "subnet-yyyyyyyyy"
+]
+
+public_subnet_ids = [
+  "subnet-zzzzzzzzz",  # Replace with actual public subnet IDs
+  "subnet-aaaaaaaaa"
+]
+
+# Security Groups (create these or use existing)
+ecs_security_group_id = "sg-xxxxxxxxx"  # Security group for ECS tasks
+vpc_security_group_id = "sg-yyyyyyyyy"  # Security group for VPC link
+
+# Database Configuration
+db_instance_class = "db.t3.micro"
+db_username       = "amesa_admin"
+db_password       = "CHANGE_ME_SECURE_PASSWORD"  # Use AWS Secrets Manager in production
+
+# Redis Configuration
+redis_node_type   = "cache.t3.micro"
+redis_auth_token  = "CHANGE_ME_REDIS_TOKEN"  # Use AWS Secrets Manager in production
+
+# ALB Listener ARNs (will be populated after ALB creation)
+auth_service_alb_listener_arn              = ""
+payment_service_alb_listener_arn           = ""
+lottery_service_alb_listener_arn           = ""
+content_service_alb_listener_arn           = ""
+notification_service_alb_listener_arn      = ""
+lottery_results_service_alb_listener_arn   = ""
+analytics_service_alb_listener_arn        = ""
+admin_service_alb_listener_arn             = ""
+
+# Event Target ARNs (will be populated after ECS service creation)
+notification_service_event_target_arn = ""
+payment_service_event_target_arn      = ""
+lottery_service_event_target_arn      = ""
+analytics_service_event_target_arn    = ""
+

@@ -1,0 +1,22 @@
+ElastiCache Redis Endpoint Information
+
+Cluster ID: amesa-redis
+Status: available
+Endpoint: amesa-redis.3ogg7e.0001.eun1.cache.amazonaws.com
+Port: 6379
+
+Connection String Format:
+amesa-redis.3ogg7e.0001.eun1.cache.amazonaws.com:6379
+
+For appsettings.json:
+"ConnectionStrings": {
+  "Redis": "amesa-redis.3ogg7e.0001.eun1.cache.amazonaws.com:6379"
+}
+
+CacheConfig:
+"CacheConfig": {
+  "RedisConnection": "amesa-redis.3ogg7e.0001.eun1.cache.amazonaws.com:6379",
+  "InstanceName": "amesa-<service-name>",
+  "UseSSL": false
+}
+

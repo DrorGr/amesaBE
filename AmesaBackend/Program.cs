@@ -682,11 +682,10 @@ using (var scope = app.Services.CreateScope())
         }
         else
         {
-            // For PostgreSQL in development, create tables if they don't exist
-            // In production, use migrations instead
+            // For PostgreSQL - NEVER auto-seed in production to avoid high database costs
             if (builder.Environment.IsDevelopment())
             {
-                Log.Information("Ensuring PostgreSQL database tables are created and seeded (Development mode)...");
+                Log.Information("Development mode: Ensuring PostgreSQL database tables are created and seeded...");
                 await context.Database.EnsureCreatedAsync();
                 await DataSeedingService.SeedDatabaseAsync(context);
                 await TranslationSeedingService.SeedTranslationsAsync(context);
@@ -699,7 +698,9 @@ using (var scope = app.Services.CreateScope())
             }
             else
             {
-                Log.Information("Using PostgreSQL database - skipping automatic table creation (use migrations in production)");
+                Log.Information("Production mode: Skipping automatic seeding (use manual seeding or migrations)");
+                // In production, database should already be set up with migrations
+                // Manual seeding: dotnet run --project AmesaBackend -- --seeder
             }
         }
     }

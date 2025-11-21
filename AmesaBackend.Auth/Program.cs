@@ -454,9 +454,13 @@ using (var scope = app.Services.CreateScope())
     {
         if (builder.Environment.IsDevelopment())
         {
-            Log.Information("Ensuring Auth database tables are created (Development mode)...");
+            Log.Information("Development mode: Ensuring Auth database tables are created...");
             await context.Database.EnsureCreatedAsync();
             Log.Information("Auth database setup completed successfully");
+        }
+        else
+        {
+            Log.Information("Production mode: Skipping EnsureCreated (use migrations)");
         }
         else
         {

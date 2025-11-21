@@ -88,7 +88,13 @@ using (var scope = app.Services.CreateScope())
     {
         if (builder.Environment.IsDevelopment())
         {
+            Log.Information("Development mode: Ensuring Notification database tables are created...");
             await context.Database.EnsureCreatedAsync();
+            Log.Information("Notification database setup completed successfully");
+        }
+        else
+        {
+            Log.Information("Production mode: Skipping EnsureCreated (use migrations)");
         }
     }
     catch (Exception ex)

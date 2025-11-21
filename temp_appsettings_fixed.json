@@ -1,0 +1,36 @@
+{
+    "ConnectionStrings":  {
+                              "DefaultConnection":  "Host=amesadbmain1.cruuae28ob7m.eu-north-1.rds.amazonaws.com;Port=5432;Database=amesa_lottery;Username=dror;Password=aAXa406L6qdqfTU6o8vr;SSL Mode=Require;"
+                          },
+    "Logging":  {
+                    "LogLevel":  {
+                                     "Default":  "Information",
+                                     "Microsoft.AspNetCore":  "Warning"
+                                 }
+                },
+    "JwtSettings":  {
+                        "SecretKey":  "your-super-secret-key-for-jwt-tokens-min-32-chars",
+                        "Issuer":  "AmesaBackend",
+                        "Audience":  "AmesaFrontend",
+                        "ExpirationHours":  24
+                    },
+    "AllowedOrigins":  [
+                           "https://localhost:4200",
+                           "http://localhost:4200",
+                           "https://dpqbvdgnenckf.cloudfront.net"
+                       ],
+    "Authentication":  {
+                           "Google":  {
+                                          "ClientId":  "",
+                                          "ClientSecret":  "",
+                                          "SecretId":  "",
+                                          "CallbackUrl":  "http://localhost:5000/api/v1/oauth/google-callback"
+                                      },
+                           "Meta":  {
+                                        "AppId":  "",
+                                        "AppSecret":  ""
+                                    },
+                           "FrontendUrl":  "http://localhost:4200"
+                       },
+    "DetailedErrors":  true
+}

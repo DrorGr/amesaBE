@@ -78,7 +78,13 @@ using (var scope = app.Services.CreateScope())
     {
         if (builder.Environment.IsDevelopment())
         {
+            Log.Information("Development mode: Ensuring Content database tables are created...");
             await context.Database.EnsureCreatedAsync();
+            Log.Information("Content database setup completed successfully");
+        }
+        else
+        {
+            Log.Information("Production mode: Skipping EnsureCreated (use migrations)");
         }
     }
     catch (Exception ex)
