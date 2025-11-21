@@ -58,7 +58,7 @@ namespace AmesaBackend.Shared.Caching
             // Configure CacheConfig
             services.Configure<CacheConfig>(configuration.GetSection("CacheConfig"));
             cacheConfig.RedisConnection = redisConnectionString;
-            services.AddSingleton(Options.Create(cacheConfig));
+            services.AddSingleton(cacheConfig);
 
             services.AddSingleton<ICache, StackRedisCache>();
         }

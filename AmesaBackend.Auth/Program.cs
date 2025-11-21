@@ -461,10 +461,6 @@ using (var scope = app.Services.CreateScope())
         {
             Log.Information("Production mode: Skipping EnsureCreated (use migrations)");
         }
-        else
-        {
-            Log.Information("Using PostgreSQL database - skipping automatic table creation (use migrations in production)");
-        }
     }
     catch (Exception ex)
     {

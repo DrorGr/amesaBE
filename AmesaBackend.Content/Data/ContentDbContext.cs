@@ -11,7 +11,7 @@ namespace AmesaBackend.Content.Data
 
         public DbSet<Translation> Translations { get; set; }
         public DbSet<Language> Languages { get; set; }
-        public DbSet<Content> Contents { get; set; }
+        public DbSet<Models.Content> Contents { get; set; }
         public DbSet<ContentCategory> ContentCategories { get; set; }
         public DbSet<ContentMedia> ContentMedia { get; set; }
 
