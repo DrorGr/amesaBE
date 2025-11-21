@@ -7,7 +7,8 @@ WORKDIR /src
 COPY ["AmesaBackend.Admin/AmesaBackend.Admin.csproj", "AmesaBackend.Admin/"]
 COPY ["AmesaBackend.Shared/AmesaBackend.Shared.csproj", "AmesaBackend.Shared/"]
 RUN dotnet restore "AmesaBackend.Admin/AmesaBackend.Admin.csproj"
-COPY . .
+COPY ["AmesaBackend.Admin/", "AmesaBackend.Admin/"]
+COPY ["AmesaBackend.Shared/", "AmesaBackend.Shared/"]
 RUN dotnet build "AmesaBackend.Admin/AmesaBackend.Admin.csproj" -c Release -o /app/build
 
 FROM build AS publish
