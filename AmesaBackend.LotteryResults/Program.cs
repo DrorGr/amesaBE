@@ -63,7 +63,7 @@ app.UseSwaggerUI();
 // Enable X-Ray tracing if configured
 if (builder.Configuration.GetValue<bool>("XRay:Enabled", false))
 {
-    app.UseAmesaXRay(builder.Configuration["XRay:ServiceName"] ?? "amesa-lottery-results-service");
+    // X-Ray tracing removed for microservices
 }
 
 app.UseAmesaMiddleware();

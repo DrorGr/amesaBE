@@ -424,7 +424,7 @@ app.UseCors("AllowFrontend");
 // Enable X-Ray tracing if configured
 if (builder.Configuration.GetValue<bool>("XRay:Enabled", false))
 {
-    app.UseAmesaXRay(builder.Configuration["XRay:ServiceName"] ?? "amesa-auth-service");
+    // X-Ray tracing removed for microservices
 }
 
 app.UseAmesaMiddleware();
