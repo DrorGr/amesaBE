@@ -11,6 +11,8 @@ RUN dotnet restore "AmesaBackend.Admin/AmesaBackend.Admin.csproj"
 COPY ["AmesaBackend.Admin/", "AmesaBackend.Admin/"]
 COPY ["AmesaBackend.Shared/", "AmesaBackend.Shared/"]
 COPY ["AmesaBackend.Auth/", "AmesaBackend.Auth/"]
+# Remove Auth's appsettings.json to avoid conflicts with Admin's appsettings.json
+RUN rm -f /src/AmesaBackend.Auth/appsettings.json /src/AmesaBackend.Auth/appsettings.*.json
 RUN dotnet build "AmesaBackend.Admin/AmesaBackend.Admin.csproj" -c Release -o /app/build
 
 FROM build AS publish
