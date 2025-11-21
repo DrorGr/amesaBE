@@ -12,7 +12,7 @@ on:
 env:
   AWS_REGION: eu-north-1
   AWS_ACCOUNT_ID: 129394705401
-  ECR_ROOT: ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
+  ECR_ROOT: 129394705401.dkr.ecr.eu-north-1.amazonaws.com
   ECS_CLUSTER: Amesa
 
 jobs:
