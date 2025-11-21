@@ -8,19 +8,20 @@ EXPOSE 443
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
-# Copy project file and restore dependencies
-COPY ["AmesaBackend.csproj", "./"]
-RUN dotnet restore "AmesaBackend.csproj"
+# Copy project files and restore dependencies
+COPY ["AmesaBackend/AmesaBackend.csproj", "AmesaBackend/"]
+COPY ["AmesaBackend.Shared/AmesaBackend.Shared.csproj", "AmesaBackend.Shared/"]
+RUN dotnet restore "AmesaBackend/AmesaBackend.csproj"
 
 # Copy the rest of the source code
 COPY . .
 
 # Build the application
-RUN dotnet build "AmesaBackend.csproj" -c Release -o /app/build
+RUN dotnet build "AmesaBackend/AmesaBackend.csproj" -c Release -o /app/build
 
 # Publish the application
 FROM build AS publish
-RUN dotnet publish "AmesaBackend.csproj" -c Release -o /app/publish /p:UseAppHost=false
+RUN dotnet publish "AmesaBackend/AmesaBackend.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
 # Final stage/image
 FROM base AS final
