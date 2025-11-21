@@ -4,7 +4,6 @@ using Microsoft.EntityFrameworkCore;
 using AmesaBackend.Auth.Data;
 using AmesaBackend.Auth.DTOs;
 using AmesaBackend.Auth.Models;
-using AmesaBackend.Shared.Contracts;
 using System.Security.Claims;
 using System.Text.Json;
 
@@ -41,8 +40,7 @@ namespace AmesaBackend.Auth.Controllers
                     return Unauthorized(new ApiResponse<UserPreferencesDto>
                     {
                         Success = false,
-                        Message = "User not authenticated",
-                        Timestamp = DateTime.UtcNow
+                        Message = "User not authenticated"
                     });
                 }
 
@@ -57,8 +55,7 @@ namespace AmesaBackend.Auth.Controllers
                     {
                         Success = true,
                         Data = MapToDto(defaultPreferences),
-                        Message = "Default preferences returned",
-                        Timestamp = DateTime.UtcNow
+                        Message = "Default preferences returned"
                     });
                 }
 
@@ -66,8 +63,7 @@ namespace AmesaBackend.Auth.Controllers
                 {
                     Success = true,
                     Data = MapToDto(userPreferences),
-                    Message = "Preferences retrieved successfully",
-                    Timestamp = DateTime.UtcNow
+                    Message = "Preferences retrieved successfully"
                 });
             }
             catch (Exception ex)
@@ -77,12 +73,11 @@ namespace AmesaBackend.Auth.Controllers
                 {
                     Success = false,
                     Message = "An error occurred while retrieving preferences",
-                    Error = new ApiError
+                    Error = new ErrorResponse
                     {
                         Code = "INTERNAL_ERROR",
                         Message = ex.Message
-                    },
-                    Timestamp = DateTime.UtcNow
+                    }
                 });
             }
         }
@@ -103,8 +98,7 @@ namespace AmesaBackend.Auth.Controllers
                     return Unauthorized(new ApiResponse<UserPreferencesDto>
                     {
                         Success = false,
-                        Message = "User not authenticated",
-                        Timestamp = DateTime.UtcNow
+                        Message = "User not authenticated"
                     });
                 }
 
@@ -135,8 +129,7 @@ namespace AmesaBackend.Auth.Controllers
                     {
                         Success = true,
                         Data = MapToDto(newPreferences),
-                        Message = "Preferences created successfully",
-                        Timestamp = DateTime.UtcNow
+                        Message = "Preferences created successfully"
                     });
                 }
                 else
@@ -155,8 +148,7 @@ namespace AmesaBackend.Auth.Controllers
                     {
                         Success = true,
                         Data = MapToDto(existingPreferences),
-                        Message = "Preferences updated successfully",
-                        Timestamp = DateTime.UtcNow
+                        Message = "Preferences updated successfully"
                     });
                 }
             }
@@ -167,12 +159,11 @@ namespace AmesaBackend.Auth.Controllers
                 {
                     Success = false,
                     Message = "An error occurred while updating preferences",
-                    Error = new ApiError
+                    Error = new ErrorResponse
                     {
                         Code = "INTERNAL_ERROR",
                         Message = ex.Message
-                    },
-                    Timestamp = DateTime.UtcNow
+                    }
                 });
             }
         }
@@ -192,8 +183,7 @@ namespace AmesaBackend.Auth.Controllers
                     return Unauthorized(new ApiResponse<UserPreferencesDto>
                     {
                         Success = false,
-                        Message = "User not authenticated",
-                        Timestamp = DateTime.UtcNow
+                        Message = "User not authenticated"
                     });
                 }
 
@@ -222,8 +212,7 @@ namespace AmesaBackend.Auth.Controllers
                 {
                     Success = true,
                     Data = MapToDto(existingPreferences ?? defaultPreferences),
-                    Message = "Preferences reset to defaults successfully",
-                    Timestamp = DateTime.UtcNow
+                    Message = "Preferences reset to defaults successfully"
                 });
             }
             catch (Exception ex)
@@ -233,12 +222,11 @@ namespace AmesaBackend.Auth.Controllers
                 {
                     Success = false,
                     Message = "An error occurred while resetting preferences",
-                    Error = new ApiError
+                    Error = new ErrorResponse
                     {
                         Code = "INTERNAL_ERROR",
                         Message = ex.Message
-                    },
-                    Timestamp = DateTime.UtcNow
+                    }
                 });
             }
         }
@@ -258,8 +246,7 @@ namespace AmesaBackend.Auth.Controllers
                     return Unauthorized(new ApiResponse<object>
                     {
                         Success = false,
-                        Message = "User not authenticated",
-                        Timestamp = DateTime.UtcNow
+                        Message = "User not authenticated"
                     });
                 }
 
@@ -277,8 +264,7 @@ namespace AmesaBackend.Auth.Controllers
                 return Ok(new ApiResponse<object>
                 {
                     Success = true,
-                    Message = "Preferences deleted successfully",
-                    Timestamp = DateTime.UtcNow
+                    Message = "Preferences deleted successfully"
                 });
             }
             catch (Exception ex)
@@ -288,12 +274,11 @@ namespace AmesaBackend.Auth.Controllers
                 {
                     Success = false,
                     Message = "An error occurred while deleting preferences",
-                    Error = new ApiError
+                    Error = new ErrorResponse
                     {
                         Code = "INTERNAL_ERROR",
                         Message = ex.Message
-                    },
-                    Timestamp = DateTime.UtcNow
+                    }
                 });
             }
         }
@@ -313,8 +298,7 @@ namespace AmesaBackend.Auth.Controllers
                     return Unauthorized(new ApiResponse<PreferencesSyncStatusDto>
                     {
                         Success = false,
-                        Message = "User not authenticated",
-                        Timestamp = DateTime.UtcNow
+                        Message = "User not authenticated"
                     });
                 }
 
@@ -334,8 +318,7 @@ namespace AmesaBackend.Auth.Controllers
                 {
                     Success = true,
                     Data = syncStatus,
-                    Message = "Sync status retrieved successfully",
-                    Timestamp = DateTime.UtcNow
+                    Message = "Sync status retrieved successfully"
                 });
             }
             catch (Exception ex)
@@ -345,12 +328,11 @@ namespace AmesaBackend.Auth.Controllers
                 {
                     Success = false,
                     Message = "An error occurred while retrieving sync status",
-                    Error = new ApiError
+                    Error = new ErrorResponse
                     {
                         Code = "INTERNAL_ERROR",
                         Message = ex.Message
-                    },
-                    Timestamp = DateTime.UtcNow
+                    }
                 });
             }
         }
