@@ -87,3 +87,5 @@ Once routing is fixed:
 - `/admin` → Should return 200 OK from admin service
 - All other service paths → Should route to respective services
 
+
+

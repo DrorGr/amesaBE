@@ -124,3 +124,5 @@ This configuration ensures:
 - ALB can send health checks to ECS tasks
 - ECS tasks can only receive traffic from ALB (more secure)
 
+
+

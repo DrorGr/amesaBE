@@ -18,6 +18,9 @@ namespace AmesaBackend.Data
         public DbSet<UserSession> UserSessions { get; set; }
         public DbSet<UserActivityLog> UserActivityLogs { get; set; }
         public DbSet<UserNotification> UserNotifications { get; set; }
+        public DbSet<UserPreferences> UserPreferences { get; set; }
+        public DbSet<UserPreferenceHistory> UserPreferenceHistory { get; set; }
+        public DbSet<UserPreferenceSyncLog> UserPreferenceSyncLog { get; set; }
 
         // Lottery related tables
         public DbSet<House> Houses { get; set; }

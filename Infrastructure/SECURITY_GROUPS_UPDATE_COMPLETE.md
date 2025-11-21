@@ -93,3 +93,5 @@ aws ec2 describe-security-groups --region eu-north-1 --filters "Name=group-name,
 aws ec2 describe-security-groups --region eu-north-1 --filters "Name=group-name,Values=amesa-ecs-sg" "Name=vpc-id,Values=vpc-0faeeb78eded33ccf" --query "SecurityGroups[0].GroupId" --output text
 ```
 
+
+

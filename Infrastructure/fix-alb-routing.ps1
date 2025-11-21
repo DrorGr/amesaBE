@@ -45,3 +45,5 @@ Write-Host "`n✅ Low-priority conflicting rules removed" -ForegroundColor Green
 Write-Host "`nCurrent routing rules (100+) should now work correctly." -ForegroundColor Yellow
 Write-Host "Wait 30 seconds for changes to propagate, then test endpoints." -ForegroundColor Cyan
 
+
+

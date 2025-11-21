@@ -127,3 +127,5 @@ If endpoints still return 404:
 
 The infrastructure is now properly configured and services are healthy. The endpoint 404s are likely a routing configuration issue that can be resolved by verifying ALB listener rules.
 
+
+

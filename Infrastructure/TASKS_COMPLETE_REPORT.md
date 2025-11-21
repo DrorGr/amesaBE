@@ -113,3 +113,5 @@
 
 **Key Finding**: ALB health checks are not reaching the service. The health endpoint works fine, but there's still a connectivity issue between ALB and ECS tasks.
 
+
+
