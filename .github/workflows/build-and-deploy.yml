@@ -103,21 +103,21 @@ jobs:
       matrix:
         include:
           - service: amesa-auth-service
-            ecs_service: amesa-auth
+            ecs_service: amesa-auth-service
           - service: amesa-content-service
-            ecs_service: amesa-content
+            ecs_service: amesa-content-service
           - service: amesa-notification-service
-            ecs_service: amesa-notification
+            ecs_service: amesa-notification-service
           - service: amesa-payment-service
-            ecs_service: amesa-payment
+            ecs_service: amesa-payment-service
           - service: amesa-lottery-service
-            ecs_service: amesa-lottery
+            ecs_service: amesa-lottery-service
           - service: amesa-lottery-results-service
-            ecs_service: amesa-lottery-results
+            ecs_service: amesa-lottery-results-service
           - service: amesa-analytics-service
-            ecs_service: amesa-analytics
+            ecs_service: amesa-analytics-service
           - service: amesa-admin-service
-            ecs_service: amesa-admin
+            ecs_service: amesa-admin-service
       fail-fast: false
 
     steps:
