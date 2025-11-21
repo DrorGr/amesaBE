@@ -16,6 +16,11 @@ namespace AmesaBackend.Auth.Data
         public DbSet<UserIdentityDocument> UserIdentityDocuments { get; set; }
         public DbSet<UserSession> UserSessions { get; set; }
         public DbSet<UserActivityLog> UserActivityLogs { get; set; }
+        
+        // User preferences tables
+        public DbSet<UserPreferences> UserPreferences { get; set; }
+        public DbSet<UserPreferenceHistory> UserPreferenceHistory { get; set; }
+        public DbSet<UserPreferenceSyncLog> UserPreferenceSyncLog { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -78,6 +83,36 @@ namespace AmesaBackend.Auth.Data
                 entity.Property(e => e.Action).IsRequired().HasMaxLength(100);
                 entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId);
                 entity.HasOne(e => e.Session).WithMany().HasForeignKey(e => e.SessionId);
+            });
+
+            // Configure UserPreferences entity
+            modelBuilder.Entity<UserPreferences>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.UserId).IsUnique();
+                entity.Property(e => e.PreferencesJson).IsRequired().HasColumnType("jsonb");
+                entity.Property(e => e.Version).IsRequired().HasMaxLength(20);
+                entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId);
+            });
+
+            // Configure UserPreferenceHistory entity
+            modelBuilder.Entity<UserPreferenceHistory>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Category).IsRequired().HasMaxLength(50);
+                entity.Property(e => e.PropertyName).IsRequired().HasMaxLength(100);
+                entity.HasOne(e => e.UserPreferences).WithMany(p => p.History).HasForeignKey(e => e.UserPreferencesId);
+                entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId);
+            });
+
+            // Configure UserPreferenceSyncLog entity
+            modelBuilder.Entity<UserPreferenceSyncLog>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.SyncType).IsRequired().HasMaxLength(20);
+                entity.Property(e => e.SyncStatus).IsRequired().HasMaxLength(20);
+                entity.HasOne(e => e.UserPreferences).WithMany().HasForeignKey(e => e.UserPreferencesId);
+                entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId);
             });
         }
     }

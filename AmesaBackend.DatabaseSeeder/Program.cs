@@ -32,7 +32,7 @@ namespace AmesaBackend.DatabaseSeeder
 
                 // Get services
                 var logger = host.Services.GetRequiredService<ILogger<Program>>();
-                var seederService = host.Services.GetRequiredService<DatabaseSeederService>();
+                var seederService = host.Services.GetRequiredService<DatabaseSeederService_Fixed>();
 
                 // Display configuration info
                 var environment = configuration["SeederSettings:Environment"] ?? "Development";
@@ -127,7 +127,7 @@ namespace AmesaBackend.DatabaseSeeder
                     services.Configure<SeederSettings>(configuration.GetSection("SeederSettings"));
 
                     // Register services
-                    services.AddScoped<DatabaseSeederService>();
+                    services.AddScoped<DatabaseSeederService_Fixed>();
                 })
                 .Build();
         }

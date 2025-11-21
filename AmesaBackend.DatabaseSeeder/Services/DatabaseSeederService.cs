@@ -140,7 +140,48 @@ namespace AmesaBackend.DatabaseSeeder.Services
 
         private async Task SeedTranslationsAsync()
         {
-            _logger.LogInformation("Seeding comprehensive translations for 150+ most important keys across 6 languages...");
+            _logger.LogInformation("Seeding comprehensive translations from external SQL files...");
+
+            try
+            {
+                // First, seed the main comprehensive translations (5 languages)
+                var comprehensiveTranslationsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "comprehensive-translations.sql");
+                if (File.Exists(comprehensiveTranslationsPath))
+                {
+                    _logger.LogInformation("Loading comprehensive translations from file...");
+                    var comprehensiveSql = await File.ReadAllTextAsync(comprehensiveTranslationsPath);
+                    await _context.Database.ExecuteSqlRawAsync(comprehensiveSql);
+                    _logger.LogInformation("Comprehensive translations seeded successfully");
+                }
+                else
+                {
+                    _logger.LogWarning($"Comprehensive translations file not found at: {comprehensiveTranslationsPath}");
+                }
+
+                // Then, seed Polish translations addon
+                var polishTranslationsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "polish-translations-addon.sql");
+                if (File.Exists(polishTranslationsPath))
+                {
+                    _logger.LogInformation("Loading Polish translations addon from file...");
+                    var polishSql = await File.ReadAllTextAsync(polishTranslationsPath);
+                    await _context.Database.ExecuteSqlRawAsync(polishSql);
+                    _logger.LogInformation("Polish translations seeded successfully");
+                }
+                else
+                {
+                    _logger.LogWarning($"Polish translations file not found at: {polishTranslationsPath}");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error seeding translations from files, falling back to inline translations");
+                await SeedInlineTranslationsAsync();
+            }
+        }
+
+        private async Task SeedInlineTranslationsAsync()
+        {
+            _logger.LogInformation("Seeding fallback inline translations...");
 
             var sql = @"
                 INSERT INTO amesa_content.translations (""Id"", ""LanguageCode"", ""Key"", ""Value"", ""Description"", ""Category"", ""IsActive"", ""CreatedAt"", ""UpdatedAt"", ""CreatedBy"", ""UpdatedBy"")
