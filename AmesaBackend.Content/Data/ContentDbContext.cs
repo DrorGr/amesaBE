@@ -39,7 +39,7 @@ namespace AmesaBackend.Content.Data
                 entity.HasIndex(e => e.Code).IsUnique();
             });
 
-            modelBuilder.Entity<Content>(entity =>
+            modelBuilder.Entity<Models.Content>(entity =>
             {
                 entity.HasKey(e => e.Id);
                 entity.Property(e => e.Title).IsRequired().HasMaxLength(255);

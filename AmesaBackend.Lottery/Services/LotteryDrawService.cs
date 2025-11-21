@@ -26,7 +26,8 @@ namespace AmesaBackend.Lottery.Services
                 {
                     using var scope = _serviceProvider.CreateScope();
                     var context = scope.ServiceProvider.GetRequiredService<LotteryDbContext>();
-                    var eventPublisher = scope.ServiceProvider.GetRequiredService<IEventPublisher>();
+                    // TODO: Implement IEventPublisher interface
+                    // var eventPublisher = scope.ServiceProvider.GetRequiredService<IEventPublisher>();
 
                     // Check for lotteries that need to be drawn
                     var pendingDraws = await context.LotteryDraws

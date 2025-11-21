@@ -373,9 +373,10 @@ namespace AmesaBackend.Auth.Services
         {
             try
             {
-                // Use shared library's JWT token manager for validation
-                var claims = _jwtTokenManager.GetClaimsFromExpiredToken(token);
-                return claims != null && claims.Any();
+                // TODO: Implement GetClaimsFromExpiredToken method in IJwtTokenManager
+                // var claims = _jwtTokenManager.GetClaimsFromExpiredToken(token);
+                // return claims != null && claims.Any();
+                return false; // Temporary fix - always return false for expired tokens
             }
             catch
             {
