@@ -6,6 +6,22 @@ on:
   pull_request:
     branches: [ main ]
   workflow_dispatch:
+    inputs:
+      services:
+        description: 'Select services to deploy'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - 'all'
+          - 'amesa-auth-service'
+          - 'amesa-content-service'
+          - 'amesa-notification-service'
+          - 'amesa-payment-service'
+          - 'amesa-lottery-service'
+          - 'amesa-lottery-results-service'
+          - 'amesa-analytics-service'
+          - 'amesa-admin-service'
 
 env:
   AWS_REGION: eu-north-1
@@ -37,6 +53,12 @@ jobs:
           - service: amesa-admin-service
             dockerfile: AmesaBackend.Admin/Dockerfile
       fail-fast: false
+    
+    # Skip services not selected in manual dispatch
+    if: |
+      github.event_name != 'workflow_dispatch' || 
+      github.event.inputs.services == 'all' || 
+      github.event.inputs.services == matrix.service
     
     steps:
       - name: Checkout code
@@ -88,6 +110,12 @@ jobs:
           - service: amesa-admin-service
             ecs_service: amesa-admin
       fail-fast: false
+
+    # Skip services not selected in manual dispatch
+    if: |
+      github.event_name != 'workflow_dispatch' || 
+      github.event.inputs.services == 'all' || 
+      github.event.inputs.services == matrix.service
 
     steps:
       - name: Configure AWS credentials
