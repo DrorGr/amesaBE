@@ -11,7 +11,6 @@ using AmesaBackend.Auth.Models;
 using AmesaBackend.Shared.Extensions;
 using AmesaBackend.Shared.Middleware.Extensions;
 using AmesaBackend.Shared.Logging;
-using AmesaBackend.Shared.Tracing;
 using Serilog;
 using Npgsql;
 using Microsoft.Extensions.Caching.Memory;

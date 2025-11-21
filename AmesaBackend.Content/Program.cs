@@ -2,7 +2,6 @@ using Microsoft.EntityFrameworkCore;
 using AmesaBackend.Content.Data;
 using AmesaBackend.Shared.Extensions;
 using AmesaBackend.Shared.Middleware.Extensions;
-using AmesaBackend.Shared.Tracing;
 using Serilog;
 using Npgsql;
 

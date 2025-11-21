@@ -2,7 +2,6 @@ using AmesaBackend.Admin.Services;
 using AmesaBackend.Auth.Services;
 using AmesaBackend.Shared.Extensions;
 using AmesaBackend.Shared.Middleware.Extensions;
-using AmesaBackend.Shared.Tracing;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);

@@ -4,7 +4,6 @@ using AmesaBackend.Notification.Services;
 using AmesaBackend.Notification.Handlers;
 using AmesaBackend.Shared.Extensions;
 using AmesaBackend.Shared.Middleware.Extensions;
-using AmesaBackend.Shared.Tracing;
 using Serilog;
 using Npgsql;
 
