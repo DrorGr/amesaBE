@@ -47,9 +47,9 @@ namespace AmesaBackend.Notification.Services
         {
             // Get user info from Auth Service via HTTP
             var authServiceUrl = _configuration["Services:AuthService:Url"] ?? "http://auth-service:8080";
-            var userResponse = await _httpRequest.GetAsync<object>($"{authServiceUrl}/api/v1/auth/users/{userId}");
+            var userResponse = await _httpRequest.GetRequest<dynamic>($"{authServiceUrl}/api/v1/auth/users/{userId}", "");
 
-            if (userResponse.Success && userResponse.Value != null)
+            if (userResponse != null)
             {
                 // Parse user data and send email
                 // In a real implementation, you'd have a UserDto type

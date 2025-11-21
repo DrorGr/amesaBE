@@ -113,7 +113,9 @@ namespace AmesaBackend.Notification.Handlers
             
             try
             {
-                await emailService.SendPasswordResetEmailAsync(@event.Email, @event.ResetToken);
+                // TODO: Implement SendPasswordResetEmailAsync method in IEmailService
+                // await emailService.SendPasswordResetEmailAsync(@event.Email, @event.ResetToken);
+                _logger.LogWarning("SendPasswordResetEmailAsync not implemented yet");
                 _logger.LogInformation("Password reset email sent to {Email}", @event.Email);
             }
             catch (Exception ex)
