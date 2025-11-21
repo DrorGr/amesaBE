@@ -6,9 +6,11 @@ FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 COPY ["AmesaBackend.Admin/AmesaBackend.Admin.csproj", "AmesaBackend.Admin/"]
 COPY ["AmesaBackend.Shared/AmesaBackend.Shared.csproj", "AmesaBackend.Shared/"]
+COPY ["AmesaBackend.Auth/AmesaBackend.Auth.csproj", "AmesaBackend.Auth/"]
 RUN dotnet restore "AmesaBackend.Admin/AmesaBackend.Admin.csproj"
 COPY ["AmesaBackend.Admin/", "AmesaBackend.Admin/"]
 COPY ["AmesaBackend.Shared/", "AmesaBackend.Shared/"]
+COPY ["AmesaBackend.Auth/", "AmesaBackend.Auth/"]
 RUN dotnet build "AmesaBackend.Admin/AmesaBackend.Admin.csproj" -c Release -o /app/build
 
 FROM build AS publish
