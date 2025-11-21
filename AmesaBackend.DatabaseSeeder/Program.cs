@@ -32,7 +32,7 @@ namespace AmesaBackend.DatabaseSeeder
 
                 // Get services
                 var logger = host.Services.GetRequiredService<ILogger<Program>>();
-                var seederService = host.Services.GetRequiredService<DatabaseSeederService_Fixed>();
+                var seederService = host.Services.GetRequiredService<DatabaseSeederService>();
 
                 // Display configuration info
                 var environment = configuration["SeederSettings:Environment"] ?? "Development";
@@ -46,9 +46,23 @@ namespace AmesaBackend.DatabaseSeeder
                 // Prompt for confirmation in production
                 if (environment.Equals("Production", StringComparison.OrdinalIgnoreCase))
                 {
+                    var truncateEnabled = configuration.GetValue<bool>("SeederSettings:TruncateExistingData");
+                    
                     Console.WriteLine();
                     Console.WriteLine("⚠️  WARNING: You are about to seed the PRODUCTION database!");
-                    Console.WriteLine("This will TRUNCATE existing data and replace it with demo data.");
+                    
+                    if (truncateEnabled)
+                    {
+                        Console.WriteLine("⚠️  DANGER: This will TRUNCATE existing data and replace it with demo data!");
+                    }
+                    else
+                    {
+                        Console.WriteLine("✅ SAFE MODE: This will ADD new data without deleting existing data.");
+                        Console.WriteLine("   - TruncateExistingData is set to FALSE");
+                        Console.WriteLine("   - Existing data will be preserved");
+                        Console.WriteLine("   - Only missing data will be added");
+                    }
+                    
                     Console.WriteLine();
                     Console.Write("Are you sure you want to continue? (type 'YES' to confirm): ");
                     
@@ -127,7 +141,7 @@ namespace AmesaBackend.DatabaseSeeder
                     services.Configure<SeederSettings>(configuration.GetSection("SeederSettings"));
 
                     // Register services
-                    services.AddScoped<DatabaseSeederService_Fixed>();
+                    services.AddScoped<DatabaseSeederService>();
                 })
                 .Build();
         }

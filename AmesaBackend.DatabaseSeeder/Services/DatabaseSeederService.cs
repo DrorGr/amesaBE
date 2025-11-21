@@ -132,7 +132,8 @@ namespace AmesaBackend.DatabaseSeeder.Services
                     ('ar', 'Arabic', 'العربية', '🇸🇦', true, false, 3, NOW(), NOW()),
                     ('es', 'Spanish', 'Español', '🇪🇸', true, false, 4, NOW(), NOW()),
                     ('fr', 'French', 'Français', '🇫🇷', true, false, 5, NOW(), NOW()),
-                    ('pl', 'Polish', 'Polski', '🇵🇱', true, false, 6, NOW(), NOW());";
+                    ('pl', 'Polish', 'Polski', '🇵🇱', true, false, 6, NOW(), NOW())
+                ON CONFLICT (""Code"") DO NOTHING;";
 
             await _context.Database.ExecuteSqlRawAsync(sql);
             _logger.LogInformation("Seeded 6 languages");
@@ -142,6 +143,18 @@ namespace AmesaBackend.DatabaseSeeder.Services
         {
             _logger.LogInformation("Seeding comprehensive translations from external SQL files...");
 
+            // Check if translations already exist
+            var existingTranslations = await _context.Translations.CountAsync();
+            var polishTranslations = await _context.Translations.CountAsync(t => t.LanguageCode == "pl");
+            
+            _logger.LogInformation($"Existing translations: {existingTranslations}, Polish translations: {polishTranslations}");
+            
+            if (existingTranslations > 0 && polishTranslations > 0)
+            {
+                _logger.LogInformation($"Translations already exist including Polish ({polishTranslations} Polish translations found), skipping...");
+                return;
+            }
+
             try
             {
                 // First, seed the main comprehensive translations (5 languages)
@@ -150,6 +163,13 @@ namespace AmesaBackend.DatabaseSeeder.Services
                 {
                     _logger.LogInformation("Loading comprehensive translations from file...");
                     var comprehensiveSql = await File.ReadAllTextAsync(comprehensiveTranslationsPath);
+                    
+                    // Add ON CONFLICT clause to handle duplicates
+                    if (!comprehensiveSql.Contains("ON CONFLICT"))
+                    {
+                        comprehensiveSql = comprehensiveSql.TrimEnd(';') + " ON CONFLICT (\"LanguageCode\", \"Key\") DO NOTHING;";
+                    }
+                    
                     await _context.Database.ExecuteSqlRawAsync(comprehensiveSql);
                     _logger.LogInformation("Comprehensive translations seeded successfully");
                 }
@@ -164,6 +184,13 @@ namespace AmesaBackend.DatabaseSeeder.Services
                 {
                     _logger.LogInformation("Loading Polish translations addon from file...");
                     var polishSql = await File.ReadAllTextAsync(polishTranslationsPath);
+                    
+                    // Add ON CONFLICT clause to handle duplicates
+                    if (!polishSql.Contains("ON CONFLICT"))
+                    {
+                        polishSql = polishSql.TrimEnd(';') + " ON CONFLICT (\"LanguageCode\", \"Key\") DO NOTHING;";
+                    }
+                    
                     await _context.Database.ExecuteSqlRawAsync(polishSql);
                     _logger.LogInformation("Polish translations seeded successfully");
                 }

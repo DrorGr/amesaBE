@@ -3,7 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace AmesaBackend.Models
 {
-    [Table("houses")]
+    [Table("houses", Schema = "amesa_lottery")]
     public class House
     {
         [Key]
@@ -77,7 +77,7 @@ namespace AmesaBackend.Models
         public virtual User? CreatedByUser { get; set; }
     }
 
-    [Table("house_images")]
+    [Table("house_images", Schema = "amesa_lottery")]
     public class HouseImage
     {
         [Key]

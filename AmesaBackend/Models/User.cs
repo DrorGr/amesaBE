@@ -3,7 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace AmesaBackend.Models
 {
-    [Table("users")]
+    [Table("users", Schema = "amesa_auth")]
     public class User
     {
         [Key]

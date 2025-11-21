@@ -3,7 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace AmesaBackend.Models
 {
-    [Table("translations")]
+    [Table("translations", Schema = "amesa_content")]
     public class Translation
     {
         [Key]
@@ -40,7 +40,7 @@ namespace AmesaBackend.Models
         public virtual Language Language { get; set; } = null!;
     }
 
-    [Table("languages")]
+    [Table("languages", Schema = "amesa_content")]
     public class Language
     {
         [Key]
