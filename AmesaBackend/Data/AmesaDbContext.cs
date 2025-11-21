@@ -270,6 +270,7 @@ namespace AmesaBackend.Data
             // Configure Language entity
             modelBuilder.Entity<Language>(entity =>
             {
+                entity.ToTable("languages", "amesa_content");
                 entity.HasKey(e => e.Code);
                 entity.Property(e => e.Code).IsRequired().HasMaxLength(10);
                 entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
@@ -281,6 +282,7 @@ namespace AmesaBackend.Data
             // Configure Translation entity
             modelBuilder.Entity<Translation>(entity =>
             {
+                entity.ToTable("translations", "amesa_content");
                 entity.HasKey(e => e.Id);
                 entity.Property(e => e.LanguageCode).IsRequired().HasMaxLength(10);
                 entity.Property(e => e.Key).IsRequired().HasMaxLength(255);
