@@ -20,8 +20,6 @@ jobs:
     strategy:
       matrix:
         include:
-          - service: amesa-backend
-            dockerfile: AmesaBackend/Dockerfile
           - service: amesa-auth-service
             dockerfile: AmesaBackend.Auth/Dockerfile
           - service: amesa-content-service
@@ -73,8 +71,6 @@ jobs:
     strategy:
       matrix:
         include:
-          - service: amesa-backend
-            ecs_service: amesa-backend
           - service: amesa-auth-service
             ecs_service: amesa-auth
           - service: amesa-content-service
