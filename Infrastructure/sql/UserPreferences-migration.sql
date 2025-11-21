@@ -333,3 +333,4 @@ BEGIN
     RAISE NOTICE 'Created view: v_user_preferences_summary';
     RAISE NOTICE 'Created indexes and triggers for optimal performance';
 END $$;
+

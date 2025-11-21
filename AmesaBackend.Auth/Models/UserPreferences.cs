@@ -1,7 +1,8 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using AmesaBackend.Shared.Models;
 
-namespace AmesaBackend.Models
+namespace AmesaBackend.Auth.Models
 {
     /// <summary>
     /// User preferences entity for storing user-specific settings
@@ -238,4 +239,3 @@ namespace AmesaBackend.Models
         public virtual User? User { get; set; }
     }
 }
-

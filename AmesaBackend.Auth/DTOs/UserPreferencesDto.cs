@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
 
-namespace AmesaBackend.DTOs
+namespace AmesaBackend.Auth.DTOs
 {
     /// <summary>
     /// User preferences data transfer object
@@ -234,4 +234,3 @@ namespace AmesaBackend.DTOs
         public string? Reason { get; set; }
     }
 }
-
