@@ -108,8 +108,8 @@ namespace AmesaBackend.DatabaseSeeder.Services
                 await _context.Database.ExecuteSqlRawAsync("TRUNCATE TABLE amesa_auth.user_phones CASCADE;");
                 await _context.Database.ExecuteSqlRawAsync("TRUNCATE TABLE amesa_auth.user_addresses CASCADE;");
                 await _context.Database.ExecuteSqlRawAsync("TRUNCATE TABLE amesa_auth.users CASCADE;");
-                await _context.Database.ExecuteSqlRawAsync("TRUNCATE TABLE amesa_content.translations CASCADE;");
-                await _context.Database.ExecuteSqlRawAsync("TRUNCATE TABLE amesa_content.languages CASCADE;");
+                await _context.Database.ExecuteSqlRawAsync("TRUNCATE TABLE public.translations CASCADE;");
+                await _context.Database.ExecuteSqlRawAsync("TRUNCATE TABLE public.languages CASCADE;");
 
                 _logger.LogInformation("Existing data truncated successfully");
             }
@@ -125,7 +125,7 @@ namespace AmesaBackend.DatabaseSeeder.Services
             _logger.LogInformation("Seeding languages...");
 
             var sql = @"
-                INSERT INTO amesa_content.languages (""Code"", ""Name"", ""NativeName"", ""FlagUrl"", ""IsActive"", ""IsDefault"", ""DisplayOrder"", ""CreatedAt"", ""UpdatedAt"")
+                INSERT INTO public.languages (""Code"", ""Name"", ""NativeName"", ""FlagUrl"", ""IsActive"", ""IsDefault"", ""DisplayOrder"", ""CreatedAt"", ""UpdatedAt"")
                 VALUES 
                     ('en', 'English', 'English', '🇺🇸', true, true, 1, NOW(), NOW()),
                     ('he', 'Hebrew', 'עברית', '🇮🇱', true, false, 2, NOW(), NOW()),
@@ -211,7 +211,7 @@ namespace AmesaBackend.DatabaseSeeder.Services
             _logger.LogInformation("Seeding fallback inline translations...");
 
             var sql = @"
-                INSERT INTO amesa_content.translations (""Id"", ""LanguageCode"", ""Key"", ""Value"", ""Description"", ""Category"", ""IsActive"", ""CreatedAt"", ""UpdatedAt"", ""CreatedBy"", ""UpdatedBy"")
+                INSERT INTO public.translations (""Id"", ""LanguageCode"", ""Key"", ""Value"", ""Description"", ""Category"", ""IsActive"", ""CreatedAt"", ""UpdatedAt"", ""CreatedBy"", ""UpdatedBy"")
                 VALUES 
                     -- Navigation (5 languages)
                     (uuid_generate_v4(), 'en', 'nav.lotteries', 'Lotteries', 'Navigation', 'Navigation', true, NOW(), NOW(), 'System', 'System'),
@@ -527,7 +527,7 @@ namespace AmesaBackend.DatabaseSeeder.Services
             _logger.LogInformation("Adding Polish translations...");
 
             var polishSql = @"
-                INSERT INTO amesa_content.translations (""Id"", ""LanguageCode"", ""Key"", ""Value"", ""Description"", ""Category"", ""IsActive"", ""CreatedAt"", ""UpdatedAt"", ""CreatedBy"", ""UpdatedBy"")
+                INSERT INTO public.translations (""Id"", ""LanguageCode"", ""Key"", ""Value"", ""Description"", ""Category"", ""IsActive"", ""CreatedAt"", ""UpdatedAt"", ""CreatedBy"", ""UpdatedBy"")
                 VALUES 
                     -- Navigation (Polish)
                     (uuid_generate_v4(), 'pl', 'nav.lotteries', 'Loterie', 'Navigation', 'Navigation', true, NOW(), NOW(), 'System', 'System'),

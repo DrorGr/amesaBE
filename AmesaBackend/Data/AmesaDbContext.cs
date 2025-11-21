@@ -282,7 +282,7 @@ namespace AmesaBackend.Data
             // Configure Translation entity
             modelBuilder.Entity<Translation>(entity =>
             {
-                entity.ToTable("translations", "amesa_content");
+                entity.ToTable("translations", "public");
                 entity.HasKey(e => e.Id);
                 entity.Property(e => e.LanguageCode).IsRequired().HasMaxLength(10);
                 entity.Property(e => e.Key).IsRequired().HasMaxLength(255);
