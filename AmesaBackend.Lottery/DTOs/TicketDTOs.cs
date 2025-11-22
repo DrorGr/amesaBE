@@ -1,0 +1,64 @@
+using System.ComponentModel.DataAnnotations;
+
+namespace AmesaBackend.Lottery.DTOs
+{
+    /// <summary>
+    /// Response for favorite house operations - matches API contract
+    /// </summary>
+    public class FavoriteHouseResponse
+    {
+        public Guid HouseId { get; set; }
+        public bool Added { get; set; }
+        public string Message { get; set; } = string.Empty;
+    }
+
+    /// <summary>
+    /// Paged entry history response
+    /// </summary>
+    public class PagedEntryHistoryResponse
+    {
+        public List<LotteryTicketDto> Entries { get; set; } = new();
+        public int Page { get; set; }
+        public int Limit { get; set; }
+        public int Total { get; set; }
+        public int TotalPages { get; set; }
+        public bool HasNext { get; set; }
+        public bool HasPrevious { get; set; }
+    }
+
+    /// <summary>
+    /// Quick entry request
+    /// </summary>
+    public class QuickEntryRequest
+    {
+        [Required]
+        public Guid HouseId { get; set; }
+
+        [Range(1, 10)]
+        public int TicketCount { get; set; } = 1;
+
+        [Required]
+        public Guid PaymentMethodId { get; set; }
+    }
+
+    /// <summary>
+    /// Quick entry response
+    /// </summary>
+    public class QuickEntryResponse
+    {
+        public List<LotteryTicketDto> Tickets { get; set; } = new();
+        public decimal TotalAmount { get; set; }
+        public string TransactionId { get; set; } = string.Empty;
+        public string Message { get; set; } = string.Empty;
+    }
+
+    /// <summary>
+    /// Recommended house with score and reason
+    /// </summary>
+    public class RecommendedHouseDto : HouseDto
+    {
+        public decimal RecommendationScore { get; set; }
+        public string Reason { get; set; } = string.Empty;
+    }
+}
+

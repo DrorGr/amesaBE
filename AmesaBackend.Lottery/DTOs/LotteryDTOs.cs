@@ -232,5 +232,36 @@ namespace AmesaBackend.Lottery.DTOs
         public string Message { get; set; } = string.Empty;
         public object? Details { get; set; }
     }
+
+    /// <summary>
+    /// User lottery statistics DTO
+    /// </summary>
+    public class UserLotteryStatsDto
+    {
+        public int TotalEntries { get; set; }
+        public int ActiveEntries { get; set; }
+        public int TotalWins { get; set; }
+        public decimal TotalSpending { get; set; }
+        public decimal TotalWinnings { get; set; }
+        public decimal WinRate { get; set; }
+        public decimal AverageSpendingPerEntry { get; set; }
+        public Guid? FavoriteHouseId { get; set; }
+        public string? MostActiveMonth { get; set; }
+        public DateTime? LastEntryDate { get; set; }
+    }
+
+    /// <summary>
+    /// Entry filters for querying user entries
+    /// </summary>
+    public class EntryFilters
+    {
+        public int Page { get; set; } = 1;
+        public int Limit { get; set; } = 20;
+        public string? Status { get; set; }
+        public Guid? HouseId { get; set; }
+        public DateTime? StartDate { get; set; }
+        public DateTime? EndDate { get; set; }
+        public bool? IsWinner { get; set; }
+    }
 }
 

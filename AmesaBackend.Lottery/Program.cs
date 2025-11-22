@@ -50,6 +50,9 @@ builder.Services.AddDbContext<LotteryDbContext>(options =>
 builder.Services.AddAmesaBackendShared(builder.Configuration);
 
 // Add Services
+// Note: IUserPreferencesService is optional for ILotteryService
+// If you want favorites functionality, add project reference to AmesaBackend.Auth
+// and register: builder.Services.AddScoped<IUserPreferencesService, UserPreferencesService>();
 builder.Services.AddScoped<ILotteryService, LotteryService>();
 builder.Services.AddScoped<IFileService, FileService>();
 

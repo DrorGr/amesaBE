@@ -9,5 +9,15 @@ namespace AmesaBackend.Lottery.Services
         Task<List<LotteryDrawDto>> GetDrawsAsync();
         Task<LotteryDrawDto> GetDrawAsync(Guid drawId);
         Task ConductDrawAsync(Guid drawId, ConductDrawRequest request);
+        
+        // Favorites methods
+        Task<List<HouseDto>> GetUserFavoriteHousesAsync(Guid userId);
+        Task<bool> AddHouseToFavoritesAsync(Guid userId, Guid houseId);
+        Task<bool> RemoveHouseFromFavoritesAsync(Guid userId, Guid houseId);
+        Task<List<HouseDto>> GetRecommendedHousesAsync(Guid userId, int limit = 10);
+        
+        // Entry management methods
+        Task<List<LotteryTicketDto>> GetUserActiveEntriesAsync(Guid userId);
+        Task<UserLotteryStatsDto> GetUserLotteryStatsAsync(Guid userId);
     }
 }

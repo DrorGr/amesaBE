@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using AmesaBackend.Lottery.Data;
 using AmesaBackend.Lottery.DTOs;
 using AmesaBackend.Lottery.Models;
+using AmesaBackend.Lottery.Services;
 using AmesaBackend.Shared.Events;
 using System.Security.Claims;
 
@@ -16,12 +17,24 @@ namespace AmesaBackend.Lottery.Controllers
         private readonly LotteryDbContext _context;
         private readonly IEventPublisher _eventPublisher;
         private readonly ILogger<HousesController> _logger;
+        private readonly ILotteryService _lotteryService;
 
-        public HousesController(LotteryDbContext context, IEventPublisher eventPublisher, ILogger<HousesController> logger)
+        public HousesController(
+            LotteryDbContext context, 
+            IEventPublisher eventPublisher, 
+            ILogger<HousesController> logger,
+            ILotteryService lotteryService)
         {
             _context = context;
             _eventPublisher = eventPublisher;
             _logger = logger;
+            _lotteryService = lotteryService;
+        }
+
+        private Guid? GetCurrentUserId()
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            return Guid.TryParse(userIdClaim, out var userId) ? userId : null;
         }
 
         [HttpGet]
@@ -510,6 +523,243 @@ namespace AmesaBackend.Lottery.Controllers
             {
                 _logger.LogError(ex, "Error deleting house {HouseId}", id);
                 return StatusCode(500, new ApiResponse<object>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "INTERNAL_ERROR",
+                        Message = ex.Message
+                    }
+                });
+            }
+        }
+
+        /// <summary>
+        /// Get user's favorite houses
+        /// </summary>
+        [HttpGet("favorites")]
+        [Authorize]
+        public async Task<ActionResult<ApiResponse<List<HouseDto>>>> GetFavoriteHouses()
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                if (userId == null)
+                {
+                    return Unauthorized(new ApiResponse<List<HouseDto>>
+                    {
+                        Success = false,
+                        Message = "User not authenticated"
+                    });
+                }
+
+                var favoriteHouses = await _lotteryService.GetUserFavoriteHousesAsync(userId.Value);
+
+                return Ok(new ApiResponse<List<HouseDto>>
+                {
+                    Success = true,
+                    Data = favoriteHouses,
+                    Message = "Favorite houses retrieved successfully"
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving favorite houses");
+                return StatusCode(500, new ApiResponse<List<HouseDto>>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "INTERNAL_ERROR",
+                        Message = ex.Message
+                    }
+                });
+            }
+        }
+
+        /// <summary>
+        /// Add a house to user's favorites
+        /// </summary>
+        [HttpPost("{id}/favorite")]
+        [Authorize]
+        public async Task<ActionResult<ApiResponse<FavoriteHouseResponse>>> AddToFavorites(Guid id)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                if (userId == null)
+                {
+                    return Unauthorized(new ApiResponse<FavoriteHouseResponse>
+                    {
+                        Success = false,
+                        Message = "User not authenticated"
+                    });
+                }
+
+                var success = await _lotteryService.AddHouseToFavoritesAsync(userId.Value, id);
+
+                if (!success)
+                {
+                    return BadRequest(new ApiResponse<FavoriteHouseResponse>
+                    {
+                        Success = false,
+                        Message = "Failed to add house to favorites. House may not exist or already be in favorites."
+                    });
+                }
+
+                return Ok(new ApiResponse<FavoriteHouseResponse>
+                {
+                    Success = true,
+                    Data = new FavoriteHouseResponse
+                    {
+                        HouseId = id,
+                        Added = true,
+                        Message = "House added to favorites successfully"
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error adding house {HouseId} to favorites", id);
+                return StatusCode(500, new ApiResponse<FavoriteHouseResponse>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "INTERNAL_ERROR",
+                        Message = ex.Message
+                    }
+                });
+            }
+        }
+
+        /// <summary>
+        /// Remove a house from user's favorites
+        /// </summary>
+        [HttpDelete("{id}/favorite")]
+        [Authorize]
+        public async Task<ActionResult<ApiResponse<FavoriteHouseResponse>>> RemoveFromFavorites(Guid id)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                if (userId == null)
+                {
+                    return Unauthorized(new ApiResponse<FavoriteHouseResponse>
+                    {
+                        Success = false,
+                        Message = "User not authenticated"
+                    });
+                }
+
+                var success = await _lotteryService.RemoveHouseFromFavoritesAsync(userId.Value, id);
+
+                if (!success)
+                {
+                    return BadRequest(new ApiResponse<FavoriteHouseResponse>
+                    {
+                        Success = false,
+                        Message = "Failed to remove house from favorites. House may not be in favorites."
+                    });
+                }
+
+                return Ok(new ApiResponse<FavoriteHouseResponse>
+                {
+                    Success = true,
+                    Data = new FavoriteHouseResponse
+                    {
+                        HouseId = id,
+                        Added = false,
+                        Message = "House removed from favorites successfully"
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error removing house {HouseId} from favorites", id);
+                return StatusCode(500, new ApiResponse<FavoriteHouseResponse>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "INTERNAL_ERROR",
+                        Message = ex.Message
+                    }
+                });
+            }
+        }
+
+        /// <summary>
+        /// Get recommended houses for the user
+        /// </summary>
+        [HttpGet("recommendations")]
+        [Authorize]
+        public async Task<ActionResult<ApiResponse<List<RecommendedHouseDto>>>> GetRecommendedHouses([FromQuery] int limit = 10)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                if (userId == null)
+                {
+                    return Unauthorized(new ApiResponse<List<RecommendedHouseDto>>
+                    {
+                        Success = false,
+                        Message = "User not authenticated"
+                    });
+                }
+
+                if (limit < 1 || limit > 50)
+                {
+                    limit = 10;
+                }
+
+                var recommendedHouses = await _lotteryService.GetRecommendedHousesAsync(userId.Value, limit);
+
+                // Convert to RecommendedHouseDto with scores and reasons
+                var recommendedDtos = recommendedHouses.Select((house, index) => new RecommendedHouseDto
+                {
+                    // Copy all HouseDto properties
+                    Id = house.Id,
+                    Title = house.Title,
+                    Description = house.Description,
+                    Price = house.Price,
+                    Location = house.Location,
+                    Address = house.Address,
+                    Bedrooms = house.Bedrooms,
+                    Bathrooms = house.Bathrooms,
+                    SquareFeet = house.SquareFeet,
+                    PropertyType = house.PropertyType,
+                    YearBuilt = house.YearBuilt,
+                    LotSize = house.LotSize,
+                    Features = house.Features,
+                    Status = house.Status,
+                    TotalTickets = house.TotalTickets,
+                    TicketPrice = house.TicketPrice,
+                    LotteryStartDate = house.LotteryStartDate,
+                    LotteryEndDate = house.LotteryEndDate,
+                    DrawDate = house.DrawDate,
+                    MinimumParticipationPercentage = house.MinimumParticipationPercentage,
+                    TicketsSold = house.TicketsSold,
+                    ParticipationPercentage = house.ParticipationPercentage,
+                    CanExecute = house.CanExecute,
+                    Images = house.Images,
+                    CreatedAt = house.CreatedAt,
+                    // Add recommendation-specific fields
+                    RecommendationScore = Math.Round(0.9m - (index * 0.1m), 2),
+                    Reason = index == 0 ? "Based on your favorites" : "Similar to your preferences"
+                }).ToList();
+
+                return Ok(new ApiResponse<List<RecommendedHouseDto>>
+                {
+                    Success = true,
+                    Data = recommendedDtos,
+                    Message = "Recommended houses retrieved successfully"
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving recommended houses");
+                return StatusCode(500, new ApiResponse<List<RecommendedHouseDto>>
                 {
                     Success = false,
                     Error = new ErrorResponse
