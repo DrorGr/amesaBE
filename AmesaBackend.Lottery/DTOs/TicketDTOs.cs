@@ -13,11 +13,11 @@ namespace AmesaBackend.Lottery.DTOs
     }
 
     /// <summary>
-    /// Paged entry history response
+    /// Paged entry history response - Fixed: Uses "Items" to match API contract
     /// </summary>
     public class PagedEntryHistoryResponse
     {
-        public List<LotteryTicketDto> Entries { get; set; } = new();
+        public List<LotteryTicketDto> Items { get; set; } = new(); // Fixed: Changed from "Entries" to "Items"
         public int Page { get; set; }
         public int Limit { get; set; }
         public int Total { get; set; }
@@ -42,12 +42,13 @@ namespace AmesaBackend.Lottery.DTOs
     }
 
     /// <summary>
-    /// Quick entry response
+    /// Quick entry response - Fixed: Matches API contract structure
     /// </summary>
     public class QuickEntryResponse
     {
-        public List<LotteryTicketDto> Tickets { get; set; } = new();
-        public decimal TotalAmount { get; set; }
+        public List<LotteryTicketDto> TicketsPurchased { get; set; } = new(); // Fixed: Changed from "Tickets" to "TicketsPurchased"
+        public decimal TotalCost { get; set; } // Fixed: Changed from "TotalAmount" to "TotalCost"
+        public List<string> TicketNumbers { get; set; } = new(); // Fixed: Added TicketNumbers array
         public string TransactionId { get; set; } = string.Empty;
         public string Message { get; set; } = string.Empty;
     }

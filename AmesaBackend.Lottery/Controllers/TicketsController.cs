@@ -120,7 +120,8 @@ namespace AmesaBackend.Lottery.Controllers
                 var page = filters.Page > 0 ? filters.Page : 1;
                 var limit = filters.Limit > 0 && filters.Limit <= 100 ? filters.Limit : 20;
 
-                var allTickets = await _lotteryService.GetUserActiveEntriesAsync(userId);
+                // Fixed: Use GetUserTicketsAsync to get ALL tickets, not just active ones
+                var allTickets = await _lotteryService.GetUserTicketsAsync(userId);
                 
                 var filteredTickets = allTickets.AsQueryable();
                 
@@ -158,7 +159,7 @@ namespace AmesaBackend.Lottery.Controllers
 
                 var response = new PagedEntryHistoryResponse
                 {
-                    Entries = tickets,
+                    Items = tickets, // Fixed: Changed from "Entries" to "Items" to match API contract
                     Page = page,
                     Limit = limit,
                     Total = total,
@@ -250,10 +251,12 @@ namespace AmesaBackend.Lottery.Controllers
                 }
 
                 // This would integrate with payment service
+                // Fixed: Response structure matches API contract
                 var response = new QuickEntryResponse
                 {
-                    Tickets = new List<LotteryTicketDto>(),
-                    TotalAmount = 0,
+                    TicketsPurchased = new List<LotteryTicketDto>(), // Fixed: Changed from "Tickets" to "TicketsPurchased"
+                    TotalCost = 0, // Fixed: Changed from "TotalAmount" to "TotalCost"
+                    TicketNumbers = new List<string>(), // Fixed: Added TicketNumbers array
                     TransactionId = Guid.NewGuid().ToString(),
                     Message = "Quick entry functionality requires payment integration"
                 };
