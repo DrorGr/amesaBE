@@ -266,14 +266,61 @@ git checkout main
 - `../MetaData/Configs/` - ECS task definitions and configs
 
 ## Agent Instructions
+
+### 🚀 **ON AGENT CREATION - MANDATORY FIRST STEPS**
+**CRITICAL**: When a new agent session starts, you MUST:
+1. **Read and review ALL context files** to understand current backend state:
+   - Read `.cursorrules` (root monorepo context)
+   - Read `BE/.cursorrules` (this file - backend context)
+   - Review `MetaData/Documentation/` for recent session documentation
+   - Check "Recent Changes" and "Recent Major Work" sections
+2. **Understand current backend status** before starting any work:
+   - Review "Current Status" section
+   - Check deployment status and environment configuration
+   - Review API structure and endpoints
+   - Identify any ongoing work or pending tasks
+   - Note any known issues or limitations
+3. **Familiarize yourself with backend architecture**:
+   - Understand .NET 8.0 project structure
+   - Know database schema and Entity Framework setup
+   - Understand deployment process (ECS, Docker, ECR)
+   - Review AWS infrastructure configuration
+
+### 📋 **General Agent Guidelines**
 - Always check context files for current project status
-- Update relevant context files when making changes
 - Follow .NET 8.0 and ASP.NET Core best practices
 - Maintain RESTful API design principles
 - Document API changes in Swagger/OpenAPI
 - Test changes with unit and integration tests
 - Ensure database migrations are properly created
-- **CRITICAL**: If any changes relate to API design, database schema, deployment, or infrastructure, update the appropriate context files and this .cursorrules file
+
+### ✅ **TASK COMPLETION PROTOCOL - MANDATORY**
+**CRITICAL**: For every task you start and complete, you MUST:
+1. **Use `todo_write` tool** to track all tasks with clear status updates
+2. **Update context files IMMEDIATELY upon task completion**:
+   - Update `BE/.cursorrules` "Recent Major Work" section
+   - Update root `.cursorrules` "Recent Changes" section
+   - Update `CONTEXT_QUICK_REFERENCE.md` if applicable
+   - Document in "Recent Major Work" with:
+     - ✅ Status indicators
+     - Clear descriptions of what was fixed/implemented
+     - Technical details for future reference
+     - Date and session information
+3. **Commit context updates** to the BE repository:
+   - All backend context updates → commit to BE repository
+   - Include context updates in the same commit as code changes when possible
+4. **Provide summary** of what was accomplished for chat continuity
+
+**Why This Matters**: This ensures that when a new agent session starts, the context contains complete, up-to-date information about recent backend work and current status. Without updating context files, new agents will be working with outdated information.
+
+### 🔧 **CRITICAL UPDATE TRIGGERS**
+**CRITICAL**: If any changes relate to the following, you MUST update context files:
+- API design or endpoint changes
+- Database schema or migrations
+- Deployment processes or infrastructure
+- Environment configuration
+- Authentication/authorization changes
+- New features or major refactoring
 
 ## Architecture Overview
 
