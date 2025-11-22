@@ -48,7 +48,7 @@ namespace AmesaBackend.Lottery.DTOs
     /// </summary>
     public class QuickEntryResponse
     {
-        public int TicketsPurchased { get; set; } // Fixed: Changed from List<LotteryTicketDto> to int (count)
+        public int TicketsPurchased { get; set; } // Fixed: Changed from List<LotteryTicketDto> to int (count) to match API contract
         public decimal TotalCost { get; set; } // Fixed: Changed from "TotalAmount" to "TotalCost"
         public List<string> TicketNumbers { get; set; } = new(); // Fixed: Added TicketNumbers array
         public string TransactionId { get; set; } = string.Empty;

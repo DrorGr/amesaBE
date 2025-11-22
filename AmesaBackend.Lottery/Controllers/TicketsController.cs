@@ -254,7 +254,7 @@ namespace AmesaBackend.Lottery.Controllers
                 // Fixed: Response structure matches API contract
                 var response = new QuickEntryResponse
                 {
-                    TicketsPurchased = request.TicketCount, // Fixed: Changed to int (count) instead of List
+                    TicketsPurchased = request.TicketCount, // Fixed: Changed to int (count) instead of List to match API contract
                     TotalCost = 0, // Fixed: Changed from "TotalAmount" to "TotalCost"
                     TicketNumbers = new List<string>(), // Fixed: Added TicketNumbers array
                     TransactionId = Guid.NewGuid().ToString(),
@@ -284,4 +284,3 @@ namespace AmesaBackend.Lottery.Controllers
         }
     }
 }
-
