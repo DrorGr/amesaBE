@@ -1,2 +1,0 @@
-pick f9b4263 Complete microservices migration: All 8 services extracted, EventBridge, Redis, X-Ray integrated, CI/CD workflows created
-edit afcb2e7 Complete microservices migration: All 8 services extracted, EventBridge, Redis, X-Ray integrated, CI/CD workflows created
