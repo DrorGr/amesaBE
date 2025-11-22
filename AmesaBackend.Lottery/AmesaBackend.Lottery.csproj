@@ -17,10 +17,16 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AmesaBackend.Shared\AmesaBackend.Shared.csproj" />
-    <ProjectReference Include="..\AmesaBackend.Auth\AmesaBackend.Auth.csproj">
-      <PrivateAssets>All</PrivateAssets>
-      <ExcludeAssets>contentFiles</ExcludeAssets>
-    </ProjectReference>
+    <ProjectReference Include="..\AmesaBackend.Auth\AmesaBackend.Auth.csproj" />
   </ItemGroup>
+
+  <!-- Exclude appsettings.json from referenced Auth project during publish -->
+  <Target Name="ExcludeAuthAppSettings" BeforeTargets="GetCopyToPublishDirectoryItems">
+    <ItemGroup>
+      <_AuthAppSettings Include="$(MSBuildProjectDirectory)\..\AmesaBackend.Auth\appsettings.json" />
+      <_AuthAppSettings Include="$(MSBuildProjectDirectory)\..\AmesaBackend.Auth\appsettings.*.json" />
+      <ContentWithTargetPath Remove="@(_AuthAppSettings)" />
+    </ItemGroup>
+  </Target>
 
 </Project>
