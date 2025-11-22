@@ -23,6 +23,33 @@ namespace AmesaBackend.Auth.DTOs
         public string Timezone { get; set; } = string.Empty;
         public DateTime? LastLoginAt { get; set; }
         public DateTime CreatedAt { get; set; }
+        public UserLotteryDataDto? LotteryData { get; set; }
+    }
+
+    /// <summary>
+    /// User lottery data for inclusion in user profile
+    /// Fixed: Changed from counts to arrays as per frontend contract
+    /// </summary>
+    public class UserLotteryDataDto
+    {
+        // Arrays for frontend consumption (as per API contract)
+        public List<Guid> FavoriteHouseIds { get; set; } = new();
+        public List<object> ActiveEntries { get; set; } = new(); // List<LotteryTicketDto> - using object to avoid circular dependency
+        
+        // Statistics
+        public int TotalEntriesCount { get; set; }
+        public int TotalWins { get; set; }
+        public decimal TotalSpending { get; set; }
+        public decimal TotalWinnings { get; set; }
+        public decimal WinRatePercentage { get; set; }
+        public decimal AverageSpendingPerEntry { get; set; }
+        public Guid? FavoriteHouseId { get; set; }
+        public string? MostActiveMonth { get; set; }
+        public DateTime? LastEntryDate { get; set; }
+        
+        // Additional data
+        public object? Stats { get; set; } // UserLotteryStatsDto
+        public object? Preferences { get; set; } // LotteryPreferencesDto
     }
 
     public class UpdateUserProfileRequest

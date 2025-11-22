@@ -239,3 +239,4 @@ namespace AmesaBackend.Auth.Models
         public virtual User? User { get; set; }
     }
 }
+

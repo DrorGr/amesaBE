@@ -23,3 +23,4 @@ namespace AmesaBackend.Auth.DTOs
         public object? Details { get; set; }
     }
 }
+

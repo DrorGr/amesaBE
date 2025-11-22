@@ -17,19 +17,22 @@ namespace AmesaBackend.Auth.Services
         private readonly IEventPublisher _eventPublisher;
         private readonly IJwtTokenManager _jwtTokenManager;
         private readonly ILogger<AuthService> _logger;
+        private readonly IUserPreferencesService? _userPreferencesService;
 
         public AuthService(
             AuthDbContext context,
             IConfiguration configuration,
             IEventPublisher eventPublisher,
             IJwtTokenManager jwtTokenManager,
-            ILogger<AuthService> logger)
+            ILogger<AuthService> logger,
+            IUserPreferencesService? userPreferencesService = null)
         {
             _context = context;
             _configuration = configuration;
             _eventPublisher = eventPublisher;
             _jwtTokenManager = jwtTokenManager;
             _logger = logger;
+            _userPreferencesService = userPreferencesService;
         }
 
         public async Task<AuthResponse> RegisterAsync(RegisterRequest request)
@@ -146,12 +149,15 @@ namespace AmesaBackend.Auth.Services
 
                 _logger.LogInformation("User logged in successfully: {Email}", user.Email);
 
+                var userDto = MapToUserDto(user);
+                userDto.LotteryData = await GetUserLotteryDataAsync(user.Id);
+
                 return new AuthResponse
                 {
                     AccessToken = tokens.AccessToken,
                     RefreshToken = tokens.RefreshToken,
                     ExpiresAt = tokens.ExpiresAt,
-                    User = MapToUserDto(user)
+                    User = userDto
                 };
             }
             catch (Exception ex)
@@ -392,7 +398,95 @@ namespace AmesaBackend.Auth.Services
                 throw new InvalidOperationException("User not found");
             }
 
-            return MapToUserDto(user);
+            var userDto = MapToUserDto(user);
+            userDto.LotteryData = await GetUserLotteryDataAsync(userId);
+            return userDto;
+        }
+
+        private async Task<UserLotteryDataDto?> GetUserLotteryDataAsync(Guid userId)
+        {
+            try
+            {
+                // Query the user_lottery_dashboard view
+                var sql = @"
+                    SELECT 
+                        favorite_houses_count,
+                        active_entries_count,
+                        total_entries_count,
+                        total_wins,
+                        total_spending,
+                        total_winnings,
+                        win_rate_percentage,
+                        average_spending_per_entry,
+                        favorite_house_id,
+                        most_active_month,
+                        last_entry_date
+                    FROM amesa_auth.user_lottery_dashboard
+                    WHERE user_id = {0}";
+
+                var result = await _context.Database
+                    .SqlQueryRaw<UserLotteryDashboardResult>(sql, userId)
+                    .FirstOrDefaultAsync();
+
+                // Get favorite house IDs array
+                var favoriteHouseIds = new List<Guid>();
+                if (_userPreferencesService != null)
+                {
+                    try
+                    {
+                        favoriteHouseIds = await _userPreferencesService.GetFavoriteHouseIdsAsync(userId);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Error retrieving favorite house IDs for user {UserId}", userId);
+                    }
+                }
+
+                if (result == null)
+                {
+                    // Return defaults with empty arrays
+                    return new UserLotteryDataDto
+                    {
+                        FavoriteHouseIds = favoriteHouseIds,
+                        ActiveEntries = new List<object>()
+                    };
+                }
+
+                return new UserLotteryDataDto
+                {
+                    FavoriteHouseIds = favoriteHouseIds,
+                    ActiveEntries = new List<object>(), // TODO: Populate with actual LotteryTicketDto objects from lottery service
+                    TotalEntriesCount = result.TotalEntriesCount,
+                    TotalWins = result.TotalWins,
+                    TotalSpending = result.TotalSpending,
+                    TotalWinnings = result.TotalWinnings,
+                    WinRatePercentage = result.WinRatePercentage,
+                    AverageSpendingPerEntry = result.AverageSpendingPerEntry,
+                    FavoriteHouseId = result.FavoriteHouseId,
+                    MostActiveMonth = result.MostActiveMonth,
+                    LastEntryDate = result.LastEntryDate
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error retrieving lottery data for user {UserId}", userId);
+                return null; // Return null if view doesn't exist or query fails
+            }
+        }
+
+        private class UserLotteryDashboardResult
+        {
+            public int FavoriteHousesCount { get; set; }
+            public int ActiveEntriesCount { get; set; }
+            public int TotalEntriesCount { get; set; }
+            public int TotalWins { get; set; }
+            public decimal TotalSpending { get; set; }
+            public decimal TotalWinnings { get; set; }
+            public decimal WinRatePercentage { get; set; }
+            public decimal AverageSpendingPerEntry { get; set; }
+            public Guid? FavoriteHouseId { get; set; }
+            public string? MostActiveMonth { get; set; }
+            public DateTime? LastEntryDate { get; set; }
         }
 
         public async Task<(AuthResponse Response, bool IsNewUser)> CreateOrUpdateOAuthUserAsync(string email, string providerId, AuthProvider provider, string? firstName = null, string? lastName = null)

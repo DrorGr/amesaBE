@@ -63,3 +63,4 @@ namespace AmesaBackend.Shared.Models
         public string? DeletedBy { get; set; }
     }
 }
+

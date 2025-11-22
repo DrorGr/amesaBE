@@ -297,7 +297,13 @@ git checkout main
 ### ✅ **TASK COMPLETION PROTOCOL - MANDATORY**
 **CRITICAL**: For every task you start and complete, you MUST:
 1. **Use `todo_write` tool** to track all tasks with clear status updates
-2. **Update context files IMMEDIATELY upon task completion**:
+2. **BUILD LOCALLY BEFORE PUSHING** - **MANDATORY**:
+   - **ALWAYS run `dotnet build`** in the BE directory before committing/pushing
+   - Verify build completes successfully with no errors
+   - Run tests if applicable: `dotnet test`
+   - Fix any build errors before pushing to repository
+   - This prevents CI/CD failures and broken deployments
+3. **Update context files IMMEDIATELY upon task completion**:
    - Update `BE/.cursorrules` "Recent Major Work" section
    - Update root `.cursorrules` "Recent Changes" section
    - Update `CONTEXT_QUICK_REFERENCE.md` if applicable
@@ -306,10 +312,10 @@ git checkout main
      - Clear descriptions of what was fixed/implemented
      - Technical details for future reference
      - Date and session information
-3. **Commit context updates** to the BE repository:
+4. **Commit context updates** to the BE repository:
    - All backend context updates → commit to BE repository
    - Include context updates in the same commit as code changes when possible
-4. **Provide summary** of what was accomplished for chat continuity
+5. **Provide summary** of what was accomplished for chat continuity
 
 **Why This Matters**: This ensures that when a new agent session starts, the context contains complete, up-to-date information about recent backend work and current status. Without updating context files, new agents will be working with outdated information.
 

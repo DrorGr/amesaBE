@@ -234,3 +234,4 @@ namespace AmesaBackend.Auth.DTOs
         public string? Reason { get; set; }
     }
 }
+

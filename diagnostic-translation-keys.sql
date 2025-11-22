@@ -53,3 +53,4 @@ FROM amesa_content.translations
 WHERE "LanguageCode" = 'pl'
 ORDER BY "Key"
 LIMIT 20;
+

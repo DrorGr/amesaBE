@@ -483,3 +483,4 @@ FROM amesa_content.translations
 WHERE "CreatedBy" = 'comprehensive-sync'
 ORDER BY "LanguageCode", "Key"
 LIMIT 30;
+

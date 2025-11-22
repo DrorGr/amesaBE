@@ -379,6 +379,7 @@ builder.Services.AddAmesaBackendShared(builder.Configuration);
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IAdminAuthService, AdminAuthService>();
+builder.Services.AddScoped<IUserPreferencesService, UserPreferencesService>();
 builder.Services.AddHttpContextAccessor();
 
 // Add Memory Cache

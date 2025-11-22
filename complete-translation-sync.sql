@@ -218,3 +218,4 @@ FROM amesa_content.translations
 WHERE "CreatedBy" = 'complete-sync'
 ORDER BY "LanguageCode", "Key"
 LIMIT 50;
+
