@@ -159,6 +159,55 @@ AmesaBE is the backend API for the Amesa lottery management system. Built with .
 ### Automatic Deployment
 1. **Main Branch** → Push → GitHub Actions → ECR → ECS Production
 
+### Deploying Specific Services
+**IMPORTANT**: You can deploy individual services without deploying all services.
+
+**When to use**:
+- When you only changed one service (e.g., `AmesaBackend.Lottery`)
+- When you want faster deployments
+- When you want to avoid redeploying unrelated services
+
+**How to deploy a specific service**:
+
+**Option 1: Using PowerShell Script (Recommended)**
+```powershell
+cd BE/Infrastructure
+.\deploy-specific-service.ps1 -ServiceName "amesa-lottery-service"
+```
+
+**Available Services**:
+- `amesa-auth-service` → `AmesaBackend.Auth`
+- `amesa-content-service` → `AmesaBackend.Content`
+- `amesa-notification-service` → `AmesaBackend.Notification`
+- `amesa-payment-service` → `AmesaBackend.Payment`
+- `amesa-lottery-service` → `AmesaBackend.Lottery`
+- `amesa-lottery-results-service` → `AmesaBackend.LotteryResults`
+- `amesa-analytics-service` → `AmesaBackend.Analytics`
+- `amesa-admin-service` → `AmesaBackend.Admin`
+
+**Option 2: Manual AWS CLI Commands**
+```bash
+# 1. Build and push Docker image
+cd BE
+docker build -f AmesaBackend.Lottery/Dockerfile -t 129394705401.dkr.ecr.eu-north-1.amazonaws.com/amesa-lottery-service:latest .
+aws ecr get-login-password --region eu-north-1 | docker login --username AWS --password-stdin 129394705401.dkr.ecr.eu-north-1.amazonaws.com
+docker push 129394705401.dkr.ecr.eu-north-1.amazonaws.com/amesa-lottery-service:latest
+
+# 2. Force ECS service update
+aws ecs update-service --cluster Amesa --service amesa-lottery-service --force-new-deployment --region eu-north-1
+```
+
+**Option 3: GitHub Actions with Path Filters**
+- GitHub Actions workflows can be configured to only trigger on changes to specific paths
+- Example: Only deploy lottery service when `AmesaBackend.Lottery/**` files change
+- See workflow files for path filter configuration
+
+**Benefits of Service-Specific Deployment**:
+- ✅ Faster deployments (only build/push one service)
+- ✅ Reduced risk (don't affect other services)
+- ✅ Lower resource usage (smaller Docker builds)
+- ✅ Easier debugging (isolated service updates)
+
 ### GitHub Secrets Required
 - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
 - `PROD_ECS_CLUSTER`, `PROD_ECS_SERVICE`
