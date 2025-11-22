@@ -30,15 +30,16 @@ AmesaBE is the backend API for the Amesa lottery management system. Built with .
 - **Version Control**: Git with GitHub repository
 - **Package Management**: NuGet
 
-## Current Status (2025-11-21)
+## Current Status (2025-01-XX)
 - **Repository**: https://github.com/DrorGr/amesaBE
-- **Main branch**: Stable, deployed with schema fixes and user preferences ✅
+- **Main branch**: Stable, deployed with Lottery Favorites Phase 1 ✅
 - **Admin Panel**: Blazor Server admin panel deployed to production ✅
 - **Database**: Fully seeded with comprehensive test data ✅
 - **Translations**: 4 languages supported (EN, ES, FR, PL) - 507 keys each ✅
 - **User Preferences**: Complete CRUD API implemented ✅
+- **Lottery Favorites**: Phase 1 complete, deployed to production ✅
 - **Deployment**: ECS Fargate with Docker containers
-- **Latest**: Complete translation system overhaul - all 507 keys scripted
+- **Latest**: Docker build fix for amesa-lottery-service, production deployment complete
 - **Database Seeder**: Excluded from repository (in .gitignore) ✅
 
 ## Environment Configuration
@@ -356,7 +357,16 @@ Client → CloudFront /api/* → ALB → ECS Task → .NET API → Aurora Postgr
 - **Real-time Features**: Live lottery updates via SignalR
 - **Identity Verification**: KYC/AML compliance
 
-## Recent Major Work (2025-11-21) - COMPLETE TRANSLATION SYSTEM OVERHAUL
+## Recent Major Work (2025-01-XX) - LOTTERY FAVORITES DEPLOYMENT & DOCKER BUILD FIX
+- ✅ **Docker Build Error Fixed** - Resolved NETSDK1152 error for amesa-lottery-service
+- ✅ **Dockerfile Workaround** - Added temporary rename of Auth appsettings.json during publish
+- ✅ **Project Reference Updated** - Modified AmesaBackend.Lottery.csproj to handle referenced project content
+- ✅ **Backend Deployed** - Lottery Favorites Phase 1 code deployed to production via CI/CD
+- ✅ **Production Test Script** - Created PowerShell script for testing endpoints on production
+- ✅ **Migration Complete** - Database indexes, views, and translations added to production
+- ✅ **Ready for Testing** - All services deployed, endpoints ready for production verification
+
+## Previous Major Work (2025-11-21) - COMPLETE TRANSLATION SYSTEM OVERHAUL
 - ✅ **Complete Translation Coverage** - All 507 frontend translation keys identified and scripted
 - ✅ **Language Support Reduced** - Removed Hebrew and Arabic, now 4 languages (EN, ES, FR, PL)
 - ✅ **Comprehensive SQL Script** - `COMPLETE_ALL_507_TRANSLATIONS.sql` with all keys for all languages
