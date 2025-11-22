@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 
 namespace AmesaBackend.Lottery.DTOs
 {
@@ -35,7 +36,8 @@ namespace AmesaBackend.Lottery.DTOs
         public Guid HouseId { get; set; }
 
         [Range(1, 10)]
-        public int TicketCount { get; set; } = 1;
+        [JsonPropertyName("quantity")]
+        public int TicketCount { get; set; } = 1; // Fixed: Added JsonPropertyName to match frontend "quantity"
 
         [Required]
         public Guid PaymentMethodId { get; set; }
@@ -46,7 +48,7 @@ namespace AmesaBackend.Lottery.DTOs
     /// </summary>
     public class QuickEntryResponse
     {
-        public List<LotteryTicketDto> TicketsPurchased { get; set; } = new(); // Fixed: Changed from "Tickets" to "TicketsPurchased"
+        public int TicketsPurchased { get; set; } // Fixed: Changed from List<LotteryTicketDto> to int (count)
         public decimal TotalCost { get; set; } // Fixed: Changed from "TotalAmount" to "TotalCost"
         public List<string> TicketNumbers { get; set; } = new(); // Fixed: Added TicketNumbers array
         public string TransactionId { get; set; } = string.Empty;
