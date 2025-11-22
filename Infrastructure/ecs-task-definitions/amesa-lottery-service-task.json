@@ -27,6 +27,16 @@
           "value": "http://+:8080"
         }
       ],
+      "secrets": [
+        {
+          "name": "JwtSettings__SecretKey",
+          "valueFrom": "/amesa/prod/JwtSettings/SecretKey"
+        },
+        {
+          "name": "ConnectionStrings__DefaultConnection",
+          "valueFrom": "/amesa/prod/ConnectionStrings/Lottery"
+        }
+      ],
       "logConfiguration": {
         "logDriver": "awslogs",
         "options": {
