@@ -12,6 +12,11 @@ RUN dotnet build "AmesaBackend.Lottery/AmesaBackend.Lottery.csproj" -c Release -
 
 FROM build AS publish
 RUN dotnet publish "AmesaBackend.Lottery/AmesaBackend.Lottery.csproj" -c Release -o /app/publish /p:UseAppHost=false
+# Ensure only Lottery project's appsettings.json is present (remove any from referenced projects)
+RUN if [ -f /src/AmesaBackend.Lottery/appsettings.json ]; then \
+      rm -f /app/publish/appsettings*.json && \
+      cp /src/AmesaBackend.Lottery/appsettings.json /app/publish/appsettings.json; \
+    fi
 
 FROM base AS final
 WORKDIR /app
