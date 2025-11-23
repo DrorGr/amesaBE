@@ -419,16 +419,13 @@ if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(goo
                 }, TimeSpan.FromMinutes(5));
 
                 // Store temp token keyed by email so we can retrieve it after redirect
-                // Also store in properties as backup
+                // Also store in properties so callback endpoint can access it
                 var emailCacheKey = $"oauth_temp_token_{email}";
                 memoryCache.Set(emailCacheKey, tempToken, TimeSpan.FromMinutes(5));
                 context.Properties.Items["temp_token"] = tempToken;
                 
-                // Modify the RedirectUri to include the temp token
-                // This ensures it's available after the middleware redirects
-                var frontendUrl = builder.Configuration["FrontendUrl"] ?? "http://localhost:4200";
-                context.Properties.RedirectUri = $"{frontendUrl}/auth/callback?code={Uri.EscapeDataString(tempToken)}";
-                
+                // DO NOT modify RedirectUri here - let it go to the backend callback endpoint
+                // The callback endpoint will extract temp_token and redirect to frontend with code
                 logger.LogInformation("User created/updated and tokens cached for: {Email}, temp_token: {TempToken}", email, tempToken);
             }
             catch (Exception ex)

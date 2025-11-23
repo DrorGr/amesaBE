@@ -76,11 +76,17 @@ namespace AmesaBackend.Controllers
                 _logger.LogInformation("Initiating Google OAuth login");
                 
                 // Challenge should return a ChallengeResult that triggers a 302 redirect
-                // The RedirectUri will be set in OnCreatingTicket to redirect to frontend after OAuth completes
+                // The OAuth middleware will redirect to CallbackPath (/api/v1/oauth/google-callback)
+                // The callback endpoint will then redirect to frontend with the code
+                // Store frontend URL in Items so callback endpoint can use it
                 var properties = new AuthenticationProperties
                 {
-                    RedirectUri = $"{frontendUrl}/auth/callback", // Where to go after OAuth completes
-                    AllowRefresh = true
+                    RedirectUri = Url.Action(nameof(GoogleCallback)), // Redirect to backend callback endpoint
+                    AllowRefresh = true,
+                    Items =
+                    {
+                        { "frontendUrl", frontendUrl }
+                    }
                 };
                 
                 return Challenge(properties, GoogleDefaults.AuthenticationScheme);
@@ -118,13 +124,32 @@ namespace AmesaBackend.Controllers
                     return Redirect($"{frontendUrl}/auth/callback?error={Uri.EscapeDataString("Google authentication failed")}");
                 }
 
-                // If we reach here, middleware handled it but redirected here
-                // Check if we have a temp token in the request (passed via query or session)
-                var tempToken = Request.Query["temp_token"].FirstOrDefault();
+                // If we reach here, middleware handled it and redirected here
+                // Try to get temp_token from authentication properties (set in OnCreatingTicket)
+                var tempToken = googleResult.Properties?.Items.TryGetValue("temp_token", out var token) == true 
+                    ? token 
+                    : Request.Query["temp_token"].FirstOrDefault();
+                
+                // If not found in properties, try to get it from email cache (fallback)
+                if (string.IsNullOrEmpty(tempToken))
+                {
+                    var email = googleResult.Principal?.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
+                    if (!string.IsNullOrEmpty(email))
+                    {
+                        var emailCacheKey = $"oauth_temp_token_{email}";
+                        if (_memoryCache.TryGetValue(emailCacheKey, out string? cachedToken) && !string.IsNullOrEmpty(cachedToken))
+                        {
+                            tempToken = cachedToken;
+                            _logger.LogInformation("Google OAuth callback: Found temp_token from email cache");
+                            // Remove from cache after use
+                            _memoryCache.Remove(emailCacheKey);
+                        }
+                    }
+                }
                 
                 if (!string.IsNullOrEmpty(tempToken))
                 {
-                    // Redirect to frontend with the temp token
+                    _logger.LogInformation("Google OAuth callback: Found temp_token, redirecting to frontend with code");
                     await HttpContext.SignOutAsync("Cookies");
                     await HttpContext.SignOutAsync(GoogleDefaults.AuthenticationScheme);
                     return Redirect($"{frontendUrl}/auth/callback?code={Uri.EscapeDataString(tempToken)}");
