@@ -11,6 +11,8 @@ using AmesaBackend.DTOs;
 using System.Security.Claims;
 using Microsoft.Extensions.Caching.Memory;
 using System.Security.Cryptography;
+using System.IO;
+using System.Text.Json;
 
 namespace AmesaBackend.Controllers
 {
@@ -83,9 +85,18 @@ namespace AmesaBackend.Controllers
                 // 4. OnCreatingTicket fires and creates user, stores temp_token, modifies RedirectUri to include code
                 // 5. OAuth middleware redirects to RedirectUri (frontend with code)
                 // Set RedirectUri to frontend - OnCreatingTicket will modify it to include the code parameter
+                var initialRedirectUri = $"{frontendUrl}/auth/callback";
+                
+                // #region agent log
+                try {
+                    var logData = new { sessionId = "debug-session", runId = "run1", hypothesisId = "A,E", location = "OAuthController.cs:GoogleLogin", message = "Initial RedirectUri set", data = new { redirectUri = initialRedirectUri, frontendUrl }, timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() };
+                    File.AppendAllText(@"c:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\.cursor\debug.log", System.Text.Json.JsonSerializer.Serialize(logData) + "\n");
+                } catch {}
+                // #endregion
+                
                 var properties = new AuthenticationProperties
                 {
-                    RedirectUri = $"{frontendUrl}/auth/callback", // Frontend callback - OnCreatingTicket will add code parameter
+                    RedirectUri = initialRedirectUri, // Frontend callback - OnCreatingTicket will add code parameter
                     AllowRefresh = true
                 };
                 
@@ -111,6 +122,14 @@ namespace AmesaBackend.Controllers
         {
             try
             {
+                // #region agent log
+                try {
+                    var requestUrl = $"{Request.Scheme}://{Request.Host}{Request.Path}{Request.QueryString}";
+                    var logData = new { sessionId = "debug-session", runId = "run1", hypothesisId = "D", location = "OAuthController.cs:GoogleCallback:entry", message = "Callback endpoint hit", data = new { requestUrl, queryString = Request.QueryString.ToString(), hasCodeInQuery = Request.Query.ContainsKey("code") }, timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() };
+                    File.AppendAllText(@"c:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\.cursor\debug.log", System.Text.Json.JsonSerializer.Serialize(logData) + "\n");
+                } catch {}
+                // #endregion
+                
                 _logger.LogInformation("Google OAuth callback endpoint hit");
                 var frontendUrl = _configuration["FrontendUrl"] ?? "http://localhost:4200";
 
@@ -163,6 +182,14 @@ namespace AmesaBackend.Controllers
                     await HttpContext.SignOutAsync("Cookies");
                     await HttpContext.SignOutAsync(GoogleDefaults.AuthenticationScheme);
                     var redirectUrl = $"{frontendUrl}/auth/callback?code={Uri.EscapeDataString(tempToken)}";
+                    
+                    // #region agent log
+                    try {
+                        var logData = new { sessionId = "debug-session", runId = "run1", hypothesisId = "D", location = "OAuthController.cs:GoogleCallback:redirect", message = "Redirecting to frontend with code", data = new { redirectUrl, hasCode = redirectUrl.Contains("code=") }, timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() };
+                        File.AppendAllText(@"c:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\.cursor\debug.log", System.Text.Json.JsonSerializer.Serialize(logData) + "\n");
+                    } catch {}
+                    // #endregion
+                    
                     _logger.LogInformation("Google OAuth callback: Redirecting to: {RedirectUrl}", redirectUrl);
                     return Redirect(redirectUrl);
                 }

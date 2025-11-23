@@ -17,6 +17,8 @@ using Serilog;
 using Npgsql;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Caching.Memory;
+using System.IO;
+using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -376,6 +378,14 @@ if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(goo
         {
             try
             {
+                // #region agent log
+                try {
+                    var redirectUriBefore = context.Properties.RedirectUri ?? "NULL";
+                    var logData = new { sessionId = "debug-session", runId = "run1", hypothesisId = "A,B", location = "Program.cs:OnCreatingTicket:entry", message = "OnCreatingTicket fired", data = new { redirectUriBefore }, timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() };
+                    File.AppendAllText(@"c:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\.cursor\debug.log", System.Text.Json.JsonSerializer.Serialize(logData) + "\n");
+                } catch {}
+                // #endregion
+                
                 // Get services from HttpContext
                 var serviceProvider = context.HttpContext.RequestServices;
                 var authService = serviceProvider.GetRequiredService<IAuthService>();
@@ -432,9 +442,24 @@ if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(goo
                 var frontendUrl = builder.Configuration["FrontendUrl"] ?? "http://localhost:4200";
                 var baseRedirectUri = context.Properties.RedirectUri ?? $"{frontendUrl}/auth/callback";
                 
+                // #region agent log
+                try {
+                    var logData = new { sessionId = "debug-session", runId = "run1", hypothesisId = "A,B,C", location = "Program.cs:OnCreatingTicket:before-modify", message = "Before RedirectUri modification", data = new { baseRedirectUri, tempToken = tempToken?.Substring(0, Math.Min(10, tempToken?.Length ?? 0)) + "..." }, timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() };
+                    File.AppendAllText(@"c:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\.cursor\debug.log", System.Text.Json.JsonSerializer.Serialize(logData) + "\n");
+                } catch {}
+                // #endregion
+                
                 // Append code parameter to redirect URI
                 var separator = baseRedirectUri.Contains("?") ? "&" : "?";
-                context.Properties.RedirectUri = $"{baseRedirectUri}{separator}code={Uri.EscapeDataString(tempToken)}";
+                var modifiedRedirectUri = $"{baseRedirectUri}{separator}code={Uri.EscapeDataString(tempToken)}";
+                context.Properties.RedirectUri = modifiedRedirectUri;
+                
+                // #region agent log
+                try {
+                    var logData = new { sessionId = "debug-session", runId = "run1", hypothesisId = "A,B,C", location = "Program.cs:OnCreatingTicket:after-modify", message = "After RedirectUri modification", data = new { redirectUriAfter = modifiedRedirectUri, hasCode = modifiedRedirectUri.Contains("code=") }, timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() };
+                    File.AppendAllText(@"c:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\.cursor\debug.log", System.Text.Json.JsonSerializer.Serialize(logData) + "\n");
+                } catch {}
+                // #endregion
                 
                 logger.LogInformation("OnCreatingTicket: Modified RedirectUri to include code parameter: {RedirectUri}", context.Properties.RedirectUri);
                 
