@@ -45,6 +45,7 @@ namespace AmesaBackend.Auth.Controllers
                 }
 
                 var userPreferences = await _context.UserPreferences
+                    .AsNoTracking()
                     .FirstOrDefaultAsync(up => up.UserId == userId);
 
                 if (userPreferences == null)
@@ -303,6 +304,7 @@ namespace AmesaBackend.Auth.Controllers
                 }
 
                 var preferences = await _context.UserPreferences
+                    .AsNoTracking()
                     .FirstOrDefaultAsync(up => up.UserId == userId);
 
                 var syncStatus = new PreferencesSyncStatusDto

@@ -4,6 +4,7 @@ using AmesaBackend.Content.Data;
 using AmesaBackend.Content.DTOs;
 using AmesaBackend.Content.Models;
 using AmesaBackend.Shared.Events;
+using AmesaBackend.Shared.Caching;
 
 namespace AmesaBackend.Content.Controllers
 {
@@ -14,15 +15,19 @@ namespace AmesaBackend.Content.Controllers
         private readonly ContentDbContext _context;
         private readonly ILogger<TranslationsController> _logger;
         private readonly IEventPublisher _eventPublisher;
+        private readonly ICache? _cache;
+        private static readonly TimeSpan CacheExpiration = TimeSpan.FromMinutes(30);
 
         public TranslationsController(
             ContentDbContext context, 
             ILogger<TranslationsController> logger,
-            IEventPublisher eventPublisher)
+            IEventPublisher eventPublisher,
+            ICache? cache = null)
         {
             _context = context;
             _logger = logger;
             _eventPublisher = eventPublisher;
+            _cache = cache;
         }
 
         [HttpGet("{languageCode}")]
@@ -30,7 +35,26 @@ namespace AmesaBackend.Content.Controllers
         {
             try
             {
+                var cacheKey = $"translations_{languageCode}";
+                
+                // Try to get from Redis cache first
+                if (_cache != null)
+                {
+                    var cachedResponse = await _cache.GetRecordAsync<TranslationsResponseDto>(cacheKey);
+                    if (cachedResponse != null)
+                    {
+                        return Ok(new ApiResponse<TranslationsResponseDto>
+                        {
+                            Success = true,
+                            Data = cachedResponse,
+                            Message = "Translations retrieved successfully (cached)"
+                        });
+                    }
+                }
+
+                // Query database with AsNoTracking for better performance
                 var translations = await _context.Translations
+                    .AsNoTracking()
                     .Where(t => t.LanguageCode == languageCode && t.IsActive)
                     .OrderBy(t => t.Key)
                     .ToListAsync();
@@ -43,6 +67,12 @@ namespace AmesaBackend.Content.Controllers
                     Translations = translationDict,
                     LastUpdated = translations.Any() ? translations.Max(t => t.UpdatedAt) : DateTime.UtcNow
                 };
+
+                // Cache the response in Redis
+                if (_cache != null)
+                {
+                    await _cache.SetRecordAsync(cacheKey, response, CacheExpiration);
+                }
 
                 return Ok(new ApiResponse<TranslationsResponseDto>
                 {

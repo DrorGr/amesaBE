@@ -87,6 +87,7 @@ namespace AmesaBackend.Lottery.Controllers
                 var totalCount = await query.CountAsync();
 
                 var houses = await query
+                    .AsNoTracking()
                     .OrderByDescending(h => h.CreatedAt)
                     .Skip((page - 1) * limit)
                     .Take(limit)
@@ -94,6 +95,7 @@ namespace AmesaBackend.Lottery.Controllers
 
                 var houseIds = houses.Select(h => h.Id).ToList();
                 var ticketCounts = await _context.LotteryTickets
+                    .AsNoTracking()
                     .Where(t => houseIds.Contains(t.HouseId) && t.Status == "Active")
                     .GroupBy(t => t.HouseId)
                     .Select(g => new { HouseId = g.Key, Count = g.Count() })
@@ -185,6 +187,7 @@ namespace AmesaBackend.Lottery.Controllers
             {
                 var house = await _context.Houses
                     .Include(h => h.Images)
+                    .AsNoTracking()
                     .FirstOrDefaultAsync(h => h.Id == id);
 
                 if (house == null)

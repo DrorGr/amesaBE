@@ -66,6 +66,7 @@ namespace AmesaBackend.LotteryResults.Controllers
                 var totalPages = (int)Math.Ceiling((double)totalCount / filter.PageSize);
 
                 var results = await query
+                    .AsNoTracking()
                     .Skip((filter.PageNumber - 1) * filter.PageSize)
                     .Take(filter.PageSize)
                     .ToListAsync();
@@ -133,6 +134,7 @@ namespace AmesaBackend.LotteryResults.Controllers
             try
             {
                 var result = await _context.LotteryResults
+                    .AsNoTracking()
                     .Include(lr => lr.History)
                     .FirstOrDefaultAsync(lr => lr.Id == id);
 
