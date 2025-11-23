@@ -25,8 +25,8 @@ Console.WriteLine($"[Config] Environment: {builder.Environment.EnvironmentName}"
 Console.WriteLine($"[Config] Content Root: {builder.Environment.ContentRootPath}");
 Console.WriteLine($"[Config] IsDevelopment: {builder.Environment.IsDevelopment()}");
 
-// Configure Npgsql for dynamic JSON support
-NpgsqlConnection.GlobalTypeMapper.EnableDynamicJson();
+// Note: Npgsql 7+ enables dynamic JSON support by default via data source mapping
+// No need for GlobalTypeMapper.EnableDynamicJson() - it's obsolete
 
 // Check if we're running in seeder mode
 // Note: Database seeding is handled by the standalone AmesaBackend.DatabaseSeeder project

@@ -63,7 +63,7 @@ public class AuthControllerTests
         var apiResponse = okResult.Value.Should().BeOfType<ApiResponse<AuthResponse>>().Subject;
         apiResponse.Success.Should().BeTrue();
         apiResponse.Data.Should().NotBeNull();
-        apiResponse.Data.AccessToken.Should().Be("mock-jwt-token");
+        apiResponse.Data!.AccessToken.Should().Be("mock-jwt-token");
         _mockAuthService.Verify(x => x.RegisterAsync(It.IsAny<RegisterRequest>()), Times.Once);
     }
 
@@ -212,7 +212,8 @@ public class AuthControllerTests
         var unauthorizedResult = result.Result.Should().BeOfType<UnauthorizedObjectResult>().Subject;
         var apiResponse = unauthorizedResult.Value.Should().BeOfType<ApiResponse<object>>().Subject;
         apiResponse.Success.Should().BeFalse();
-        apiResponse.Error.Code.Should().Be("USER_NOT_FOUND");
+        apiResponse.Error.Should().NotBeNull();
+        apiResponse.Error!.Code.Should().Be("USER_NOT_FOUND");
     }
 
     [Fact]
@@ -272,7 +273,8 @@ public class AuthControllerTests
         var unauthorizedResult = result.Result.Should().BeOfType<UnauthorizedObjectResult>().Subject;
         var apiResponse = unauthorizedResult.Value.Should().BeOfType<ApiResponse<object>>().Subject;
         apiResponse.Success.Should().BeFalse();
-        apiResponse.Error.Code.Should().Be("AUTHENTICATION_ERROR");
+        apiResponse.Error.Should().NotBeNull();
+        apiResponse.Error!.Code.Should().Be("AUTHENTICATION_ERROR");
     }
 
     [Fact]
