@@ -94,9 +94,43 @@ options.CallbackPath = "/api/v1/oauth/google-callback";
 - **Cause**: Redirect URI not registered in Google Cloud Console
 - **Solution**: Add the exact redirect URI from the error message to Google Cloud Console
 
-### Error: `invalid_client`
-- **Cause**: Client ID or Client Secret incorrect
-- **Solution**: Verify credentials in AWS Secrets Manager match Google Cloud Console
+### Error: `invalid_client` or `invalid_client;Description=Unauthorized`
+- **Cause**: Client ID or Client Secret is incorrect, doesn't match Google Cloud Console, or the OAuth client type is wrong
+- **Symptoms**: 
+  - OAuth redirect works (user sees Google login)
+  - User authorizes the app
+  - Error occurs when exchanging authorization code for tokens
+- **Solutions**:
+  1. **Verify AWS Secrets Manager Secret**:
+     - Go to AWS Secrets Manager
+     - Find secret: `amesa-google_people_API`
+     - Verify it contains:
+       ```json
+       {
+         "ClientId": "your-client-id-here.apps.googleusercontent.com",
+         "ClientSecret": "your-client-secret-here"
+       }
+       ```
+  2. **Verify Google Cloud Console OAuth Client**:
+     - Go to: https://console.cloud.google.com/apis/credentials
+     - Find your OAuth 2.0 Client ID
+     - Verify the **Client ID** matches exactly what's in AWS Secrets Manager
+     - Verify the **Client Secret** matches exactly (click "Show" to reveal)
+  3. **Check OAuth Client Type**:
+     - The OAuth client must be of type **"Web application"** (not Desktop app, iOS, Android, etc.)
+     - Go to your OAuth client in Google Cloud Console
+     - Verify it's configured as "Web application"
+  4. **Verify Client Secret Format**:
+     - Client Secret should NOT have spaces or extra characters
+     - Copy it directly from Google Cloud Console (use "Show" button)
+     - Ensure no trailing/leading whitespace
+  5. **Check Application Status**:
+     - Ensure the OAuth consent screen is published (if required)
+     - Verify the application is not in testing mode with restricted users (unless you're testing)
+  6. **Check Logs**:
+     - After deployment, check ECS logs: `aws logs tail /ecs/amesa-auth-service --follow`
+     - Look for "OAuth ClientId loaded" message
+     - Look for "INVALID_CLIENT ERROR" details
 
 ### Error: `access_denied`
 - **Cause**: User denied permission or OAuth scope issue

@@ -173,6 +173,18 @@ if (builder.Environment.IsProduction())
             {
                 builder.Configuration.AddInMemoryCollection(configValues);
                 Console.WriteLine("[OAuth] Loaded Google credentials from AWS Secrets Manager");
+                
+                // Log ClientId preview for verification (first 10 chars for security)
+                var clientId = configValues["Authentication:Google:ClientId"];
+                if (!string.IsNullOrWhiteSpace(clientId))
+                {
+                    var clientIdPreview = clientId.Length > 10 ? clientId.Substring(0, 10) + "..." : clientId;
+                    Log.Information("OAuth ClientId loaded (preview): {ClientIdPreview}", clientIdPreview);
+                }
+            }
+            else
+            {
+                Log.Warning("No OAuth credentials were loaded from AWS Secrets Manager secret {SecretId}", googleSecretId);
             }
         }
     }
@@ -368,8 +380,34 @@ if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(goo
         options.Events.OnRemoteFailure = context =>
         {
             var errorMessage = context.Failure?.Message ?? "Unknown error";
+            var errorDescription = context.Failure?.ToString() ?? "No additional details";
+            
             Log.Error("Google OAuth remote failure: {Error}", errorMessage);
-            var frontendUrl = builder.Configuration["FrontendUrl"] ?? "http://localhost:4200";
+            Log.Error("Google OAuth failure details: {Details}", errorDescription);
+            
+            // Log the ClientId (first 10 chars for security) to verify it's being used
+            var clientId = builder.Configuration["Authentication:Google:ClientId"];
+            if (!string.IsNullOrWhiteSpace(clientId))
+            {
+                var clientIdPreview = clientId.Length > 10 ? clientId.Substring(0, 10) + "..." : clientId;
+                Log.Information("OAuth ClientId being used: {ClientIdPreview}", clientIdPreview);
+            }
+            else
+            {
+                Log.Warning("OAuth ClientId is null or empty!");
+            }
+            
+            // Check if it's an invalid_client error
+            if (errorMessage.Contains("invalid_client", StringComparison.OrdinalIgnoreCase))
+            {
+                Log.Error("INVALID_CLIENT ERROR: The ClientId or ClientSecret is incorrect or doesn't match Google Cloud Console");
+                Log.Error("Please verify:");
+                Log.Error("1. AWS Secrets Manager secret 'amesa-google_people_API' contains correct ClientId and ClientSecret");
+                Log.Error("2. The ClientId matches the OAuth 2.0 Client ID in Google Cloud Console");
+                Log.Error("3. The ClientSecret matches the OAuth 2.0 Client Secret in Google Cloud Console");
+            }
+            
+            var frontendUrl = builder.Configuration["FrontendUrl"] ?? "https://dpqbvdgnenckf.cloudfront.net";
             context.Response.Redirect($"{frontendUrl}/auth/callback?error={Uri.EscapeDataString(errorMessage)}");
             context.HandleResponse();
             return Task.CompletedTask;
