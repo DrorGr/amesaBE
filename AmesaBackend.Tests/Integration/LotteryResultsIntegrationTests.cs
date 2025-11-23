@@ -346,6 +346,7 @@ namespace AmesaBackend.Tests.Integration
             });
 
             Assert.True(results!.Success);
+            Assert.NotNull(results.Data);
             Assert.True(results.Data.Results.Count > 0);
 
             // 2. Get specific result
@@ -358,6 +359,7 @@ namespace AmesaBackend.Tests.Integration
             });
 
             Assert.True(specificResult!.Success);
+            Assert.NotNull(specificResult.Data);
             Assert.Equal(result.Id, specificResult.Data.Id);
 
             // 3. Validate QR code
@@ -369,6 +371,7 @@ namespace AmesaBackend.Tests.Integration
             });
 
             Assert.True(validation!.Success);
+            Assert.NotNull(validation.Data);
             Assert.True(validation.Data.IsValid);
             Assert.True(validation.Data.IsWinner);
 
@@ -387,10 +390,11 @@ namespace AmesaBackend.Tests.Integration
             });
 
             Assert.True(claimResult!.Success);
+            Assert.NotNull(claimResult.Data);
             Assert.True(claimResult.Data.IsClaimed);
 
             // 5. If it's not first place, create delivery
-            if (claimResult.Data.PrizePosition > 1)
+            if (claimResult.Data!.PrizePosition > 1)
             {
                 var deliveryRequest = new CreatePrizeDeliveryRequest
                 {
@@ -412,6 +416,7 @@ namespace AmesaBackend.Tests.Integration
                 });
 
                 Assert.True(deliveryResult!.Success);
+                Assert.NotNull(deliveryResult.Data);
                 Assert.Equal(deliveryRequest.RecipientName, deliveryResult.Data.RecipientName);
             }
         }
@@ -431,6 +436,7 @@ namespace AmesaBackend.Tests.Integration
             response.EnsureSuccessStatusCode();
             Assert.NotNull(result);
             Assert.True(result.Success);
+            Assert.NotNull(result.Data);
             Assert.All(result.Data.Results, r => 
             {
                 Assert.Equal(1, r.PrizePosition);

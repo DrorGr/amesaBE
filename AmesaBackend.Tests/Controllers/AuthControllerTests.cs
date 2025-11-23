@@ -93,7 +93,7 @@ public class AuthControllerTests
         var apiResponse = badRequestResult.Value.Should().BeOfType<ApiResponse<object>>().Subject;
         apiResponse.Success.Should().BeFalse();
         apiResponse.Error.Should().NotBeNull();
-        apiResponse.Error.Code.Should().Be("VALIDATION_ERROR");
+        apiResponse.Error!.Code.Should().Be("VALIDATION_ERROR");
     }
 
     [Fact]
@@ -122,7 +122,7 @@ public class AuthControllerTests
         statusResult.StatusCode.Should().Be(500);
         var apiResponse = statusResult.Value.Should().BeOfType<ApiResponse<object>>().Subject;
         apiResponse.Success.Should().BeFalse();
-        apiResponse.Error.Code.Should().Be("INTERNAL_ERROR");
+        apiResponse.Error!.Code.Should().Be("INTERNAL_ERROR");
     }
 
     [Fact]
@@ -162,7 +162,7 @@ public class AuthControllerTests
         var apiResponse = okResult.Value.Should().BeOfType<ApiResponse<AuthResponse>>().Subject;
         apiResponse.Success.Should().BeTrue();
         apiResponse.Data.Should().NotBeNull();
-        apiResponse.Data.AccessToken.Should().Be("mock-jwt-token");
+        apiResponse.Data!.AccessToken.Should().Be("mock-jwt-token");
         _mockAuthService.Verify(x => x.LoginAsync(It.IsAny<LoginRequest>()), Times.Once);
     }
 
@@ -188,7 +188,7 @@ public class AuthControllerTests
         var apiResponse = unauthorizedResult.Value.Should().BeOfType<ApiResponse<object>>().Subject;
         apiResponse.Success.Should().BeFalse();
         apiResponse.Error.Should().NotBeNull();
-        apiResponse.Error.Code.Should().Be("AUTHENTICATION_ERROR");
+        apiResponse.Error!.Code.Should().Be("AUTHENTICATION_ERROR");
     }
 
     [Fact]
@@ -248,7 +248,7 @@ public class AuthControllerTests
         var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
         var apiResponse = okResult.Value.Should().BeOfType<ApiResponse<AuthResponse>>().Subject;
         apiResponse.Success.Should().BeTrue();
-        apiResponse.Data.AccessToken.Should().Be("new-jwt-token");
+        apiResponse.Data!.AccessToken.Should().Be("new-jwt-token");
         _mockAuthService.Verify(x => x.RefreshTokenAsync(It.IsAny<RefreshTokenRequest>()), Times.Once);
     }
 
@@ -286,7 +286,7 @@ public class AuthControllerTests
 
         _mockAuthService
             .Setup(x => x.LogoutAsync(It.IsAny<string>()))
-            .ReturnsAsync(true);
+            .Returns(Task.CompletedTask);
 
         // Act
         var result = await _controller.Logout(request);

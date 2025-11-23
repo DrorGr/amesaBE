@@ -367,6 +367,7 @@ namespace AmesaBackend.Tests.Controllers
             response.EnsureSuccessStatusCode();
             Assert.NotNull(result);
             Assert.True(result.Success);
+            Assert.NotNull(result.Data);
             Assert.Equal(deliveryRequest.RecipientName, result.Data.RecipientName);
         }
 
