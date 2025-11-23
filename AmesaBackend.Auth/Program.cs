@@ -20,6 +20,7 @@ using System.Linq;
 using Amazon.SecretsManager;
 using Amazon.SecretsManager.Model;
 using System.Text.Json;
+using Microsoft.AspNetCore.HttpOverrides;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -35,6 +36,16 @@ Log.Logger = new LoggerConfiguration()
     .CreateLogger();
 
 builder.Host.UseSerilog();
+
+// Configure forwarded headers for load balancer/proxy (required for HTTPS detection)
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost;
+    // Trust all proxies in production (ALB/CloudFront)
+    // In a more secure setup, you'd whitelist specific proxy IPs
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 
 // Add services to the container
 builder.Services.AddControllers();
@@ -272,7 +283,6 @@ if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(goo
 {
     authBuilder.AddGoogle(options =>
     {
-
         options.ClientId = googleClientId;
         options.ClientSecret = googleClientSecret;
         options.CallbackPath = "/api/v1/oauth/google-callback";
@@ -464,6 +474,43 @@ if (builder.Environment.IsDevelopment())
 var app = builder.Build();
 
 // Configure the HTTP request pipeline
+// Use forwarded headers BEFORE other middleware to ensure correct scheme detection
+app.UseForwardedHeaders();
+
+// Force HTTPS scheme in production for OAuth redirects
+// This ensures the OAuth redirect URI uses HTTPS even if the request comes as HTTP from the load balancer
+if (app.Environment.IsProduction())
+{
+    app.Use(async (context, next) =>
+    {
+        // If request came through CloudFront/ALB, ensure scheme is HTTPS
+        if (context.Request.Headers.ContainsKey("X-Forwarded-Proto"))
+        {
+            var proto = context.Request.Headers["X-Forwarded-Proto"].ToString();
+            if (proto.Equals("https", StringComparison.OrdinalIgnoreCase))
+            {
+                context.Request.Scheme = "https";
+            }
+        }
+        // Also check CloudFront-specific headers
+        else if (context.Request.Headers.ContainsKey("CloudFront-Forwarded-Proto"))
+        {
+            var proto = context.Request.Headers["CloudFront-Forwarded-Proto"].ToString();
+            if (proto.Equals("https", StringComparison.OrdinalIgnoreCase))
+            {
+                context.Request.Scheme = "https";
+            }
+        }
+        // For CloudFront domains, always use HTTPS
+        else if (context.Request.Host.Host.Contains("cloudfront.net", StringComparison.OrdinalIgnoreCase))
+        {
+            context.Request.Scheme = "https";
+        }
+        
+        await next();
+    });
+}
+
 app.UseSwagger();
 app.UseSwaggerUI(c =>
 {
