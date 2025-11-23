@@ -149,9 +149,11 @@ namespace AmesaBackend.Controllers
                 
                 // Try to get temp_token from authentication properties (set in OnCreatingTicket)
                 string? tempToken = null;
+                bool hasTempTokenInProperties = false;
                 if (googleResult.Properties?.Items.TryGetValue("temp_token", out var token) == true && token != null)
                 {
                     tempToken = token;
+                    hasTempTokenInProperties = true;
                 }
                 if (string.IsNullOrEmpty(tempToken))
                 {
