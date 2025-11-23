@@ -52,6 +52,12 @@ namespace AmesaBackend.Auth.Controllers
 
                 // #region agent log
                 _logger.LogInformation("[DEBUG] GetPreferences:before-query userId={UserId}", userId);
+                try {
+                    var canConnect = await _context.Database.CanConnectAsync();
+                    _logger.LogInformation("[DEBUG] GetPreferences:db-connection canConnect={CanConnect}", canConnect);
+                } catch (Exception dbEx) {
+                    _logger.LogError(dbEx, "[DEBUG] GetPreferences:db-connection-error exType={ExType} exMessage={ExMessage}", dbEx.GetType().Name, dbEx.Message);
+                }
                 // #endregion
                 var userPreferences = await _context.UserPreferences
                     .AsNoTracking()
@@ -132,6 +138,12 @@ namespace AmesaBackend.Auth.Controllers
 
                 // #region agent log
                 _logger.LogInformation("[DEBUG] UpdatePreferences:before-query userId={UserId}", userId);
+                try {
+                    var canConnect = await _context.Database.CanConnectAsync();
+                    _logger.LogInformation("[DEBUG] UpdatePreferences:db-connection canConnect={CanConnect}", canConnect);
+                } catch (Exception dbEx) {
+                    _logger.LogError(dbEx, "[DEBUG] UpdatePreferences:db-connection-error exType={ExType} exMessage={ExMessage}", dbEx.GetType().Name, dbEx.Message);
+                }
                 // #endregion
                 var existingPreferences = await _context.UserPreferences
                     .FirstOrDefaultAsync(up => up.UserId == userId);
