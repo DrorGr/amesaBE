@@ -115,10 +115,14 @@ namespace AmesaBackend.Controllers
         {
             try
             {
+                _logger.LogInformation("Google OAuth callback endpoint hit");
                 var frontendUrl = _configuration["FrontendUrl"] ?? "http://localhost:4200";
 
                 // Try to authenticate with Google scheme (in case middleware didn't handle it)
                 var googleResult = await HttpContext.AuthenticateAsync(GoogleDefaults.AuthenticationScheme);
+                
+                _logger.LogInformation("Google OAuth callback: Authentication result - Succeeded: {Succeeded}, Principal: {HasPrincipal}", 
+                    googleResult.Succeeded, googleResult.Principal != null);
                 
                 if (!googleResult.Succeeded)
                 {
@@ -131,11 +135,14 @@ namespace AmesaBackend.Controllers
                 // If we reach here, middleware handled it and redirected here
                 // Get email from authenticated principal (used in multiple places)
                 var email = googleResult.Principal?.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
+                _logger.LogInformation("Google OAuth callback: Email from principal: {Email}", email ?? "NULL");
                 
                 // Try to get temp_token from authentication properties (set in OnCreatingTicket)
-                var tempToken = googleResult.Properties?.Items.TryGetValue("temp_token", out var token) == true 
-                    ? token 
-                    : Request.Query["temp_token"].FirstOrDefault();
+                var hasTempTokenInProperties = googleResult.Properties?.Items.TryGetValue("temp_token", out var token) == true;
+                var tempToken = hasTempTokenInProperties ? token : Request.Query["temp_token"].FirstOrDefault();
+                
+                _logger.LogInformation("Google OAuth callback: temp_token from properties: {HasToken}, Value: {TokenPreview}", 
+                    hasTempTokenInProperties, tempToken?.Length > 0 ? tempToken.Substring(0, Math.Min(10, tempToken.Length)) + "..." : "NULL");
                 
                 // If not found in properties, try to get it from email cache (fallback)
                 if (string.IsNullOrEmpty(tempToken) && !string.IsNullOrEmpty(email))
@@ -148,6 +155,10 @@ namespace AmesaBackend.Controllers
                         // Remove from cache after use
                         _memoryCache.Remove(emailCacheKey);
                     }
+                    else
+                    {
+                        _logger.LogWarning("Google OAuth callback: temp_token not found in email cache for email: {Email}", email);
+                    }
                 }
                 
                 if (!string.IsNullOrEmpty(tempToken))
@@ -155,8 +166,12 @@ namespace AmesaBackend.Controllers
                     _logger.LogInformation("Google OAuth callback: Found temp_token, redirecting to frontend with code");
                     await HttpContext.SignOutAsync("Cookies");
                     await HttpContext.SignOutAsync(GoogleDefaults.AuthenticationScheme);
-                    return Redirect($"{frontendUrl}/auth/callback?code={Uri.EscapeDataString(tempToken)}");
+                    var redirectUrl = $"{frontendUrl}/auth/callback?code={Uri.EscapeDataString(tempToken)}";
+                    _logger.LogInformation("Google OAuth callback: Redirecting to: {RedirectUrl}", redirectUrl);
+                    return Redirect(redirectUrl);
                 }
+                
+                _logger.LogWarning("Google OAuth callback: temp_token is empty after all attempts");
 
                 // Fallback: try to get user from authenticated principal
                 if (!string.IsNullOrEmpty(email))

@@ -427,7 +427,19 @@ if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(goo
                 memoryCache.Set(emailCacheKey, tempToken, TimeSpan.FromMinutes(5));
                 context.Properties.Items["temp_token"] = tempToken;
                 
-                logger.LogInformation("User created/updated and tokens cached for: {Email}, temp_token: {TempToken}", email, tempToken);
+                // Also store in RedirectUri query string as backup (in case properties don't persist)
+                var frontendUrl = builder.Configuration["FrontendUrl"] ?? "http://localhost:4200";
+                var currentRedirectUri = context.Properties.RedirectUri ?? $"{frontendUrl}/auth/callback";
+                if (!currentRedirectUri.Contains("code="))
+                {
+                    // Append code to existing redirect URI
+                    var separator = currentRedirectUri.Contains("?") ? "&" : "?";
+                    context.Properties.RedirectUri = $"{currentRedirectUri}{separator}code={Uri.EscapeDataString(tempToken)}";
+                    logger.LogInformation("OnCreatingTicket: Modified RedirectUri to include code parameter");
+                }
+                
+                logger.LogInformation("User created/updated and tokens cached for: {Email}, temp_token: {TempToken}, RedirectUri: {RedirectUri}", 
+                    email, tempToken, context.Properties.RedirectUri);
             }
             catch (Exception ex)
             {
