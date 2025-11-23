@@ -352,6 +352,8 @@ if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(goo
         options.CorrelationCookie.MaxAge = TimeSpan.FromMinutes(10);
         
         // For development (HTTP), use Lax. For production (HTTPS), use None with Secure
+        // Note: Don't set Domain explicitly - let it default to the request domain
+        // This ensures cookies work correctly with load balancers and proxies
         if (builder.Environment.IsDevelopment())
         {
             options.CorrelationCookie.SameSite = Microsoft.AspNetCore.Http.SameSiteMode.Lax;
@@ -359,6 +361,7 @@ if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(goo
         }
         else
         {
+            // Production: Must use None for cross-site cookies, and Always for Secure
             options.CorrelationCookie.SameSite = Microsoft.AspNetCore.Http.SameSiteMode.None;
             options.CorrelationCookie.SecurePolicy = Microsoft.AspNetCore.Http.CookieSecurePolicy.Always;
         }

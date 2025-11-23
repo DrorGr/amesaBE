@@ -78,10 +78,13 @@ namespace AmesaBackend.Controllers
                 // Challenge should return a ChallengeResult that triggers a 302 redirect
                 // The OAuth middleware will redirect to CallbackPath (/api/v1/oauth/google-callback)
                 // The callback endpoint will then redirect to frontend with the code
-                // Store frontend URL in Items so callback endpoint can use it
+                // Use absolute URL for RedirectUri to ensure state validation works correctly
+                var request = HttpContext.Request;
+                var backendCallbackUrl = $"{request.Scheme}://{request.Host}{Url.Action(nameof(GoogleCallback))}";
+                
                 var properties = new AuthenticationProperties
                 {
-                    RedirectUri = Url.Action(nameof(GoogleCallback)), // Redirect to backend callback endpoint
+                    RedirectUri = backendCallbackUrl, // Absolute URL to backend callback endpoint
                     AllowRefresh = true,
                     Items =
                     {
