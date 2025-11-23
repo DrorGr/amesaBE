@@ -204,3 +204,4 @@ WHERE "CreatedBy" IN ('complete-sync', 'placeholder-sync')
 GROUP BY "CreatedBy"
 ORDER BY translations_added DESC;
 
+

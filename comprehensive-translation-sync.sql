@@ -484,3 +484,4 @@ WHERE "CreatedBy" = 'comprehensive-sync'
 ORDER BY "LanguageCode", "Key"
 LIMIT 30;
 
+

@@ -34,3 +34,4 @@ $uniqueKeys | Out-File -FilePath "BE/all-translation-keys.txt" -Encoding UTF8
 Write-Host ""
 Write-Host "Keys saved to BE/all-translation-keys.txt"
 
+

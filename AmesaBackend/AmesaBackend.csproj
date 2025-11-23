@@ -6,6 +6,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <DocumentationFile>bin\$(Configuration)\$(TargetFramework)\$(AssemblyName).xml</DocumentationFile>
+    <!-- Suppress CS1591: Missing XML comment for publicly visible type or member -->
+    <!-- This allows XML docs to be generated without requiring comments on every public member -->
+    <NoWarn>$(NoWarn);1591</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -49,6 +52,8 @@
   <ItemGroup>
     <!-- Exclude DatabaseSeeder from build - it's in separate AmesaBackend.DatabaseSeeder project -->
     <Compile Remove="Data\DatabaseSeeder.cs" />
+    <!-- Mark as None to ensure it's not included in any build -->
+    <None Include="Data\DatabaseSeeder.cs" />
   </ItemGroup>
 
 </Project>

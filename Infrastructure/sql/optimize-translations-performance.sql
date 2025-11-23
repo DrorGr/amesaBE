@@ -18,3 +18,4 @@ WHERE tablename = 'translations'
     AND indexname LIKE '%languagecode%'
 ORDER BY indexname;
 
+

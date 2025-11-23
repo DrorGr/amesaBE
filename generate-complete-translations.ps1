@@ -326,3 +326,4 @@ Write-Host "Generated complete SQL script with all 507 keys for 6 languages"
 Write-Host "Total translations to be created: $($keys.Count * 6)"
 Write-Host "Saved to: BE/complete-507-translations.sql"
 
+

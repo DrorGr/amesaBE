@@ -12,3 +12,4 @@ AND table_name = 'user_lottery_dashboard';
 -- SELECT * FROM amesa_auth.user_lottery_dashboard LIMIT 1;
 
 
+

@@ -21,11 +21,12 @@
   </ItemGroup>
 
   <!-- Exclude appsettings.json from referenced Auth project during publish -->
-  <Target Name="ExcludeAuthAppSettings" BeforeTargets="GetCopyToPublishDirectoryItems">
+  <Target Name="ExcludeAuthAppSettings" BeforeTargets="_GetCopyToPublishDirectoryItems">
     <ItemGroup>
       <_AuthAppSettings Include="$(MSBuildProjectDirectory)\..\AmesaBackend.Auth\appsettings.json" />
       <_AuthAppSettings Include="$(MSBuildProjectDirectory)\..\AmesaBackend.Auth\appsettings.*.json" />
       <ContentWithTargetPath Remove="@(_AuthAppSettings)" />
+      <None Remove="@(_AuthAppSettings)" />
     </ItemGroup>
   </Target>
 

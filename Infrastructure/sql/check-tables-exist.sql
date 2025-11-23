@@ -35,3 +35,4 @@ AND table_name IN ('lottery_tickets', 'houses', 'users', 'user_preferences')
 ORDER BY table_schema, table_name;
 
 
+
