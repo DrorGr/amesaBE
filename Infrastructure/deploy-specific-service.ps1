@@ -111,7 +111,7 @@ Write-Host ""
 
 # Step 2: Build Docker image
 Write-Host "Step 2: Building Docker image..." -ForegroundColor Cyan
-$image = "$EcrRoot/$ecrRepo:latest"
+$image = "${EcrRoot}/${ecrRepo}:latest"
 $env:DOCKER_BUILDKIT = "1"
 Push-Location $beDir
 try {
