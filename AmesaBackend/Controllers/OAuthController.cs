@@ -80,16 +80,12 @@ namespace AmesaBackend.Controllers
                 // 1. Set correlation cookie and redirect to Google
                 // 2. Google redirects back to CallbackPath (/api/v1/oauth/google-callback)
                 // 3. OAuth middleware validates state (checks correlation cookie)
-                // 4. OnCreatingTicket fires and creates user, stores temp_token
-                // 5. OAuth middleware redirects to RedirectUri (backend callback endpoint)
-                // 6. Backend callback endpoint extracts temp_token and redirects to frontend with code
-                // Use absolute URL for RedirectUri to ensure state validation works
-                var request = HttpContext.Request;
-                var backendCallbackUrl = $"{request.Scheme}://{request.Host}{Url.Action(nameof(GoogleCallback))}";
-                
+                // 4. OnCreatingTicket fires and creates user, stores temp_token, modifies RedirectUri to include code
+                // 5. OAuth middleware redirects to RedirectUri (frontend with code)
+                // Set RedirectUri to frontend - OnCreatingTicket will modify it to include the code parameter
                 var properties = new AuthenticationProperties
                 {
-                    RedirectUri = backendCallbackUrl, // Backend callback endpoint - will redirect to frontend with code
+                    RedirectUri = $"{frontendUrl}/auth/callback", // Frontend callback - OnCreatingTicket will add code parameter
                     AllowRefresh = true
                 };
                 

@@ -427,16 +427,16 @@ if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(goo
                 memoryCache.Set(emailCacheKey, tempToken, TimeSpan.FromMinutes(5));
                 context.Properties.Items["temp_token"] = tempToken;
                 
-                // Also store in RedirectUri query string as backup (in case properties don't persist)
+                // Modify RedirectUri to include the code parameter
+                // This ensures the frontend receives the code for token exchange
                 var frontendUrl = builder.Configuration["FrontendUrl"] ?? "http://localhost:4200";
-                var currentRedirectUri = context.Properties.RedirectUri ?? $"{frontendUrl}/auth/callback";
-                if (!currentRedirectUri.Contains("code="))
-                {
-                    // Append code to existing redirect URI
-                    var separator = currentRedirectUri.Contains("?") ? "&" : "?";
-                    context.Properties.RedirectUri = $"{currentRedirectUri}{separator}code={Uri.EscapeDataString(tempToken)}";
-                    logger.LogInformation("OnCreatingTicket: Modified RedirectUri to include code parameter");
-                }
+                var baseRedirectUri = context.Properties.RedirectUri ?? $"{frontendUrl}/auth/callback";
+                
+                // Append code parameter to redirect URI
+                var separator = baseRedirectUri.Contains("?") ? "&" : "?";
+                context.Properties.RedirectUri = $"{baseRedirectUri}{separator}code={Uri.EscapeDataString(tempToken)}";
+                
+                logger.LogInformation("OnCreatingTicket: Modified RedirectUri to include code parameter: {RedirectUri}", context.Properties.RedirectUri);
                 
                 logger.LogInformation("User created/updated and tokens cached for: {Email}, temp_token: {TempToken}, RedirectUri: {RedirectUri}", 
                     email, tempToken, context.Properties.RedirectUri);
