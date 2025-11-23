@@ -410,3 +410,6 @@ appsettings.*.json
 # Database Seeder Service (not for production deployment)
 AmesaBackend.DatabaseSeeder/
 **/DatabaseSeeder.cs
+
+# PowerShell scripts
+*.ps1
