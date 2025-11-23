@@ -40,7 +40,7 @@ namespace AmesaBackend.Shared.Authentication
                 Expires = tokenExpiration,
                 SigningCredentials = new SigningCredentials(
                     authSigningKey,
-                    SecurityAlgorithms.HmacSha512Signature),
+                    SecurityAlgorithms.HmacSha256Signature),
                 IssuedAt = DateTime.UtcNow,
                 NotBefore = DateTime.UtcNow - TimeSpan.FromSeconds(notBeforeOffset)
             };
