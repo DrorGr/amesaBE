@@ -492,6 +492,9 @@ namespace AmesaBackend.Auth.Services
 
         public async Task<(AuthResponse Response, bool IsNewUser)> CreateOrUpdateOAuthUserAsync(string email, string providerId, AuthProvider provider, string? firstName = null, string? lastName = null)
         {
+            // #region agent log
+            _logger.LogInformation("[DEBUG] CreateOrUpdateOAuthUserAsync:entry hypothesisId=E email={Email} provider={Provider}", email, provider);
+            // #endregion
             try
             {
                 var existingUser = await _context.Users
@@ -545,6 +548,12 @@ namespace AmesaBackend.Auth.Services
                     }
                     catch (Exception ex)
                     {
+                        // #region agent log
+                        var exType = ex.GetType().FullName;
+                        var isEventBridge = ex is Amazon.EventBridge.AmazonEventBridgeException;
+                        var innerIsEventBridge = ex.InnerException is Amazon.EventBridge.AmazonEventBridgeException;
+                        _logger.LogError(ex, "[DEBUG] EventBridge catch:entry exType={ExType} isEventBridge={IsEventBridge} innerIsEventBridge={InnerIsEventBridge} hypothesisId=D", exType, isEventBridge, innerIsEventBridge);
+                        // #endregion
                         _logger.LogError(ex, "Failed to publish UserUpdatedEvent to EventBridge (non-fatal, continuing OAuth flow)");
                         // Don't re-throw - EventBridge errors should not break OAuth authentication
                     }
@@ -599,13 +608,27 @@ namespace AmesaBackend.Auth.Services
                     }
                     catch (Exception ex)
                     {
+                        // #region agent log
+                        var exType = ex.GetType().FullName;
+                        var isEventBridge = ex is Amazon.EventBridge.AmazonEventBridgeException;
+                        var innerIsEventBridge = ex.InnerException is Amazon.EventBridge.AmazonEventBridgeException;
+                        _logger.LogError(ex, "[DEBUG] EventBridge catch:entry exType={ExType} isEventBridge={IsEventBridge} innerIsEventBridge={InnerIsEventBridge} hypothesisId=D", exType, isEventBridge, innerIsEventBridge);
+                        // #endregion
                         _logger.LogError(ex, "Failed to publish UserCreatedEvent to EventBridge (non-fatal, continuing OAuth flow)");
                         // Don't re-throw - EventBridge errors should not break OAuth authentication
                     }
                 }
 
+                // #region agent log
+                _logger.LogInformation("[DEBUG] CreateOrUpdateOAuthUserAsync:before-GenerateTokensAsync hypothesisId=E");
+                // #endregion
+
                 // Generate tokens
                 var tokens = await GenerateTokensAsync(user);
+
+                // #region agent log
+                _logger.LogInformation("[DEBUG] CreateOrUpdateOAuthUserAsync:after-GenerateTokensAsync hypothesisId=E hasTokens={HasTokens}", tokens.AccessToken != null);
+                // #endregion
 
                 var response = new AuthResponse
                 {
@@ -615,10 +638,22 @@ namespace AmesaBackend.Auth.Services
                     User = MapToUserDto(user)
                 };
                 
+                // #region agent log
+                _logger.LogInformation("[DEBUG] CreateOrUpdateOAuthUserAsync:success hypothesisId=E returning response");
+                // #endregion
+                
                 return (response, isNewUser);
             }
             catch (Exception ex)
             {
+                // #region agent log
+                var exType = ex.GetType().FullName;
+                var exMessage = ex.Message;
+                var isEventBridge = ex is Amazon.EventBridge.AmazonEventBridgeException;
+                var innerIsEventBridge = ex.InnerException is Amazon.EventBridge.AmazonEventBridgeException;
+                _logger.LogError(ex, "[DEBUG] CreateOrUpdateOAuthUserAsync:catch exType={ExType} exMessage={ExMessage} isEventBridge={IsEventBridge} innerIsEventBridge={InnerIsEventBridge} hypothesisId=E", exType, exMessage, isEventBridge, innerIsEventBridge);
+                // #endregion
+
                 // Check if this is an EventBridge exception (or has EventBridge as inner exception)
                 // EventBridge errors should not fail OAuth authentication
                 var isEventBridgeException = ex is Amazon.EventBridge.AmazonEventBridgeException ||
@@ -626,6 +661,7 @@ namespace AmesaBackend.Auth.Services
                 
                 if (isEventBridgeException)
                 {
+                    _logger.LogWarning(ex, "[DEBUG] CreateOrUpdateOAuthUserAsync:EventBridge-detected attempting recovery hypothesisId=E");
                     _logger.LogWarning(ex, "EventBridge error in CreateOrUpdateOAuthUserAsync for {Provider}: {Email} (non-fatal, attempting recovery)", provider, email);
                     // Don't rethrow EventBridge exceptions - they're non-fatal
                     // Try to recover by getting the user and generating tokens

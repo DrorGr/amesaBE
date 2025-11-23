@@ -347,6 +347,10 @@ if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(goo
 
                 logger.LogInformation("Google OAuth ticket being created for: {Email}", email);
 
+                // #region agent log
+                logger.LogInformation("[DEBUG] OnCreatingTicket:before-CreateOrUpdateOAuthUserAsync hypothesisId=E email={Email}", email);
+                // #endregion
+
                 var (authResponse, isNewUser) = await authService.CreateOrUpdateOAuthUserAsync(
                     email: email,
                     providerId: googleId,
@@ -354,6 +358,10 @@ if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(goo
                     firstName: firstName,
                     lastName: lastName
                 );
+
+                // #region agent log
+                logger.LogInformation("[DEBUG] OnCreatingTicket:after-CreateOrUpdateOAuthUserAsync hypothesisId=E hasAuthResponse={HasAuthResponse} isNewUser={IsNewUser}", authResponse != null, isNewUser);
+                // #endregion
 
                 var tempToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
                 
@@ -390,18 +398,28 @@ if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(goo
             {
                 var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
                 
+                // #region agent log
+                var exType = ex.GetType().FullName;
+                var exMessage = ex.Message;
+                var isEventBridge = ex is Amazon.EventBridge.AmazonEventBridgeException;
+                var innerIsEventBridge = ex.InnerException is Amazon.EventBridge.AmazonEventBridgeException;
+                logger.LogError(ex, "[DEBUG] OnCreatingTicket:catch exType={ExType} exMessage={ExMessage} isEventBridge={IsEventBridge} innerIsEventBridge={InnerIsEventBridge} hypothesisId=E", exType, exMessage, isEventBridge, innerIsEventBridge);
+                // #endregion
+                
                 // Check if this is an EventBridge exception - these are non-fatal and should not fail OAuth
                 var isEventBridgeException = ex is Amazon.EventBridge.AmazonEventBridgeException ||
                                            ex.InnerException is Amazon.EventBridge.AmazonEventBridgeException;
                 
                 if (isEventBridgeException)
                 {
+                    logger.LogWarning(ex, "[DEBUG] OnCreatingTicket:EventBridge-detected (non-fatal, OAuth flow continues) hypothesisId=E");
                     logger.LogWarning(ex, "EventBridge error in OnCreatingTicket (non-fatal, OAuth flow continues)");
                     // Don't call context.Fail() for EventBridge errors - they're non-fatal
                     // The OAuth flow should continue even if EventBridge publishing fails
                     return;
                 }
                 
+                logger.LogError(ex, "[DEBUG] OnCreatingTicket:non-EventBridge-exception calling context.Fail() hypothesisId=E");
                 logger.LogError(ex, "Error in OnCreatingTicket for Google OAuth");
                 context.Fail("Error processing authentication");
             }
