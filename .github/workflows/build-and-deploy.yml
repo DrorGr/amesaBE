@@ -77,8 +77,152 @@ jobs:
           name: backend-coverage
           fail_ci_if_error: false
 
+  detect-changes:
+    name: Detect Changed Services
+    runs-on: ubuntu-latest
+    outputs:
+      amesa-auth-service: ${{ steps.changes.outputs.amesa-auth-service }}
+      amesa-content-service: ${{ steps.changes.outputs.amesa-content-service }}
+      amesa-notification-service: ${{ steps.changes.outputs.amesa-notification-service }}
+      amesa-payment-service: ${{ steps.changes.outputs.amesa-payment-service }}
+      amesa-lottery-service: ${{ steps.changes.outputs.amesa-lottery-service }}
+      amesa-lottery-results-service: ${{ steps.changes.outputs.amesa-lottery-results-service }}
+      amesa-analytics-service: ${{ steps.changes.outputs.amesa-analytics-service }}
+      amesa-admin-service: ${{ steps.changes.outputs.amesa-admin-service }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2  # Need previous commit to compare
+
+      - name: Detect changed files
+        id: changes
+        run: |
+          # For workflow_dispatch with 'all', deploy everything
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]] && [[ "${{ github.event.inputs.services }}" == "all" ]]; then
+            echo "amesa-auth-service=true" >> $GITHUB_OUTPUT
+            echo "amesa-content-service=true" >> $GITHUB_OUTPUT
+            echo "amesa-notification-service=true" >> $GITHUB_OUTPUT
+            echo "amesa-payment-service=true" >> $GITHUB_OUTPUT
+            echo "amesa-lottery-service=true" >> $GITHUB_OUTPUT
+            echo "amesa-lottery-results-service=true" >> $GITHUB_OUTPUT
+            echo "amesa-analytics-service=true" >> $GITHUB_OUTPUT
+            echo "amesa-admin-service=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # For workflow_dispatch with specific service, only deploy that service
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]] && [[ "${{ github.event.inputs.services }}" != "all" ]]; then
+            SERVICE="${{ github.event.inputs.services }}"
+            echo "${SERVICE}=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # For push/PR events, detect changed files
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            # Get changed files between HEAD and previous commit
+            # Handle case where this might be the first commit (no HEAD~1)
+            if git rev-parse --verify HEAD~1 >/dev/null 2>&1; then
+              CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
+            else
+              # First commit - all files are changed
+              CHANGED_FILES=$(git diff --name-only --diff-filter=A HEAD)
+            fi
+          elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            # For PRs, compare with base branch
+            CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
+          else
+            # Default: deploy all services
+            echo "amesa-auth-service=true" >> $GITHUB_OUTPUT
+            echo "amesa-content-service=true" >> $GITHUB_OUTPUT
+            echo "amesa-notification-service=true" >> $GITHUB_OUTPUT
+            echo "amesa-payment-service=true" >> $GITHUB_OUTPUT
+            echo "amesa-lottery-service=true" >> $GITHUB_OUTPUT
+            echo "amesa-lottery-results-service=true" >> $GITHUB_OUTPUT
+            echo "amesa-analytics-service=true" >> $GITHUB_OUTPUT
+            echo "amesa-admin-service=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+          
+          # Check for changes in each service directory
+          # Auth service (includes AmesaBackend since it has OAuth controller)
+          if echo "$CHANGED_FILES" | grep -qE "^AmesaBackend\.Auth/|^AmesaBackend/|^AmesaBackend\.Shared/"; then
+            echo "amesa-auth-service=true" >> $GITHUB_OUTPUT
+            echo "✅ amesa-auth-service: changes detected"
+          else
+            echo "amesa-auth-service=false" >> $GITHUB_OUTPUT
+            echo "⏭️  amesa-auth-service: no changes"
+          fi
+          
+          # Content service
+          if echo "$CHANGED_FILES" | grep -qE "^AmesaBackend\.Content/|^AmesaBackend\.Shared/"; then
+            echo "amesa-content-service=true" >> $GITHUB_OUTPUT
+            echo "✅ amesa-content-service: changes detected"
+          else
+            echo "amesa-content-service=false" >> $GITHUB_OUTPUT
+            echo "⏭️  amesa-content-service: no changes"
+          fi
+          
+          # Notification service
+          if echo "$CHANGED_FILES" | grep -qE "^AmesaBackend\.Notification/|^AmesaBackend\.Shared/"; then
+            echo "amesa-notification-service=true" >> $GITHUB_OUTPUT
+            echo "✅ amesa-notification-service: changes detected"
+          else
+            echo "amesa-notification-service=false" >> $GITHUB_OUTPUT
+            echo "⏭️  amesa-notification-service: no changes"
+          fi
+          
+          # Payment service
+          if echo "$CHANGED_FILES" | grep -qE "^AmesaBackend\.Payment/|^AmesaBackend\.Shared/"; then
+            echo "amesa-payment-service=true" >> $GITHUB_OUTPUT
+            echo "✅ amesa-payment-service: changes detected"
+          else
+            echo "amesa-payment-service=false" >> $GITHUB_OUTPUT
+            echo "⏭️  amesa-payment-service: no changes"
+          fi
+          
+          # Lottery service
+          if echo "$CHANGED_FILES" | grep -qE "^AmesaBackend\.Lottery/|^AmesaBackend\.Shared/"; then
+            echo "amesa-lottery-service=true" >> $GITHUB_OUTPUT
+            echo "✅ amesa-lottery-service: changes detected"
+          else
+            echo "amesa-lottery-service=false" >> $GITHUB_OUTPUT
+            echo "⏭️  amesa-lottery-service: no changes"
+          fi
+          
+          # Lottery Results service
+          if echo "$CHANGED_FILES" | grep -qE "^AmesaBackend\.LotteryResults/|^AmesaBackend\.Shared/"; then
+            echo "amesa-lottery-results-service=true" >> $GITHUB_OUTPUT
+            echo "✅ amesa-lottery-results-service: changes detected"
+          else
+            echo "amesa-lottery-results-service=false" >> $GITHUB_OUTPUT
+            echo "⏭️  amesa-lottery-results-service: no changes"
+          fi
+          
+          # Analytics service
+          if echo "$CHANGED_FILES" | grep -qE "^AmesaBackend\.Analytics/|^AmesaBackend\.Shared/"; then
+            echo "amesa-analytics-service=true" >> $GITHUB_OUTPUT
+            echo "✅ amesa-analytics-service: changes detected"
+          else
+            echo "amesa-analytics-service=false" >> $GITHUB_OUTPUT
+            echo "⏭️  amesa-analytics-service: no changes"
+          fi
+          
+          # Admin service
+          if echo "$CHANGED_FILES" | grep -qE "^AmesaBackend\.Admin/|^AmesaBackend\.Shared/"; then
+            echo "amesa-admin-service=true" >> $GITHUB_OUTPUT
+            echo "✅ amesa-admin-service: changes detected"
+          else
+            echo "amesa-admin-service=false" >> $GITHUB_OUTPUT
+            echo "⏭️  amesa-admin-service: no changes"
+          fi
+
   build-and-push:
-    needs: test
+    needs: [test, detect-changes]
     name: Build and Push Docker Images
     runs-on: ubuntu-latest
     strategy:
@@ -106,12 +250,38 @@ jobs:
       - name: Check if service should be deployed
         id: check-service
         run: |
-          if [[ "${{ github.event_name }}" != "workflow_dispatch" ]] || \
-             [[ "${{ github.event.inputs.services }}" == "all" ]] || \
-             [[ "${{ github.event.inputs.services }}" == "${{ matrix.service }}" ]]; then
+          # Get the output for this specific service from detect-changes job
+          # Use eval to dynamically access the output
+          SERVICE_NAME="${{ matrix.service }}"
+          SERVICE_NAME_CLEAN=$(echo "$SERVICE_NAME" | tr '-' '_')
+          
+          # Access the output using the service name
+          if [[ "$SERVICE_NAME" == "amesa-auth-service" ]]; then
+            SERVICE_CHANGED="${{ needs.detect-changes.outputs.amesa-auth-service }}"
+          elif [[ "$SERVICE_NAME" == "amesa-content-service" ]]; then
+            SERVICE_CHANGED="${{ needs.detect-changes.outputs.amesa-content-service }}"
+          elif [[ "$SERVICE_NAME" == "amesa-notification-service" ]]; then
+            SERVICE_CHANGED="${{ needs.detect-changes.outputs.amesa-notification-service }}"
+          elif [[ "$SERVICE_NAME" == "amesa-payment-service" ]]; then
+            SERVICE_CHANGED="${{ needs.detect-changes.outputs.amesa-payment-service }}"
+          elif [[ "$SERVICE_NAME" == "amesa-lottery-service" ]]; then
+            SERVICE_CHANGED="${{ needs.detect-changes.outputs.amesa-lottery-service }}"
+          elif [[ "$SERVICE_NAME" == "amesa-lottery-results-service" ]]; then
+            SERVICE_CHANGED="${{ needs.detect-changes.outputs.amesa-lottery-results-service }}"
+          elif [[ "$SERVICE_NAME" == "amesa-analytics-service" ]]; then
+            SERVICE_CHANGED="${{ needs.detect-changes.outputs.amesa-analytics-service }}"
+          elif [[ "$SERVICE_NAME" == "amesa-admin-service" ]]; then
+            SERVICE_CHANGED="${{ needs.detect-changes.outputs.amesa-admin-service }}"
+          else
+            SERVICE_CHANGED="false"
+          fi
+          
+          if [[ "$SERVICE_CHANGED" == "true" ]]; then
             echo "deploy=true" >> $GITHUB_OUTPUT
+            echo "✅ ${{ matrix.service }} will be built and deployed"
           else
             echo "deploy=false" >> $GITHUB_OUTPUT
+            echo "⏭️  ${{ matrix.service }} skipped (no changes detected)"
           fi
 
       - name: Checkout code
@@ -145,7 +315,7 @@ jobs:
 
   deploy:
     name: Deploy to ECS
-    needs: build-and-push
+    needs: [build-and-push, detect-changes]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -172,12 +342,36 @@ jobs:
       - name: Check if service should be deployed
         id: check-service
         run: |
-          if [[ "${{ github.event_name }}" != "workflow_dispatch" ]] || \
-             [[ "${{ github.event.inputs.services }}" == "all" ]] || \
-             [[ "${{ github.event.inputs.services }}" == "${{ matrix.service }}" ]]; then
+          # Get the output for this specific service from detect-changes job
+          SERVICE_NAME="${{ matrix.service }}"
+          
+          # Access the output using the service name
+          if [[ "$SERVICE_NAME" == "amesa-auth-service" ]]; then
+            SERVICE_CHANGED="${{ needs.detect-changes.outputs.amesa-auth-service }}"
+          elif [[ "$SERVICE_NAME" == "amesa-content-service" ]]; then
+            SERVICE_CHANGED="${{ needs.detect-changes.outputs.amesa-content-service }}"
+          elif [[ "$SERVICE_NAME" == "amesa-notification-service" ]]; then
+            SERVICE_CHANGED="${{ needs.detect-changes.outputs.amesa-notification-service }}"
+          elif [[ "$SERVICE_NAME" == "amesa-payment-service" ]]; then
+            SERVICE_CHANGED="${{ needs.detect-changes.outputs.amesa-payment-service }}"
+          elif [[ "$SERVICE_NAME" == "amesa-lottery-service" ]]; then
+            SERVICE_CHANGED="${{ needs.detect-changes.outputs.amesa-lottery-service }}"
+          elif [[ "$SERVICE_NAME" == "amesa-lottery-results-service" ]]; then
+            SERVICE_CHANGED="${{ needs.detect-changes.outputs.amesa-lottery-results-service }}"
+          elif [[ "$SERVICE_NAME" == "amesa-analytics-service" ]]; then
+            SERVICE_CHANGED="${{ needs.detect-changes.outputs.amesa-analytics-service }}"
+          elif [[ "$SERVICE_NAME" == "amesa-admin-service" ]]; then
+            SERVICE_CHANGED="${{ needs.detect-changes.outputs.amesa-admin-service }}"
+          else
+            SERVICE_CHANGED="false"
+          fi
+          
+          if [[ "$SERVICE_CHANGED" == "true" ]]; then
             echo "deploy=true" >> $GITHUB_OUTPUT
+            echo "✅ ${{ matrix.service }} will be deployed to ECS"
           else
             echo "deploy=false" >> $GITHUB_OUTPUT
+            echo "⏭️  ${{ matrix.service }} skipped (no changes detected)"
           fi
 
       - name: Configure AWS credentials
