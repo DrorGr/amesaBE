@@ -32,11 +32,17 @@ namespace AmesaBackend.Auth.Controllers
         [HttpGet]
         public async Task<ActionResult<ApiResponse<UserPreferencesDto>>> GetPreferences()
         {
+            // #region agent log
+            _logger.LogInformation("[DEBUG] GetPreferences:entry userId={UserId}", GetCurrentUserId());
+            // #endregion
             try
             {
                 var userId = GetCurrentUserId();
                 if (userId == null)
                 {
+                    // #region agent log
+                    _logger.LogWarning("[DEBUG] GetPreferences:unauthorized");
+                    // #endregion
                     return Unauthorized(new ApiResponse<UserPreferencesDto>
                     {
                         Success = false,
@@ -44,9 +50,15 @@ namespace AmesaBackend.Auth.Controllers
                     });
                 }
 
+                // #region agent log
+                _logger.LogInformation("[DEBUG] GetPreferences:before-query userId={UserId}", userId);
+                // #endregion
                 var userPreferences = await _context.UserPreferences
                     .AsNoTracking()
                     .FirstOrDefaultAsync(up => up.UserId == userId);
+                // #region agent log
+                _logger.LogInformation("[DEBUG] GetPreferences:after-query userId={UserId} found={Found}", userId, userPreferences != null);
+                // #endregion
 
                 if (userPreferences == null)
                 {
@@ -69,6 +81,14 @@ namespace AmesaBackend.Auth.Controllers
             }
             catch (Exception ex)
             {
+                // #region agent log
+                _logger.LogError(ex, "[DEBUG] GetPreferences:exception exType={ExType} exMessage={ExMessage} innerExType={InnerExType} innerExMessage={InnerExMessage} stackTrace={StackTrace}",
+                    ex.GetType().Name,
+                    ex.Message,
+                    ex.InnerException?.GetType().Name ?? "null",
+                    ex.InnerException?.Message ?? "null",
+                    ex.StackTrace);
+                // #endregion
                 _logger.LogError(ex, "Error retrieving user preferences");
                 return StatusCode(500, new ApiResponse<UserPreferencesDto>
                 {
@@ -91,11 +111,18 @@ namespace AmesaBackend.Auth.Controllers
         [HttpPost]
         public async Task<ActionResult<ApiResponse<UserPreferencesDto>>> UpdatePreferences([FromBody] UpdateUserPreferencesRequest request)
         {
+            // #region agent log
+            _logger.LogInformation("[DEBUG] UpdatePreferences:entry userId={UserId} hasRequest={HasRequest} requestVersion={RequestVersion}",
+                GetCurrentUserId(), request != null, request?.Version);
+            // #endregion
             try
             {
                 var userId = GetCurrentUserId();
                 if (userId == null)
                 {
+                    // #region agent log
+                    _logger.LogWarning("[DEBUG] UpdatePreferences:unauthorized");
+                    // #endregion
                     return Unauthorized(new ApiResponse<UserPreferencesDto>
                     {
                         Success = false,
@@ -103,8 +130,14 @@ namespace AmesaBackend.Auth.Controllers
                     });
                 }
 
+                // #region agent log
+                _logger.LogInformation("[DEBUG] UpdatePreferences:before-query userId={UserId}", userId);
+                // #endregion
                 var existingPreferences = await _context.UserPreferences
                     .FirstOrDefaultAsync(up => up.UserId == userId);
+                // #region agent log
+                _logger.LogInformation("[DEBUG] UpdatePreferences:after-query userId={UserId} found={Found}", userId, existingPreferences != null);
+                // #endregion
 
                 if (existingPreferences == null)
                 {
@@ -155,6 +188,14 @@ namespace AmesaBackend.Auth.Controllers
             }
             catch (Exception ex)
             {
+                // #region agent log
+                _logger.LogError(ex, "[DEBUG] UpdatePreferences:exception exType={ExType} exMessage={ExMessage} innerExType={InnerExType} innerExMessage={InnerExMessage} stackTrace={StackTrace}",
+                    ex.GetType().Name,
+                    ex.Message,
+                    ex.InnerException?.GetType().Name ?? "null",
+                    ex.InnerException?.Message ?? "null",
+                    ex.StackTrace);
+                // #endregion
                 _logger.LogError(ex, "Error updating user preferences");
                 return StatusCode(500, new ApiResponse<UserPreferencesDto>
                 {
