@@ -8,8 +8,9 @@ on:
   workflow_dispatch:
 
 # Cancel previous workflow runs when a new one starts
+# Use shared group so test and build-deploy workflows cancel each other
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 env:
