@@ -683,8 +683,8 @@ app.MapHealthChecks("/health");
 app.MapControllers();
 
 // Map SignalR hubs
-// app.MapHub<LotteryHub>("/ws/lottery");
-// app.MapHub<NotificationHub>("/ws/notifications");
+app.MapHub<LotteryHub>("/ws/lottery");
+app.MapHub<NotificationHub>("/ws/notifications");
 
 // Map Blazor Admin Panel
 app.MapBlazorHub();
