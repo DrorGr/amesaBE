@@ -31,11 +31,13 @@ namespace AmesaBackend.Shared.Authentication
             var authSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
 
             var issuer = jwtSettings["Issuer"] ?? _configuration["JWT:Issuer"] ?? "AmesaBackend";
+            var audience = jwtSettings["Audience"] ?? _configuration["JWT:Audience"] ?? "AmesaFrontend";
             var notBeforeOffset = _configuration.GetValue<double>("JWT:NotBeforeOffset", 0);
 
             var tokenDescriptor = new SecurityTokenDescriptor
             {
                 Issuer = issuer,
+                Audience = audience,
                 Subject = new ClaimsIdentity(authClaims),
                 Expires = tokenExpiration,
                 SigningCredentials = new SigningCredentials(
