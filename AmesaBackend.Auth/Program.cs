@@ -326,6 +326,11 @@ if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(goo
                 var memoryCache = serviceProvider.GetRequiredService<IMemoryCache>();
                 var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
                 
+                // #region agent log
+                var redirectUriBefore = context.Properties.RedirectUri ?? "NULL";
+                logger.LogInformation("[DEBUG] OnCreatingTicket:entry hypothesisId=A,B redirectUriBefore={RedirectUriBefore}", redirectUriBefore);
+                // #endregion
+                
                 var claims = context.Principal?.Claims.ToList() ?? new List<Claim>();
                 var email = claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.Email)?.Value;
                 var googleId = claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
@@ -365,7 +370,18 @@ if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(goo
                 memoryCache.Set(emailCacheKey, tempToken, TimeSpan.FromMinutes(5));
                 context.Properties.Items["temp_token"] = tempToken;
                 
-                context.Properties.RedirectUri = $"{frontendUrl}/auth/callback?code={Uri.EscapeDataString(tempToken)}";
+                // #region agent log
+                var baseRedirectUri = context.Properties.RedirectUri ?? $"{frontendUrl}/auth/callback";
+                var tempTokenPreview = tempToken?.Substring(0, Math.Min(10, tempToken?.Length ?? 0)) + "...";
+                logger.LogInformation("[DEBUG] OnCreatingTicket:before-modify hypothesisId=A,B,C baseRedirectUri={BaseRedirectUri} tempTokenPreview={TempTokenPreview}", baseRedirectUri, tempTokenPreview);
+                // #endregion
+                
+                var modifiedRedirectUri = $"{frontendUrl}/auth/callback?code={Uri.EscapeDataString(tempToken)}";
+                context.Properties.RedirectUri = modifiedRedirectUri;
+                
+                // #region agent log
+                logger.LogInformation("[DEBUG] OnCreatingTicket:after-modify hypothesisId=A,B,C redirectUriAfter={RedirectUriAfter} hasCode={HasCode}", modifiedRedirectUri, modifiedRedirectUri.Contains("code="));
+                // #endregion
                 
                 logger.LogInformation("User created/updated and tokens cached for: {Email}, temp_token: {TempToken}", email, tempToken);
             }

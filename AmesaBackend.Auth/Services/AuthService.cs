@@ -531,14 +531,22 @@ namespace AmesaBackend.Auth.Services
                     user.LastLoginAt = DateTime.UtcNow;
                     user.UpdatedAt = DateTime.UtcNow;
 
-                    // Publish update event
-                    await _eventPublisher.PublishAsync(new UserUpdatedEvent
+                    // Publish update event (non-fatal - don't fail OAuth if EventBridge fails)
+                    try
                     {
-                        UserId = user.Id,
-                        Email = user.Email,
-                        FirstName = user.FirstName,
-                        LastName = user.LastName
-                    });
+                        await _eventPublisher.PublishAsync(new UserUpdatedEvent
+                        {
+                            UserId = user.Id,
+                            Email = user.Email,
+                            FirstName = user.FirstName,
+                            LastName = user.LastName
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Failed to publish UserUpdatedEvent to EventBridge (non-fatal, continuing OAuth flow)");
+                        // Don't re-throw - EventBridge errors should not break OAuth authentication
+                    }
                 }
                 else
                 {
@@ -574,17 +582,25 @@ namespace AmesaBackend.Auth.Services
 
                 await _context.SaveChangesAsync();
 
-                // Publish user created event if new user
+                // Publish user created event if new user (non-fatal - don't fail OAuth if EventBridge fails)
                 if (isNewUser)
                 {
-                    await _eventPublisher.PublishAsync(new UserCreatedEvent
+                    try
                     {
-                        UserId = user.Id,
-                        Email = user.Email,
-                        Username = user.Username,
-                        FirstName = user.FirstName,
-                        LastName = user.LastName
-                    });
+                        await _eventPublisher.PublishAsync(new UserCreatedEvent
+                        {
+                            UserId = user.Id,
+                            Email = user.Email,
+                            Username = user.Username,
+                            FirstName = user.FirstName,
+                            LastName = user.LastName
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Failed to publish UserCreatedEvent to EventBridge (non-fatal, continuing OAuth flow)");
+                        // Don't re-throw - EventBridge errors should not break OAuth authentication
+                    }
                 }
 
                 // Generate tokens
