@@ -17,6 +17,9 @@ using Microsoft.Extensions.Caching.Memory;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Linq;
+using Amazon.SecretsManager;
+using Amazon.SecretsManager.Model;
+using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -118,7 +121,58 @@ builder.Services.AddDbContext<AuthDbContext>(options =>
 if (builder.Environment.IsProduction())
 {
     var awsRegion = builder.Configuration["Aws:Region"] ?? Environment.GetEnvironmentVariable("AWS_REGION") ?? "eu-north-1";
-    // OAuth secrets loading would go here if needed
+    var googleSecretId = builder.Configuration["Authentication:Google:SecretId"] ?? "amesa-google_people_API";
+    
+    try
+    {
+        var client = new AmazonSecretsManagerClient(Amazon.RegionEndpoint.GetBySystemName(awsRegion));
+        var request = new GetSecretValueRequest
+        {
+            SecretId = googleSecretId
+        };
+
+        var response = client.GetSecretValueAsync(request).GetAwaiter().GetResult();
+
+        if (!string.IsNullOrWhiteSpace(response.SecretString))
+        {
+            var secretJson = JsonDocument.Parse(response.SecretString);
+            var configValues = new Dictionary<string, string?>();
+
+            if (secretJson.RootElement.TryGetProperty("ClientId", out var clientIdValue))
+            {
+                var clientId = clientIdValue.GetString();
+                if (!string.IsNullOrWhiteSpace(clientId))
+                {
+                    configValues["Authentication:Google:ClientId"] = clientId;
+                    Log.Information("Loaded Google ClientId from AWS Secrets Manager secret {SecretId}", googleSecretId);
+                }
+            }
+
+            if (secretJson.RootElement.TryGetProperty("ClientSecret", out var clientSecretValue))
+            {
+                var clientSecret = clientSecretValue.GetString();
+                if (!string.IsNullOrWhiteSpace(clientSecret))
+                {
+                    configValues["Authentication:Google:ClientSecret"] = clientSecret;
+                    Log.Information("Loaded Google ClientSecret from AWS Secrets Manager secret {SecretId}", googleSecretId);
+                }
+            }
+
+            if (configValues.Count > 0)
+            {
+                builder.Configuration.AddInMemoryCollection(configValues);
+                Console.WriteLine("[OAuth] Loaded Google credentials from AWS Secrets Manager");
+            }
+        }
+    }
+    catch (ResourceNotFoundException)
+    {
+        Log.Warning("AWS Secrets Manager secret {SecretId} not found. OAuth may not work correctly.", googleSecretId);
+    }
+    catch (Exception ex)
+    {
+        Log.Error(ex, "Error loading secret {SecretId} from AWS Secrets Manager", googleSecretId);
+    }
 }
 
 // Get frontend URL for OAuth redirects
@@ -139,7 +193,7 @@ if (string.IsNullOrWhiteSpace(secretKey))
 }
 
 // In Production, ensure we're not using placeholder values
-if (builder.Environment.IsProduction() || builder.Environment.IsStaging())
+if (builder.Environment.IsProduction())
 {
     var placeholderValues = new[] 
     { 

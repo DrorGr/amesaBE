@@ -170,10 +170,10 @@ builder.Services.AddDbContext<AmesaDbContext>(options =>
 var awsRegion = builder.Configuration["Aws:Region"] ?? Environment.GetEnvironmentVariable("AWS_REGION") ?? "eu-north-1";
 
 // Load Google OAuth credentials
-var googleSecretId = builder.Configuration["Authentication:Google:SecretId"];
-if (!string.IsNullOrWhiteSpace(googleSecretId) && (builder.Environment.IsProduction() || builder.Environment.IsStaging()))
+var googleSecretId = builder.Configuration["Authentication:Google:SecretId"] ?? "amesa-google_people_API";
+if (builder.Environment.IsProduction())
 {
-    // Load from AWS Secrets Manager in Production/Staging
+    // Load from AWS Secrets Manager in Production
     AwsSecretLoader.TryLoadJsonSecret(
         builder.Configuration,
         googleSecretId,
@@ -200,9 +200,9 @@ else
 
 // Load Meta OAuth credentials
 var metaSecretId = builder.Configuration["Authentication:Meta:SecretId"];
-if (!string.IsNullOrWhiteSpace(metaSecretId) && (builder.Environment.IsProduction() || builder.Environment.IsStaging()))
+if (builder.Environment.IsProduction() && !string.IsNullOrWhiteSpace(metaSecretId))
 {
-    // Load from AWS Secrets Manager in Production/Staging
+    // Load from AWS Secrets Manager in Production
     AwsSecretLoader.TryLoadJsonSecret(
         builder.Configuration,
         metaSecretId,
@@ -245,7 +245,7 @@ if (string.IsNullOrWhiteSpace(secretKey))
 }
 
 // In Production, ensure we're not using placeholder values
-if (builder.Environment.IsProduction() || builder.Environment.IsStaging())
+if (builder.Environment.IsProduction())
 {
     var placeholderValues = new[] 
     { 
