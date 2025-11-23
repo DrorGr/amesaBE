@@ -75,9 +75,19 @@ namespace AmesaBackend.Shared.Events
                         @event.GetType().Name, @event.EventId);
                 }
             }
+            catch (Amazon.EventBridge.AmazonEventBridgeException ex)
+            {
+                // EventBridge exceptions are non-fatal - don't break the application flow
+                // This is especially important for OAuth flows where EventBridge failures should not prevent authentication
+                _logger.LogWarning(ex, "EventBridge error publishing event {EventType} (non-fatal, continuing): {Message}", 
+                    @event.GetType().Name, ex.Message);
+                // Don't rethrow - EventBridge failures should not break the application
+            }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error publishing event {EventType} to EventBridge", @event.GetType().Name);
+                // For non-EventBridge exceptions, log and rethrow
+                // These might be critical errors that need to propagate
+                _logger.LogError(ex, "Unexpected error publishing event {EventType} to EventBridge", @event.GetType().Name);
                 throw;
             }
         }
