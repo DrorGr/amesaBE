@@ -427,8 +427,11 @@ if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(goo
                 memoryCache.Set(emailCacheKey, tempToken, TimeSpan.FromMinutes(5));
                 context.Properties.Items["temp_token"] = tempToken;
                 
-                // DO NOT modify RedirectUri here - let it go to the backend callback endpoint
-                // The callback endpoint will extract temp_token and redirect to frontend with code
+                // Modify RedirectUri to include the code parameter
+                // This ensures the frontend receives the code for token exchange
+                var frontendUrl = builder.Configuration["FrontendUrl"] ?? "http://localhost:4200";
+                context.Properties.RedirectUri = $"{frontendUrl}/auth/callback?code={Uri.EscapeDataString(tempToken)}";
+                
                 logger.LogInformation("User created/updated and tokens cached for: {Email}, temp_token: {TempToken}", email, tempToken);
             }
             catch (Exception ex)
@@ -446,6 +449,14 @@ if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(goo
             Log.Error("Google OAuth remote failure: {Error}, Inner: {Inner}", errorMessage, innerException);
             Console.WriteLine($"[OAuth Error] {errorMessage}");
             Console.WriteLine($"[OAuth Error Inner] {innerException}");
+            
+            // Check if this is a state validation error
+            if (errorMessage.Contains("state", StringComparison.OrdinalIgnoreCase) || 
+                innerException.Contains("state", StringComparison.OrdinalIgnoreCase))
+            {
+                Log.Warning("OAuth state validation failed - this may be due to cookie configuration issues");
+                Console.WriteLine("[OAuth] State validation failed - check correlation cookie settings");
+            }
             
             // Redirect to frontend with error
             var frontendUrl = builder.Configuration["FrontendUrl"] ?? "http://localhost:4200";

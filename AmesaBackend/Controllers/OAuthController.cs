@@ -76,20 +76,17 @@ namespace AmesaBackend.Controllers
                 _logger.LogInformation("Initiating Google OAuth login");
                 
                 // Challenge should return a ChallengeResult that triggers a 302 redirect
-                // The OAuth middleware will redirect to CallbackPath (/api/v1/oauth/google-callback)
-                // The callback endpoint will then redirect to frontend with the code
-                // Use absolute URL for RedirectUri to ensure state validation works correctly
-                var request = HttpContext.Request;
-                var backendCallbackUrl = $"{request.Scheme}://{request.Host}{Url.Action(nameof(GoogleCallback))}";
-                
+                // The OAuth middleware will:
+                // 1. Set correlation cookie and redirect to Google
+                // 2. Google redirects back to CallbackPath (/api/v1/oauth/google-callback)
+                // 3. OAuth middleware validates state (checks correlation cookie)
+                // 4. OnCreatingTicket fires and creates user
+                // 5. OAuth middleware redirects to RedirectUri (frontend with code)
+                // Set RedirectUri to frontend - OnCreatingTicket will modify it to include the code
                 var properties = new AuthenticationProperties
                 {
-                    RedirectUri = backendCallbackUrl, // Absolute URL to backend callback endpoint
-                    AllowRefresh = true,
-                    Items =
-                    {
-                        { "frontendUrl", frontendUrl }
-                    }
+                    RedirectUri = $"{frontendUrl}/auth/callback", // Frontend callback URL
+                    AllowRefresh = true
                 };
                 
                 return Challenge(properties, GoogleDefaults.AuthenticationScheme);
