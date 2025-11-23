@@ -38,8 +38,9 @@ public class AuthControllerTests
 
         var authResponse = new AuthResponse
         {
-            Token = "mock-jwt-token",
+            AccessToken = "mock-jwt-token",
             RefreshToken = "mock-refresh-token",
+            ExpiresAt = DateTime.UtcNow.AddHours(1),
             User = new UserDto
             {
                 Id = Guid.NewGuid(),
@@ -62,7 +63,7 @@ public class AuthControllerTests
         var apiResponse = okResult.Value.Should().BeOfType<ApiResponse<AuthResponse>>().Subject;
         apiResponse.Success.Should().BeTrue();
         apiResponse.Data.Should().NotBeNull();
-        apiResponse.Data.Token.Should().Be("mock-jwt-token");
+        apiResponse.Data.AccessToken.Should().Be("mock-jwt-token");
         _mockAuthService.Verify(x => x.RegisterAsync(It.IsAny<RegisterRequest>()), Times.Once);
     }
 
@@ -136,8 +137,9 @@ public class AuthControllerTests
 
         var authResponse = new AuthResponse
         {
-            Token = "mock-jwt-token",
+            AccessToken = "mock-jwt-token",
             RefreshToken = "mock-refresh-token",
+            ExpiresAt = DateTime.UtcNow.AddHours(1),
             User = new UserDto
             {
                 Id = Guid.NewGuid(),
@@ -160,7 +162,7 @@ public class AuthControllerTests
         var apiResponse = okResult.Value.Should().BeOfType<ApiResponse<AuthResponse>>().Subject;
         apiResponse.Success.Should().BeTrue();
         apiResponse.Data.Should().NotBeNull();
-        apiResponse.Data.Token.Should().Be("mock-jwt-token");
+        apiResponse.Data.AccessToken.Should().Be("mock-jwt-token");
         _mockAuthService.Verify(x => x.LoginAsync(It.IsAny<LoginRequest>()), Times.Once);
     }
 

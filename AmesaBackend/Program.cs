@@ -733,16 +733,6 @@ finally
     Log.CloseAndFlush();
 }
 
-// Database seeder function
-// Database seeding functionality has been moved to the standalone AmesaBackend.DatabaseSeeder project
-// This method is kept for backward compatibility but redirects users to use the standalone seeder
-static async Task RunDatabaseSeeder()
-{
-    Console.WriteLine("⚠️  Database seeding is now handled by the standalone AmesaBackend.DatabaseSeeder project.");
-    Console.WriteLine("    Please navigate to that project and run it to seed the database.");
-    Console.WriteLine("    Example: cd AmesaBackend.DatabaseSeeder && dotnet run");
-    await Task.CompletedTask;
-}
 
 // Make Program class accessible to test projects
 public partial class Program { }

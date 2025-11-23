@@ -91,7 +91,8 @@ public class HouseBuilder
             PropertyType = "House",
             Status = LotteryStatus.Active,
             TotalTickets = _faker.Random.Int(1000, 5000),
-            TicketsSold = 0,
+            TicketPrice = _faker.Random.Decimal(10, 100),
+            LotteryEndDate = DateTime.UtcNow.AddDays(30),
             CreatedAt = DateTime.UtcNow
         };
     }
@@ -142,6 +143,7 @@ public class LotteryTicketBuilder
             TicketNumber = $"TICKET-{Guid.NewGuid().ToString()[..8]}",
             Status = TicketStatus.Active,
             PurchaseDate = DateTime.UtcNow,
+            PurchasePrice = _faker.Random.Decimal(10, 100),
             CreatedAt = DateTime.UtcNow
         };
     }
@@ -158,9 +160,9 @@ public class LotteryTicketBuilder
         return this;
     }
 
-    public LotteryTicketBuilder WithLotteryId(Guid lotteryId)
+    public LotteryTicketBuilder WithHouseId(Guid houseId)
     {
-        _ticket.LotteryId = lotteryId;
+        _ticket.HouseId = houseId;
         return this;
     }
 

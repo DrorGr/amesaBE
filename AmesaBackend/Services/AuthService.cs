@@ -151,7 +151,7 @@ namespace AmesaBackend.Services
                     throw new UnauthorizedAccessException("Invalid or expired refresh token");
                 }
 
-                if (session.User.Status == UserStatus.Suspended || session.User.Status == UserStatus.Banned)
+                if (session.User?.Status == UserStatus.Suspended || session.User?.Status == UserStatus.Banned)
                 {
                     throw new UnauthorizedAccessException("Account is suspended or banned");
                 }

@@ -46,7 +46,7 @@ namespace AmesaBackend.Controllers
                     query = query.Where(lr => lr.ResultDate <= filter.ToDate.Value);
 
                 if (!string.IsNullOrEmpty(filter.Address))
-                    query = query.Where(lr => lr.House.Address.Contains(filter.Address));
+                    query = query.Where(lr => lr.House != null && lr.House.Address != null && lr.House.Address.Contains(filter.Address));
 
                 if (!string.IsNullOrEmpty(filter.City))
                     query = query.Where(lr => lr.House.Location.Contains(filter.City));

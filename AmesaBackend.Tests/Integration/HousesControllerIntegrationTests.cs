@@ -7,6 +7,7 @@ using Xunit;
 using AmesaBackend.Data;
 using AmesaBackend.Models;
 using AmesaBackend.DTOs;
+using AmesaBackend.Controllers;
 using AmesaBackend.Tests.TestHelpers;
 using AmesaBackend.Tests.TestFixtures;
 using FluentAssertions;
@@ -26,10 +27,25 @@ public class HousesControllerIntegrationTests : IClassFixture<WebApplicationFixt
         _client = fixture.Client;
         _context = fixture.DbContext;
         
-        // Seed test data
-        DatabaseSeeder.ClearDatabase(_context);
-        var users = DatabaseSeeder.SeedUsers(_context, 2);
-        var houses = DatabaseSeeder.SeedHouses(_context, 3);
+        // Seed test data using TestDataBuilder
+        _context.Database.EnsureDeleted();
+        _context.Database.EnsureCreated();
+        
+        var users = new List<User>
+        {
+            TestDataBuilder.User().WithEmail("user1@test.com").Build(),
+            TestDataBuilder.User().WithEmail("user2@test.com").Build()
+        };
+        _context.Users.AddRange(users);
+        
+        var houses = new List<House>
+        {
+            TestDataBuilder.House().WithStatus(LotteryStatus.Active).WithPrice(300000).Build(),
+            TestDataBuilder.House().WithStatus(LotteryStatus.Active).WithPrice(500000).Build(),
+            TestDataBuilder.House().WithStatus(LotteryStatus.Upcoming).WithPrice(400000).Build()
+        };
+        _context.Houses.AddRange(houses);
+        _context.SaveChanges();
     }
 
     [Fact]
@@ -131,7 +147,7 @@ public class HousesControllerIntegrationTests : IClassFixture<WebApplicationFixt
 
     public void Dispose()
     {
-        DatabaseSeeder.ClearDatabase(_context);
+        _context.Database.EnsureDeleted();
     }
 }
 

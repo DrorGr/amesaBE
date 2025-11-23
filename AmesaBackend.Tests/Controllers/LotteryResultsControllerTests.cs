@@ -236,6 +236,7 @@ namespace AmesaBackend.Tests.Controllers
             response.EnsureSuccessStatusCode();
             Assert.NotNull(result);
             Assert.True(result.Success);
+            Assert.NotNull(result.Data);
             Assert.Equal(lotteryResult.Id, result.Data.Id);
         }
 
@@ -267,6 +268,7 @@ namespace AmesaBackend.Tests.Controllers
             response.EnsureSuccessStatusCode();
             Assert.NotNull(result);
             Assert.True(result.Success);
+            Assert.NotNull(result.Data);
             Assert.True(result.Data.IsValid);
             Assert.True(result.Data.IsWinner);
         }
@@ -286,6 +288,7 @@ namespace AmesaBackend.Tests.Controllers
             response.EnsureSuccessStatusCode();
             Assert.NotNull(result);
             Assert.True(result.Success);
+            Assert.NotNull(result.Data);
             Assert.False(result.Data.IsValid);
             Assert.False(result.Data.IsWinner);
         }

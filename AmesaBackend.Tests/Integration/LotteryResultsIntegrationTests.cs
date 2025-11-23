@@ -273,6 +273,7 @@ namespace AmesaBackend.Tests.Integration
             response.EnsureSuccessStatusCode();
             Assert.NotNull(result);
             Assert.True(result.Success);
+            Assert.NotNull(result.Data);
             Assert.Equal(5, result.Data.PageSize);
             Assert.Equal(1, result.Data.PageNumber);
             Assert.True(result.Data.Results.Count <= 5);
@@ -298,6 +299,7 @@ namespace AmesaBackend.Tests.Integration
             response.EnsureSuccessStatusCode();
             Assert.NotNull(result);
             Assert.True(result.Success);
+            Assert.NotNull(result.Data);
             Assert.All(result.Data.Results, r => 
             {
                 Assert.True(r.ResultDate >= DateTime.Parse(fromDate));
