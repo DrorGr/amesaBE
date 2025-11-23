@@ -19,6 +19,7 @@ using System.Security.Cryptography;
 using System.Linq;
 using Amazon.SecretsManager;
 using Amazon.SecretsManager.Model;
+using Amazon.EventBridge;
 using System.Text.Json;
 using Microsoft.AspNetCore.HttpOverrides;
 
@@ -388,6 +389,19 @@ if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(goo
             catch (Exception ex)
             {
                 var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+                
+                // Check if this is an EventBridge exception - these are non-fatal and should not fail OAuth
+                var isEventBridgeException = ex is Amazon.EventBridge.AmazonEventBridgeException ||
+                                           ex.InnerException is Amazon.EventBridge.AmazonEventBridgeException;
+                
+                if (isEventBridgeException)
+                {
+                    logger.LogWarning(ex, "EventBridge error in OnCreatingTicket (non-fatal, OAuth flow continues)");
+                    // Don't call context.Fail() for EventBridge errors - they're non-fatal
+                    // The OAuth flow should continue even if EventBridge publishing fails
+                    return;
+                }
+                
                 logger.LogError(ex, "Error in OnCreatingTicket for Google OAuth");
                 context.Fail("Error processing authentication");
             }

@@ -7,6 +7,7 @@ using AmesaBackend.Shared.Events;
 using BCrypt.Net;
 using System.Security.Claims;
 using System.Security.Cryptography;
+using Amazon.EventBridge;
 
 namespace AmesaBackend.Auth.Services
 {
@@ -618,6 +619,42 @@ namespace AmesaBackend.Auth.Services
             }
             catch (Exception ex)
             {
+                // Check if this is an EventBridge exception (or has EventBridge as inner exception)
+                // EventBridge errors should not fail OAuth authentication
+                var isEventBridgeException = ex is Amazon.EventBridge.AmazonEventBridgeException ||
+                                           ex.InnerException is Amazon.EventBridge.AmazonEventBridgeException;
+                
+                if (isEventBridgeException)
+                {
+                    _logger.LogWarning(ex, "EventBridge error in CreateOrUpdateOAuthUserAsync for {Provider}: {Email} (non-fatal, attempting recovery)", provider, email);
+                    // Don't rethrow EventBridge exceptions - they're non-fatal
+                    // Try to recover by getting the user and generating tokens
+                    // This should not happen if inner try-catch is working, but adding as safety net
+                    try
+                    {
+                        var existingUser = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+                        if (existingUser != null)
+                        {
+                            var tokens = await GenerateTokensAsync(existingUser);
+                            var response = new AuthResponse
+                            {
+                                AccessToken = tokens.AccessToken,
+                                RefreshToken = tokens.RefreshToken,
+                                ExpiresAt = tokens.ExpiresAt,
+                                User = MapToUserDto(existingUser)
+                            };
+                            _logger.LogInformation("Successfully recovered from EventBridge error for {Provider}: {Email}", provider, email);
+                            return (response, false);
+                        }
+                    }
+                    catch (Exception recoveryEx)
+                    {
+                        _logger.LogError(recoveryEx, "Failed to recover from EventBridge error for {Provider}: {Email}", provider, email);
+                    }
+                    // If recovery fails, rethrow the original exception
+                    throw;
+                }
+                
                 _logger.LogError(ex, "Error creating/updating OAuth user for {Provider}: {Email}", provider, email);
                 throw;
             }
