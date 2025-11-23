@@ -90,7 +90,13 @@ namespace AmesaBackend.Controllers
                 // #region agent log
                 try {
                     var logData = new { sessionId = "debug-session", runId = "run1", hypothesisId = "A,E", location = "OAuthController.cs:GoogleLogin", message = "Initial RedirectUri set", data = new { redirectUri = initialRedirectUri, frontendUrl }, timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() };
-                    File.AppendAllText(@"c:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\.cursor\debug.log", System.Text.Json.JsonSerializer.Serialize(logData) + "\n");
+                    _ = Task.Run(async () => {
+                        try {
+                            using var client = new System.Net.Http.HttpClient();
+                            await client.PostAsync("http://127.0.0.1:7242/ingest/e31aa3d2-de06-43fa-bc0f-d7e32a4257c3", 
+                                new System.Net.Http.StringContent(System.Text.Json.JsonSerializer.Serialize(logData), System.Text.Encoding.UTF8, "application/json"));
+                        } catch {}
+                    });
                 } catch {}
                 // #endregion
                 
@@ -126,7 +132,13 @@ namespace AmesaBackend.Controllers
                 try {
                     var requestUrl = $"{Request.Scheme}://{Request.Host}{Request.Path}{Request.QueryString}";
                     var logData = new { sessionId = "debug-session", runId = "run1", hypothesisId = "D", location = "OAuthController.cs:GoogleCallback:entry", message = "Callback endpoint hit", data = new { requestUrl, queryString = Request.QueryString.ToString(), hasCodeInQuery = Request.Query.ContainsKey("code") }, timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() };
-                    File.AppendAllText(@"c:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\.cursor\debug.log", System.Text.Json.JsonSerializer.Serialize(logData) + "\n");
+                    _ = Task.Run(async () => {
+                        try {
+                            using var client = new System.Net.Http.HttpClient();
+                            await client.PostAsync("http://127.0.0.1:7242/ingest/e31aa3d2-de06-43fa-bc0f-d7e32a4257c3", 
+                                new System.Net.Http.StringContent(System.Text.Json.JsonSerializer.Serialize(logData), System.Text.Encoding.UTF8, "application/json"));
+                        } catch {}
+                    });
                 } catch {}
                 // #endregion
                 
@@ -153,8 +165,15 @@ namespace AmesaBackend.Controllers
                 _logger.LogInformation("Google OAuth callback: Email from principal: {Email}", email ?? "NULL");
                 
                 // Try to get temp_token from authentication properties (set in OnCreatingTicket)
-                var hasTempTokenInProperties = googleResult.Properties?.Items.TryGetValue("temp_token", out var token) == true;
-                var tempToken = hasTempTokenInProperties ? token : Request.Query["temp_token"].FirstOrDefault();
+                string? tempToken = null;
+                if (googleResult.Properties?.Items.TryGetValue("temp_token", out var token) == true && token != null)
+                {
+                    tempToken = token;
+                }
+                if (string.IsNullOrEmpty(tempToken))
+                {
+                    tempToken = Request.Query["temp_token"].FirstOrDefault();
+                }
                 
                 _logger.LogInformation("Google OAuth callback: temp_token from properties: {HasToken}, Value: {TokenPreview}", 
                     hasTempTokenInProperties, tempToken?.Length > 0 ? tempToken.Substring(0, Math.Min(10, tempToken.Length)) + "..." : "NULL");
@@ -186,7 +205,13 @@ namespace AmesaBackend.Controllers
                     // #region agent log
                     try {
                         var logData = new { sessionId = "debug-session", runId = "run1", hypothesisId = "D", location = "OAuthController.cs:GoogleCallback:redirect", message = "Redirecting to frontend with code", data = new { redirectUrl, hasCode = redirectUrl.Contains("code=") }, timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() };
-                        File.AppendAllText(@"c:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\.cursor\debug.log", System.Text.Json.JsonSerializer.Serialize(logData) + "\n");
+                        _ = Task.Run(async () => {
+                            try {
+                                using var client = new System.Net.Http.HttpClient();
+                                await client.PostAsync("http://127.0.0.1:7242/ingest/e31aa3d2-de06-43fa-bc0f-d7e32a4257c3", 
+                                    new System.Net.Http.StringContent(System.Text.Json.JsonSerializer.Serialize(logData), System.Text.Encoding.UTF8, "application/json"));
+                            } catch {}
+                        });
                     } catch {}
                     // #endregion
                     
