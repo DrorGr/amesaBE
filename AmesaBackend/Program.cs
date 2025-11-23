@@ -437,20 +437,6 @@ if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(goo
             }
         };
         
-        // Modify RedirectUri after ticket is created to include the code parameter
-        options.Events.OnTicketReceived = context =>
-        {
-            // Get temp_token from properties (set in OnCreatingTicket)
-            if (context.Properties.Items.TryGetValue("temp_token", out var tempToken) && !string.IsNullOrEmpty(tempToken))
-            {
-                var frontendUrl = builder.Configuration["FrontendUrl"] ?? "http://localhost:4200";
-                context.Properties.RedirectUri = $"{frontendUrl}/auth/callback?code={Uri.EscapeDataString(tempToken)}";
-                Log.Information("OnTicketReceived: Modified RedirectUri to include code parameter");
-                Console.WriteLine($"[OAuth] OnTicketReceived: Modified RedirectUri with code: {tempToken.Substring(0, Math.Min(10, tempToken.Length))}...");
-            }
-            return Task.CompletedTask;
-        };
-        
         options.Events.OnRemoteFailure = context =>
         {
             var errorMessage = context.Failure?.Message ?? "Unknown error";
