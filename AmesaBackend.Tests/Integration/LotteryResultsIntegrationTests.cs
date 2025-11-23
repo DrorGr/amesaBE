@@ -41,6 +41,10 @@ namespace AmesaBackend.Tests.Integration
             _scope = _factory.Services.CreateScope();
             _context = _scope.ServiceProvider.GetRequiredService<AmesaDbContext>();
             
+            // Ensure database is created
+            _context.Database.EnsureDeleted();
+            _context.Database.EnsureCreated();
+            
             // Seed comprehensive test data
             SeedIntegrationTestData();
         }
