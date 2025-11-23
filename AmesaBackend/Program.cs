@@ -11,6 +11,7 @@ using AmesaBackend.Services;
 using AmesaBackend.Middleware;
 using AmesaBackend.Configuration;
 using AmesaBackend.Models;
+using AmesaBackend.Hubs;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using Serilog;
