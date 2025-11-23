@@ -317,13 +317,18 @@ namespace AmesaBackend.Auth.Controllers
 
                 _memoryCache.Remove(cacheKey);
 
-                return Ok(new
+                // Return wrapped in ApiResponse for consistency with other endpoints
+                return Ok(new ApiResponse<object>
                 {
-                    accessToken = cachedData.AccessToken,
-                    refreshToken = cachedData.RefreshToken,
-                    expiresAt = cachedData.ExpiresAt,
-                    isNewUser = cachedData.IsNewUser,
-                    userAlreadyExists = cachedData.UserAlreadyExists
+                    Success = true,
+                    Data = new
+                    {
+                        accessToken = cachedData.AccessToken,
+                        refreshToken = cachedData.RefreshToken,
+                        expiresAt = cachedData.ExpiresAt,
+                        isNewUser = cachedData.IsNewUser,
+                        userAlreadyExists = cachedData.UserAlreadyExists
+                    }
                 });
             }
             catch (Exception ex)
