@@ -95,6 +95,8 @@ namespace AmesaBackend.Tests.Controllers
                     PropertyType = "House",
                     Status = LotteryStatus.Active,
                     TotalTickets = 1000,
+                    TicketPrice = 50,
+                    LotteryEndDate = DateTime.UtcNow.AddDays(30),
                     CreatedAt = DateTime.UtcNow
                 },
                 new House
@@ -111,6 +113,8 @@ namespace AmesaBackend.Tests.Controllers
                     PropertyType = "House",
                     Status = LotteryStatus.Active,
                     TotalTickets = 1500,
+                    TicketPrice = 75,
+                    LotteryEndDate = DateTime.UtcNow.AddDays(30),
                     CreatedAt = DateTime.UtcNow
                 }
             };

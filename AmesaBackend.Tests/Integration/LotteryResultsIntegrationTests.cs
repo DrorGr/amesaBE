@@ -92,6 +92,8 @@ namespace AmesaBackend.Tests.Integration
                     PropertyType = "House",
                     Status = LotteryStatus.Active,
                     TotalTickets = 1000 + (i * 200),
+                    TicketPrice = 50 + (i * 10),
+                    LotteryEndDate = DateTime.UtcNow.AddDays(30),
                     CreatedAt = DateTime.UtcNow.AddDays(-i * 2)
                 });
             }
