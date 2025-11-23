@@ -378,16 +378,16 @@ if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(goo
         {
             try
             {
-                // #region agent log
-                var redirectUriBefore = context.Properties.RedirectUri ?? "NULL";
-                logger.LogInformation("[DEBUG] OnCreatingTicket:entry hypothesisId=A,B redirectUriBefore={RedirectUriBefore}", redirectUriBefore);
-                // #endregion
-                
                 // Get services from HttpContext
                 var serviceProvider = context.HttpContext.RequestServices;
                 var authService = serviceProvider.GetRequiredService<IAuthService>();
                 var memoryCache = serviceProvider.GetRequiredService<IMemoryCache>();
                 var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
+                
+                // #region agent log
+                var redirectUriBefore = context.Properties.RedirectUri ?? "NULL";
+                logger.LogInformation("[DEBUG] OnCreatingTicket:entry hypothesisId=A,B redirectUriBefore={RedirectUriBefore}", redirectUriBefore);
+                // #endregion
                 
                 // Get user info from claims (these are populated from Google's OAuth response)
                 var claims = context.Principal?.Claims.ToList() ?? new List<Claim>();
