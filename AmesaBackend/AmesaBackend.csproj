@@ -46,4 +46,9 @@
     <Folder Include="logs\" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Exclude DatabaseSeeder from build - it's in separate AmesaBackend.DatabaseSeeder project -->
+    <Compile Remove="Data\DatabaseSeeder.cs" />
+  </ItemGroup>
+
 </Project>
