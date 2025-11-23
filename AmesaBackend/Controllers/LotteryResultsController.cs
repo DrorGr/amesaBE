@@ -152,7 +152,6 @@ namespace AmesaBackend.Controllers
                 var result = await _context.LotteryResults
                     .Include(lr => lr.House)
                     .Include(lr => lr.Winner)
-                    .Include(lr => lr.Draw)
                     .FirstOrDefaultAsync(lr => lr.Id == id);
 
                 if (result == null)

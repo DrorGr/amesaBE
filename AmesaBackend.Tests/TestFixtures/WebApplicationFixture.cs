@@ -16,9 +16,11 @@ public class WebApplicationFixture : IDisposable
     public HttpClient Client { get; }
     public AmesaDbContext DbContext { get; }
     private readonly IServiceScope _scope;
+    private readonly string _databaseName = $"TestDb_{Guid.NewGuid()}";
 
     public WebApplicationFixture()
     {
+        var databaseName = _databaseName; // Capture for closure
         Factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
             {
@@ -32,10 +34,10 @@ public class WebApplicationFixture : IDisposable
                         services.Remove(descriptor);
                     }
 
-                    // Add in-memory database
+                    // Add in-memory database with shared name so controller and test use same database
                     services.AddDbContext<AmesaDbContext>(options =>
                     {
-                        options.UseInMemoryDatabase($"TestDb_{Guid.NewGuid()}");
+                        options.UseInMemoryDatabase(databaseName);
                     });
                 });
             });

@@ -138,6 +138,9 @@ namespace AmesaBackend.Services
         {
             try
             {
+                if (string.IsNullOrEmpty(qrCodeData))
+                    return string.Empty;
+
                 // Using QR Server API for generating QR code images
                 // In production, you might want to use a more robust solution
                 var encodedData = Uri.EscapeDataString(qrCodeData);

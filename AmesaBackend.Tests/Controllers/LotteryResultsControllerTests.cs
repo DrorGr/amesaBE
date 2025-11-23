@@ -18,9 +18,11 @@ namespace AmesaBackend.Tests.Controllers
         private readonly HttpClient _client;
         private readonly AmesaDbContext _context;
         private readonly IServiceScope _scope;
+        private readonly string _databaseName = $"TestDb_{Guid.NewGuid()}";
 
         public LotteryResultsControllerTests(WebApplicationFactory<Program> factory)
         {
+            var databaseName = _databaseName; // Capture for closure
             _factory = factory.WithWebHostBuilder(builder =>
             {
                 builder.ConfigureServices(services =>
@@ -29,10 +31,10 @@ namespace AmesaBackend.Tests.Controllers
                     var descriptor = services.SingleOrDefault(d => d.ServiceType == typeof(DbContextOptions<AmesaDbContext>));
                     if (descriptor != null) services.Remove(descriptor);
 
-                    // Add in-memory database
+                    // Add in-memory database with shared name so controller and test use same database
                     services.AddDbContext<AmesaDbContext>(options =>
                     {
-                        options.UseInMemoryDatabase("TestDb_" + Guid.NewGuid());
+                        options.UseInMemoryDatabase(databaseName);
                     });
                 });
             });
@@ -136,8 +138,10 @@ namespace AmesaBackend.Tests.Controllers
                     var winner = users[position % users.Count];
                     var ticketNumber = $"TICKET-{house.Id.ToString()[..8]}-{position}";
                     
+                    // Generate lottery result ID first so it matches the QR code
+                    var lotteryResultId = Guid.NewGuid();
                     var qrCodeData = qrCodeService.GenerateQRCodeDataAsync(
-                        Guid.NewGuid(), 
+                        lotteryResultId, 
                         ticketNumber, 
                         position
                     ).Result;
@@ -152,7 +156,7 @@ namespace AmesaBackend.Tests.Controllers
 
                     var lotteryResult = new LotteryResult
                     {
-                        Id = Guid.NewGuid(),
+                        Id = lotteryResultId,
                         LotteryId = house.Id,
                         DrawId = Guid.NewGuid(),
                         WinnerTicketNumber = ticketNumber,
