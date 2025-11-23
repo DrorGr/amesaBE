@@ -106,25 +106,24 @@ namespace AmesaBackend.Auth.Controllers
                     return Redirect($"{frontendUrl}/auth/callback?error={Uri.EscapeDataString("Google authentication failed")}");
                 }
 
+                // Get email from authenticated principal (used in multiple places)
+                var email = googleResult.Principal?.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
+                
                 // Try to get temp_token from authentication properties (set in OnCreatingTicket)
                 var tempToken = googleResult.Properties?.Items.TryGetValue("temp_token", out var token) == true 
                     ? token 
                     : Request.Query["temp_token"].FirstOrDefault();
                 
                 // If not found in properties, try to get it from email cache (fallback)
-                if (string.IsNullOrEmpty(tempToken))
+                if (string.IsNullOrEmpty(tempToken) && !string.IsNullOrEmpty(email))
                 {
-                    var email = googleResult.Principal?.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
-                    if (!string.IsNullOrEmpty(email))
+                    var emailCacheKey = $"oauth_temp_token_{email}";
+                    if (_memoryCache.TryGetValue(emailCacheKey, out string? cachedToken) && !string.IsNullOrEmpty(cachedToken))
                     {
-                        var emailCacheKey = $"oauth_temp_token_{email}";
-                        if (_memoryCache.TryGetValue(emailCacheKey, out string? cachedToken) && !string.IsNullOrEmpty(cachedToken))
-                        {
-                            tempToken = cachedToken;
-                            _logger.LogInformation("Google OAuth callback: Found temp_token from email cache");
-                            // Remove from cache after use
-                            _memoryCache.Remove(emailCacheKey);
-                        }
+                        tempToken = cachedToken;
+                        _logger.LogInformation("Google OAuth callback: Found temp_token from email cache");
+                        // Remove from cache after use
+                        _memoryCache.Remove(emailCacheKey);
                     }
                 }
                 
@@ -137,8 +136,6 @@ namespace AmesaBackend.Auth.Controllers
                 }
                 
                 _logger.LogWarning("Google OAuth callback: temp_token not found in properties or email cache, using fallback");
-
-                var email = googleResult.Principal?.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
                 if (!string.IsNullOrEmpty(email))
                 {
                     _logger.LogInformation("Fallback: Processing Google OAuth callback for: {Email}", email);
