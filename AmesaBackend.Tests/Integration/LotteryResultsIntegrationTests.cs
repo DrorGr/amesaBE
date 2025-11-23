@@ -322,6 +322,7 @@ namespace AmesaBackend.Tests.Integration
             response.EnsureSuccessStatusCode();
             Assert.NotNull(result);
             Assert.True(result.Success);
+            Assert.NotNull(result.Data);
             
             // Verify sorting (descending by prize value)
             var results = result.Data.Results.ToList();

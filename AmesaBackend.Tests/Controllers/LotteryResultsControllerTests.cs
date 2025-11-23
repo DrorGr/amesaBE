@@ -316,6 +316,7 @@ namespace AmesaBackend.Tests.Controllers
             response.EnsureSuccessStatusCode();
             Assert.NotNull(result);
             Assert.True(result.Success);
+            Assert.NotNull(result.Data);
             Assert.True(result.Data.IsClaimed);
         }
 

@@ -156,6 +156,11 @@ namespace AmesaBackend.Services
                     throw new UnauthorizedAccessException("Account is suspended or banned");
                 }
 
+                if (session.User == null)
+                {
+                    throw new UnauthorizedAccessException("User not found for session");
+                }
+
                 // Generate new tokens
                 var tokens = await GenerateTokensAsync(session.User);
 

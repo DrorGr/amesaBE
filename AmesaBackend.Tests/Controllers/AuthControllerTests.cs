@@ -226,8 +226,9 @@ public class AuthControllerTests
 
         var authResponse = new AuthResponse
         {
-            Token = "new-jwt-token",
+            AccessToken = "new-jwt-token",
             RefreshToken = "new-refresh-token",
+            ExpiresAt = DateTime.UtcNow.AddHours(1),
             User = new UserDto
             {
                 Id = Guid.NewGuid(),
@@ -247,7 +248,7 @@ public class AuthControllerTests
         var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
         var apiResponse = okResult.Value.Should().BeOfType<ApiResponse<AuthResponse>>().Subject;
         apiResponse.Success.Should().BeTrue();
-        apiResponse.Data.Token.Should().Be("new-jwt-token");
+        apiResponse.Data.AccessToken.Should().Be("new-jwt-token");
         _mockAuthService.Verify(x => x.RefreshTokenAsync(It.IsAny<RefreshTokenRequest>()), Times.Once);
     }
 
@@ -278,13 +279,13 @@ public class AuthControllerTests
     public async Task Logout_WithValidRequest_ReturnsSuccess()
     {
         // Arrange
-        var request = new LogoutRequest
+        var request = new RefreshTokenRequest
         {
             RefreshToken = "valid-refresh-token"
         };
 
         _mockAuthService
-            .Setup(x => x.LogoutAsync(It.IsAny<LogoutRequest>()))
+            .Setup(x => x.LogoutAsync(It.IsAny<string>()))
             .ReturnsAsync(true);
 
         // Act
@@ -294,7 +295,7 @@ public class AuthControllerTests
         var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
         var apiResponse = okResult.Value.Should().BeOfType<ApiResponse<object>>().Subject;
         apiResponse.Success.Should().BeTrue();
-        _mockAuthService.Verify(x => x.LogoutAsync(It.IsAny<LogoutRequest>()), Times.Once);
+        _mockAuthService.Verify(x => x.LogoutAsync(It.IsAny<string>()), Times.Once);
     }
 }
 

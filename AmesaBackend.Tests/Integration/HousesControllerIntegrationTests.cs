@@ -83,7 +83,8 @@ public class HousesControllerIntegrationTests : IClassFixture<WebApplicationFixt
         // Assert
         response.EnsureSuccessStatusCode();
         content.Should().NotBeNull();
-        content!.Data.Items.Should().OnlyContain(h => h.Status.ToLower() == "active");
+        content!.Data.Should().NotBeNull();
+        content.Data.Items.Should().OnlyContain(h => h.Status.ToLower() == "active");
     }
 
     [Fact]
@@ -96,7 +97,8 @@ public class HousesControllerIntegrationTests : IClassFixture<WebApplicationFixt
         // Assert
         response.EnsureSuccessStatusCode();
         content.Should().NotBeNull();
-        content!.Data.Items.Should().OnlyContain(h => h.Price >= 200000 && h.Price <= 600000);
+        content!.Data.Should().NotBeNull();
+        content.Data.Items.Should().OnlyContain(h => h.Price >= 200000 && h.Price <= 600000);
     }
 
     [Fact]
@@ -114,7 +116,7 @@ public class HousesControllerIntegrationTests : IClassFixture<WebApplicationFixt
         content.Should().NotBeNull();
         content!.Success.Should().BeTrue();
         content.Data.Should().NotBeNull();
-        content.Data.Id.Should().Be(house.Id);
+        content.Data!.Id.Should().Be(house.Id);
     }
 
     [Fact]
@@ -140,8 +142,10 @@ public class HousesControllerIntegrationTests : IClassFixture<WebApplicationFixt
         // Assert
         page1Response.EnsureSuccessStatusCode();
         page2Response.EnsureSuccessStatusCode();
-        page1Content!.Data.Items.Should().HaveCount(2);
-        page2Content!.Data.Items.Should().HaveCount(1);
+        page1Content!.Data.Should().NotBeNull();
+        page2Content!.Data.Should().NotBeNull();
+        page1Content.Data.Items.Should().HaveCount(2);
+        page2Content.Data.Items.Should().HaveCount(1);
         page1Content.Data.Items.Should().NotBeEquivalentTo(page2Content.Data.Items);
     }
 
