@@ -654,57 +654,21 @@ app.MapRazorPages(); // This is needed for Razor Pages
 app.MapFallbackToPage("/admin", "/Admin/App");
 app.MapFallbackToPage("/admin/{*path:nonfile}", "/Admin/App");
 
-// Ensure database is created and migrated
-// Check which database provider is actually being used
+// Ensure database is created (migrations should be run manually)
+// NOTE: Database seeding is DISABLED - all seeding must be done manually
+// Use the standalone AmesaBackend.DatabaseSeeder project for seeding
 using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<AmesaDbContext>();
     try
     {
-        // Get the actual connection string being used
-        var actualConnectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-        var envConnectionString = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING");
-        var connectionString = envConnectionString ?? actualConnectionString;
-        
-        // Determine if using SQLite or PostgreSQL based on connection string
-        bool isSqlite = connectionString == null || connectionString.Contains("Data Source=", StringComparison.OrdinalIgnoreCase);
-        
-        if (isSqlite)
-        {
-            Log.Information("Ensuring SQLite database is created and seeded...");
-            await context.Database.EnsureCreatedAsync();
-            await DataSeedingService.SeedDatabaseAsync(context);
-            await TranslationSeedingService.SeedTranslationsAsync(context);
-            
-            // Seed lottery results with sample data
-            var qrCodeService = scope.ServiceProvider.GetRequiredService<IQRCodeService>();
-            await LotteryResultsSeedingService.SeedLotteryResultsAsync(context, qrCodeService);
-            
-            Log.Information("SQLite database setup and seeding completed successfully");
-        }
-        else
-        {
-            // For PostgreSQL - NEVER auto-seed in production to avoid high database costs
-            if (builder.Environment.IsDevelopment())
-            {
-                Log.Information("Development mode: Ensuring PostgreSQL database tables are created and seeded...");
-                await context.Database.EnsureCreatedAsync();
-                await DataSeedingService.SeedDatabaseAsync(context);
-                await TranslationSeedingService.SeedTranslationsAsync(context);
-                
-                // Seed lottery results with sample data
-                var qrCodeService = scope.ServiceProvider.GetRequiredService<IQRCodeService>();
-                await LotteryResultsSeedingService.SeedLotteryResultsAsync(context, qrCodeService);
-                
-                Log.Information("PostgreSQL database setup and seeding completed successfully");
-            }
-            else
-            {
-                Log.Information("Production mode: Skipping automatic seeding (use manual seeding or migrations)");
-                // In production, database should already be set up with migrations
-                // Manual seeding: dotnet run --project AmesaBackend -- --seeder
-            }
-        }
+        // Only ensure database schema exists - NO automatic seeding
+        // Database migrations should be run manually: dotnet ef database update
+        // Database seeding should be done manually using AmesaBackend.DatabaseSeeder project
+        Log.Information("Ensuring database schema exists (no automatic seeding)...");
+        await context.Database.EnsureCreatedAsync();
+        Log.Information("Database schema check completed. No data was seeded automatically.");
+        Log.Information("⚠️  To seed data manually, use: dotnet run --project AmesaBackend.DatabaseSeeder");
     }
     catch (Exception ex)
     {
