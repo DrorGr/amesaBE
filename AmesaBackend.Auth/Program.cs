@@ -361,11 +361,40 @@ if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(goo
 
                 // #region agent log
                 logger.LogInformation("[DEBUG] OnCreatingTicket:after-CreateOrUpdateOAuthUserAsync hypothesisId=E hasAuthResponse={HasAuthResponse} isNewUser={IsNewUser}", authResponse != null, isNewUser);
+                logger.LogInformation("[DEBUG] OnCreatingTicket:checking-authResponse hypothesisId=E authResponseNull={AuthResponseNull} hasAccessToken={HasAccessToken} hasRefreshToken={HasRefreshToken}", 
+                    authResponse == null, authResponse?.AccessToken != null, authResponse?.RefreshToken != null);
+                // #endregion
+
+                if (authResponse == null)
+                {
+                    logger.LogError("[DEBUG] OnCreatingTicket:authResponse-is-null hypothesisId=E");
+                    context.Fail("Failed to create authentication response");
+                    return;
+                }
+
+                if (string.IsNullOrEmpty(authResponse.AccessToken))
+                {
+                    logger.LogError("[DEBUG] OnCreatingTicket:accessToken-is-null-or-empty hypothesisId=E");
+                    context.Fail("Failed to generate access token");
+                    return;
+                }
+
+                // #region agent log
+                logger.LogInformation("[DEBUG] OnCreatingTicket:before-tempToken-generation hypothesisId=E");
                 // #endregion
 
                 var tempToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
                 
+                // #region agent log
+                logger.LogInformation("[DEBUG] OnCreatingTicket:after-tempToken-generation hypothesisId=E tempTokenLength={TempTokenLength}", tempToken?.Length ?? 0);
+                // #endregion
+                
                 var cacheKey = $"oauth_token_{tempToken}";
+                
+                // #region agent log
+                logger.LogInformation("[DEBUG] OnCreatingTicket:before-cache-set hypothesisId=E cacheKey={CacheKey}", cacheKey);
+                // #endregion
+                
                 memoryCache.Set(cacheKey, new OAuthTokenCache
                 {
                     AccessToken = authResponse.AccessToken,
@@ -374,6 +403,10 @@ if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(goo
                     IsNewUser = isNewUser,
                     UserAlreadyExists = !isNewUser
                 }, TimeSpan.FromMinutes(5));
+
+                // #region agent log
+                logger.LogInformation("[DEBUG] OnCreatingTicket:after-cache-set hypothesisId=E");
+                // #endregion
 
                 var emailCacheKey = $"oauth_temp_token_{email}";
                 memoryCache.Set(emailCacheKey, tempToken, TimeSpan.FromMinutes(5));
