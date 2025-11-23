@@ -88,16 +88,7 @@ namespace AmesaBackend.Controllers
                 var initialRedirectUri = $"{frontendUrl}/auth/callback";
                 
                 // #region agent log
-                try {
-                    var logData = new { sessionId = "debug-session", runId = "run1", hypothesisId = "A,E", location = "OAuthController.cs:GoogleLogin", message = "Initial RedirectUri set", data = new { redirectUri = initialRedirectUri, frontendUrl }, timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() };
-                    _ = Task.Run(async () => {
-                        try {
-                            using var client = new System.Net.Http.HttpClient();
-                            await client.PostAsync("http://127.0.0.1:7242/ingest/e31aa3d2-de06-43fa-bc0f-d7e32a4257c3", 
-                                new System.Net.Http.StringContent(System.Text.Json.JsonSerializer.Serialize(logData), System.Text.Encoding.UTF8, "application/json"));
-                        } catch {}
-                    });
-                } catch {}
+                _logger.LogInformation("[DEBUG] GoogleLogin hypothesisId=A,E initialRedirectUri={InitialRedirectUri} frontendUrl={FrontendUrl}", initialRedirectUri, frontendUrl);
                 // #endregion
                 
                 var properties = new AuthenticationProperties
@@ -129,17 +120,9 @@ namespace AmesaBackend.Controllers
             try
             {
                 // #region agent log
-                try {
-                    var requestUrl = $"{Request.Scheme}://{Request.Host}{Request.Path}{Request.QueryString}";
-                    var logData = new { sessionId = "debug-session", runId = "run1", hypothesisId = "D", location = "OAuthController.cs:GoogleCallback:entry", message = "Callback endpoint hit", data = new { requestUrl, queryString = Request.QueryString.ToString(), hasCodeInQuery = Request.Query.ContainsKey("code") }, timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() };
-                    _ = Task.Run(async () => {
-                        try {
-                            using var client = new System.Net.Http.HttpClient();
-                            await client.PostAsync("http://127.0.0.1:7242/ingest/e31aa3d2-de06-43fa-bc0f-d7e32a4257c3", 
-                                new System.Net.Http.StringContent(System.Text.Json.JsonSerializer.Serialize(logData), System.Text.Encoding.UTF8, "application/json"));
-                        } catch {}
-                    });
-                } catch {}
+                var requestUrl = $"{Request.Scheme}://{Request.Host}{Request.Path}{Request.QueryString}";
+                _logger.LogInformation("[DEBUG] GoogleCallback:entry hypothesisId=D requestUrl={RequestUrl} queryString={QueryString} hasCodeInQuery={HasCodeInQuery}", 
+                    requestUrl, Request.QueryString.ToString(), Request.Query.ContainsKey("code"));
                 // #endregion
                 
                 _logger.LogInformation("Google OAuth callback endpoint hit");
@@ -203,16 +186,7 @@ namespace AmesaBackend.Controllers
                     var redirectUrl = $"{frontendUrl}/auth/callback?code={Uri.EscapeDataString(tempToken)}";
                     
                     // #region agent log
-                    try {
-                        var logData = new { sessionId = "debug-session", runId = "run1", hypothesisId = "D", location = "OAuthController.cs:GoogleCallback:redirect", message = "Redirecting to frontend with code", data = new { redirectUrl, hasCode = redirectUrl.Contains("code=") }, timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() };
-                        _ = Task.Run(async () => {
-                            try {
-                                using var client = new System.Net.Http.HttpClient();
-                                await client.PostAsync("http://127.0.0.1:7242/ingest/e31aa3d2-de06-43fa-bc0f-d7e32a4257c3", 
-                                    new System.Net.Http.StringContent(System.Text.Json.JsonSerializer.Serialize(logData), System.Text.Encoding.UTF8, "application/json"));
-                            } catch {}
-                        });
-                    } catch {}
+                    _logger.LogInformation("[DEBUG] GoogleCallback:redirect hypothesisId=D redirectUrl={RedirectUrl} hasCode={HasCode}", redirectUrl, redirectUrl.Contains("code="));
                     // #endregion
                     
                     _logger.LogInformation("Google OAuth callback: Redirecting to: {RedirectUrl}", redirectUrl);

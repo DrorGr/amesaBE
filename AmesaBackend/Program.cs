@@ -379,17 +379,8 @@ if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(goo
             try
             {
                 // #region agent log
-                try {
-                    var redirectUriBefore = context.Properties.RedirectUri ?? "NULL";
-                    var logData = new { sessionId = "debug-session", runId = "run1", hypothesisId = "A,B", location = "Program.cs:OnCreatingTicket:entry", message = "OnCreatingTicket fired", data = new { redirectUriBefore }, timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() };
-                    _ = Task.Run(async () => {
-                        try {
-                            using var client = new System.Net.Http.HttpClient();
-                            await client.PostAsync("http://127.0.0.1:7242/ingest/e31aa3d2-de06-43fa-bc0f-d7e32a4257c3", 
-                                new System.Net.Http.StringContent(System.Text.Json.JsonSerializer.Serialize(logData), System.Text.Encoding.UTF8, "application/json"));
-                        } catch {}
-                    });
-                } catch {}
+                var redirectUriBefore = context.Properties.RedirectUri ?? "NULL";
+                logger.LogInformation("[DEBUG] OnCreatingTicket:entry hypothesisId=A,B redirectUriBefore={RedirectUriBefore}", redirectUriBefore);
                 // #endregion
                 
                 // Get services from HttpContext
@@ -449,16 +440,8 @@ if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(goo
                 var baseRedirectUri = context.Properties.RedirectUri ?? $"{frontendUrl}/auth/callback";
                 
                 // #region agent log
-                try {
-                    var logData = new { sessionId = "debug-session", runId = "run1", hypothesisId = "A,B,C", location = "Program.cs:OnCreatingTicket:before-modify", message = "Before RedirectUri modification", data = new { baseRedirectUri, tempToken = tempToken?.Substring(0, Math.Min(10, tempToken?.Length ?? 0)) + "..." }, timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() };
-                    _ = Task.Run(async () => {
-                        try {
-                            using var client = new System.Net.Http.HttpClient();
-                            await client.PostAsync("http://127.0.0.1:7242/ingest/e31aa3d2-de06-43fa-bc0f-d7e32a4257c3", 
-                                new System.Net.Http.StringContent(System.Text.Json.JsonSerializer.Serialize(logData), System.Text.Encoding.UTF8, "application/json"));
-                        } catch {}
-                    });
-                } catch {}
+                var tempTokenPreview = tempToken?.Substring(0, Math.Min(10, tempToken?.Length ?? 0)) + "...";
+                logger.LogInformation("[DEBUG] OnCreatingTicket:before-modify hypothesisId=A,B,C baseRedirectUri={BaseRedirectUri} tempTokenPreview={TempTokenPreview}", baseRedirectUri, tempTokenPreview);
                 // #endregion
                 
                 // Append code parameter to redirect URI
@@ -469,16 +452,7 @@ if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(goo
                     context.Properties.RedirectUri = modifiedRedirectUri;
                 
                     // #region agent log
-                    try {
-                        var logData = new { sessionId = "debug-session", runId = "run1", hypothesisId = "A,B,C", location = "Program.cs:OnCreatingTicket:after-modify", message = "After RedirectUri modification", data = new { redirectUriAfter = modifiedRedirectUri, hasCode = modifiedRedirectUri.Contains("code=") }, timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() };
-                        _ = Task.Run(async () => {
-                            try {
-                                using var client = new System.Net.Http.HttpClient();
-                                await client.PostAsync("http://127.0.0.1:7242/ingest/e31aa3d2-de06-43fa-bc0f-d7e32a4257c3", 
-                                    new System.Net.Http.StringContent(System.Text.Json.JsonSerializer.Serialize(logData), System.Text.Encoding.UTF8, "application/json"));
-                            } catch {}
-                        });
-                    } catch {}
+                    logger.LogInformation("[DEBUG] OnCreatingTicket:after-modify hypothesisId=A,B,C redirectUriAfter={RedirectUriAfter} hasCode={HasCode}", modifiedRedirectUri, modifiedRedirectUri.Contains("code="));
                     // #endregion
                 }
                 
