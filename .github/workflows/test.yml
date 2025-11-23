@@ -1,0 +1,74 @@
+name: Backend Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  DOTNET_VERSION: '8.0.x'
+
+jobs:
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore dependencies
+        run: dotnet restore
+        working-directory: ./AmesaBackend.Tests
+
+      - name: Build
+        run: dotnet build --no-restore
+        working-directory: ./AmesaBackend.Tests
+
+      - name: Run unit tests with coverage
+        run: |
+          dotnet test --no-build --verbosity normal \
+            --collect:"XPlat Code Coverage" \
+            --results-directory:"${{ runner.temp }}/TestResults" \
+            --settings:coverlet.runsettings
+        working-directory: ./AmesaBackend.Tests
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: ${{ runner.temp }}/TestResults/**/coverage.cobertura.xml
+          flags: backend
+          name: backend-coverage
+          fail_ci_if_error: false
+
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore dependencies
+        run: dotnet restore
+        working-directory: ./AmesaBackend.Tests
+
+      - name: Build
+        run: dotnet build --no-restore
+        working-directory: ./AmesaBackend.Tests
+
+      - name: Run integration tests
+        run: dotnet test --no-build --verbosity normal --filter "Category=Integration"
+        working-directory: ./AmesaBackend.Tests
+
