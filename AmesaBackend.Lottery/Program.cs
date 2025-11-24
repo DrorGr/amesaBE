@@ -89,11 +89,27 @@ builder.Services.AddAuthentication(options =>
     {
         OnMessageReceived = context =>
         {
+            // #region agent log
             var accessToken = context.Request.Query["access_token"];
             var path = context.HttpContext.Request.Path;
+            var hasToken = !string.IsNullOrEmpty(accessToken);
+            var isWsPath = path.StartsWithSegments("/ws");
+            Log.Information("[DEBUG] OnMessageReceived: path={Path} hasToken={HasToken} isWsPath={IsWsPath} tokenLength={TokenLength}", 
+                path, hasToken, isWsPath, accessToken.ToString().Length);
+            // #endregion
+            
             if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/ws"))
             {
                 context.Token = accessToken;
+                // #region agent log
+                Log.Information("[DEBUG] OnMessageReceived: token set in context");
+                // #endregion
+            }
+            else
+            {
+                // #region agent log
+                Log.Warning("[DEBUG] OnMessageReceived: token NOT set - hasToken={HasToken} isWsPath={IsWsPath}", hasToken, isWsPath);
+                // #endregion
             }
             return Task.CompletedTask;
         }

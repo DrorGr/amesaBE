@@ -118,8 +118,16 @@ namespace AmesaBackend.Auth.Controllers
                     });
                 }
 
+                // #region agent log
+                _logger.LogInformation("[DEBUG] UpdatePreferences:before-query userId={UserId}", userId);
+                // #endregion
+                
                 var existingPreferences = await _context.UserPreferences
                     .FirstOrDefaultAsync(up => up.UserId == userId);
+
+                // #region agent log
+                _logger.LogInformation("[DEBUG] UpdatePreferences:after-query hasExistingPreferences={HasExistingPreferences}", existingPreferences != null);
+                // #endregion
 
                 if (existingPreferences == null)
                 {
@@ -136,8 +144,21 @@ namespace AmesaBackend.Auth.Controllers
                         UpdatedBy = userId.ToString()!
                     };
 
+                    // #region agent log
+                    _logger.LogInformation("[DEBUG] UpdatePreferences:before-Add newPreferences.UserId={UserId}", newPreferences.UserId);
+                    // #endregion
+                    
                     _context.UserPreferences.Add(newPreferences);
+                    
+                    // #region agent log
+                    _logger.LogInformation("[DEBUG] UpdatePreferences:before-SaveChangesAsync");
+                    // #endregion
+                    
                     await _context.SaveChangesAsync();
+                    
+                    // #region agent log
+                    _logger.LogInformation("[DEBUG] UpdatePreferences:after-SaveChangesAsync success");
+                    // #endregion
 
                     _logger.LogInformation("Created new user preferences for user {UserId}", userId);
 
@@ -156,7 +177,15 @@ namespace AmesaBackend.Auth.Controllers
                     existingPreferences.UpdatedAt = DateTime.UtcNow;
                     existingPreferences.UpdatedBy = userId.ToString()!;
 
+                    // #region agent log
+                    _logger.LogInformation("[DEBUG] UpdatePreferences:before-SaveChangesAsync-update existingPreferences.UserId={UserId}", existingPreferences.UserId);
+                    // #endregion
+                    
                     await _context.SaveChangesAsync();
+                    
+                    // #region agent log
+                    _logger.LogInformation("[DEBUG] UpdatePreferences:after-SaveChangesAsync-update success");
+                    // #endregion
 
                     _logger.LogInformation("Updated user preferences for user {UserId}", userId);
 
