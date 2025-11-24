@@ -1,7 +1,9 @@
+extern alias MainApp;
+using MainProgram = MainApp::Program;
+using MainApp::AmesaBackend.Data;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using AmesaBackend.Data;
 
 namespace AmesaBackend.Tests.TestFixtures;
 
@@ -12,7 +14,7 @@ namespace AmesaBackend.Tests.TestFixtures;
 /// </summary>
 public class WebApplicationFixture : IDisposable
 {
-    public WebApplicationFactory<Program> Factory { get; }
+    public WebApplicationFactory<MainProgram> Factory { get; }
     public HttpClient Client { get; }
     public AmesaDbContext DbContext { get; }
     private readonly IServiceScope _scope;
@@ -21,7 +23,7 @@ public class WebApplicationFixture : IDisposable
     public WebApplicationFixture()
     {
         var databaseName = _databaseName; // Capture for closure
-        Factory = new WebApplicationFactory<Program>()
+        Factory = new WebApplicationFactory<MainProgram>()
             .WithWebHostBuilder(builder =>
             {
                 builder.ConfigureServices(services =>

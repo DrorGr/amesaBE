@@ -1,3 +1,9 @@
+extern alias MainApp;
+using MainProgram = MainApp::Program;
+using MainApp::AmesaBackend.Data;
+using MainApp::AmesaBackend.Models;
+using MainApp::AmesaBackend.Services;
+using MainApp::AmesaBackend.DTOs;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -5,22 +11,18 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Xunit;
-using AmesaBackend.Data;
-using AmesaBackend.Models;
-using AmesaBackend.Services;
-using AmesaBackend.DTOs;
 
 namespace AmesaBackend.Tests.Integration
 {
-    public class LotteryResultsIntegrationTests : IClassFixture<WebApplicationFactory<Program>>, IDisposable
+    public class LotteryResultsIntegrationTests : IClassFixture<WebApplicationFactory<MainProgram>>, IDisposable
     {
-        private readonly WebApplicationFactory<Program> _factory;
+        private readonly WebApplicationFactory<MainProgram> _factory;
         private readonly HttpClient _client;
         private readonly AmesaDbContext _context;
         private readonly IServiceScope _scope;
         private readonly string _databaseName = $"IntegrationTestDb_{Guid.NewGuid()}";
 
-        public LotteryResultsIntegrationTests(WebApplicationFactory<Program> factory)
+        public LotteryResultsIntegrationTests(WebApplicationFactory<MainProgram> factory)
         {
             var databaseName = _databaseName; // Capture for closure
             _factory = factory.WithWebHostBuilder(builder =>

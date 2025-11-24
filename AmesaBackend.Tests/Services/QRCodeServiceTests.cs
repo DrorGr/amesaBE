@@ -1,8 +1,9 @@
+extern alias MainApp;
+using MainApp::AmesaBackend.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Xunit;
-using AmesaBackend.Services;
 
 namespace AmesaBackend.Tests.Services
 {

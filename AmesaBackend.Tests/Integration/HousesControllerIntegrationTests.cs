@@ -1,13 +1,14 @@
+extern alias MainApp;
+using MainApp::AmesaBackend.Data;
+using MainApp::AmesaBackend.Models;
+using MainApp::AmesaBackend.DTOs;
+using MainApp::AmesaBackend.Controllers;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using System.Net;
 using System.Net.Http.Json;
 using Xunit;
-using AmesaBackend.Data;
-using AmesaBackend.Models;
-using AmesaBackend.DTOs;
-using AmesaBackend.Controllers;
 using AmesaBackend.Tests.TestHelpers;
 using AmesaBackend.Tests.TestFixtures;
 using FluentAssertions;

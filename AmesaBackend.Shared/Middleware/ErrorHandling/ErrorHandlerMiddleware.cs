@@ -78,7 +78,7 @@ namespace AmesaBackend.Shared.Middleware.ErrorHandling
                         if (ex.IsModelValidationError)
                         {
                             newResponse.Message = "Bad Input";
-                            apiError = new ApiError(ResponseMessageEnum.ValidationError.GetDescription(), ex.Errors)
+                            apiError = new ApiError(ResponseMessageEnum.ValidationError.GetDescription(), ex.Errors ?? Enumerable.Empty<ValidationError>())
                             {
                                 ReferenceErrorCode = ex.ReferenceErrorCode,
                                 ReferenceDocumentLink = ex.ReferenceDocumentLink,

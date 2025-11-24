@@ -1,10 +1,11 @@
+extern alias MainApp;
+using MainApp::AmesaBackend.Controllers;
+using MainApp::AmesaBackend.DTOs;
+using MainApp::AmesaBackend.Services;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 using Xunit;
 using FluentAssertions;
-using AmesaBackend.Controllers;
-using AmesaBackend.DTOs;
-using AmesaBackend.Services;
 using Microsoft.Extensions.Logging;
 
 namespace AmesaBackend.Tests.Controllers;

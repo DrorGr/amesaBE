@@ -1,10 +1,14 @@
+extern alias AuthApp;
+using AuthApp::AmesaBackend.Auth.Services;
+using AuthApp::AmesaBackend.Auth.Data;
+using AuthApp::AmesaBackend.Auth.DTOs;
+using AuthApp::AmesaBackend.Auth.Models;
+using AuthUser = AuthApp::AmesaBackend.Auth.Models.User;
+using AuthUserStatus = AuthApp::AmesaBackend.Auth.Models.UserStatus;
+using AuthUserVerificationStatus = AuthApp::AmesaBackend.Auth.Models.UserVerificationStatus;
 using Xunit;
 using Moq;
 using FluentAssertions;
-using AmesaBackend.Auth.Services;
-using AmesaBackend.Auth.Data;
-using AmesaBackend.Auth.DTOs;
-using AmesaBackend.Auth.Models;
 using AmesaBackend.Shared.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -50,13 +54,13 @@ namespace AmesaBackend.Tests.Services
         {
             // Arrange
             var userId = Guid.NewGuid();
-            var user = new User
+            var user = new AuthUser
             {
                 Id = userId,
                 Username = "testuser",
                 Email = "test@example.com",
                 PasswordHash = "hash",
-                Status = UserStatus.Active,
+                Status = AuthUserStatus.Active,
                 CreatedAt = DateTime.UtcNow
             };
             _context.Users.Add(user);
@@ -147,7 +151,7 @@ namespace AmesaBackend.Tests.Services
 
             // Verify user status was updated
             var updatedUser = await _context.Users.FindAsync(userId);
-            updatedUser!.VerificationStatus.Should().Be(UserVerificationStatus.IdentityVerified);
+            updatedUser!.VerificationStatus.Should().Be(AuthUserVerificationStatus.IdentityVerified);
         }
 
         [Fact]
@@ -155,13 +159,13 @@ namespace AmesaBackend.Tests.Services
         {
             // Arrange
             var userId = Guid.NewGuid();
-            var user = new User
+            var user = new AuthUser
             {
                 Id = userId,
                 Username = "testuser",
                 Email = "test@example.com",
                 PasswordHash = "hash",
-                Status = UserStatus.Active,
+                Status = AuthUserStatus.Active,
                 CreatedAt = DateTime.UtcNow
             };
             _context.Users.Add(user);
@@ -200,13 +204,13 @@ namespace AmesaBackend.Tests.Services
         {
             // Arrange
             var userId = Guid.NewGuid();
-            var user = new User
+            var user = new AuthUser
             {
                 Id = userId,
                 Username = "testuser",
                 Email = "test@example.com",
                 PasswordHash = "hash",
-                Status = UserStatus.Active,
+                Status = AuthUserStatus.Active,
                 CreatedAt = DateTime.UtcNow
             };
             _context.Users.Add(user);
@@ -254,13 +258,13 @@ namespace AmesaBackend.Tests.Services
         {
             // Arrange
             var userId = Guid.NewGuid();
-            var user = new User
+            var user = new AuthUser
             {
                 Id = userId,
                 Username = "testuser",
                 Email = "test@example.com",
                 PasswordHash = "hash",
-                Status = UserStatus.Active,
+                Status = AuthUserStatus.Active,
                 CreatedAt = DateTime.UtcNow
             };
             _context.Users.Add(user);
@@ -331,13 +335,13 @@ namespace AmesaBackend.Tests.Services
         {
             // Arrange
             var userId = Guid.NewGuid();
-            var user = new User
+            var user = new AuthUser
             {
                 Id = userId,
                 Username = "testuser",
                 Email = "test@example.com",
                 PasswordHash = "hash",
-                Status = UserStatus.Active,
+                Status = AuthUserStatus.Active,
                 CreatedAt = DateTime.UtcNow
             };
             _context.Users.Add(user);
@@ -456,13 +460,13 @@ namespace AmesaBackend.Tests.Services
         {
             // Arrange
             var userId = Guid.NewGuid();
-            var user = new User
+            var user = new AuthUser
             {
                 Id = userId,
                 Username = "testuser",
                 Email = "test@example.com",
                 PasswordHash = "hash",
-                Status = UserStatus.Active,
+                Status = AuthUserStatus.Active,
                 CreatedAt = DateTime.UtcNow
             };
             _context.Users.Add(user);
@@ -527,13 +531,13 @@ namespace AmesaBackend.Tests.Services
         {
             // Arrange
             var userId = Guid.NewGuid();
-            var user = new User
+            var user = new AuthUser
             {
                 Id = userId,
                 Username = "testuser",
                 Email = "test@example.com",
                 PasswordHash = "hash",
-                Status = UserStatus.Active,
+                Status = AuthUserStatus.Active,
                 CreatedAt = DateTime.UtcNow
             };
             _context.Users.Add(user);

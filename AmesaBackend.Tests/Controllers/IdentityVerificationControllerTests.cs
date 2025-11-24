@@ -1,11 +1,11 @@
+extern alias AuthApp;
+using AuthApp::AmesaBackend.Auth.Controllers;
+using AuthApp::AmesaBackend.Auth.Services;
+using AuthApp::AmesaBackend.Auth.DTOs;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 using Xunit;
 using FluentAssertions;
-using AmesaBackend.Auth.Controllers;
-using AmesaBackend.Auth.Services;
-using AmesaBackend.Auth.DTOs;
-using AmesaBackend.Auth.DTOs;
 using Microsoft.Extensions.Logging;
 using System.Security.Claims;
 using System;

@@ -18,7 +18,7 @@ namespace AmesaBackend.Shared.Exceptions
         /// </summary>
         /// <param name="errType">Error type.</param>
         /// <param name="message">Custom exception message.</param>
-        public CustomFaultException(ServiceError errType, string message = null) : base(errType.ToString())
+        public CustomFaultException(ServiceError errType, string? message = null) : base(errType.ToString())
         {
             StatusCode = errType;
             _message = message ?? string.Empty;

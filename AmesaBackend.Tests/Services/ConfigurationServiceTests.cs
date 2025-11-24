@@ -1,6 +1,7 @@
+extern alias AuthApp;
+using AuthApp::AmesaBackend.Auth.Services;
+using AuthApp::AmesaBackend.Auth.Data;
 using Xunit;
-using AmesaBackend.Auth.Services;
-using AmesaBackend.Auth.Data;
 using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 using System;

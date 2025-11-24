@@ -1,4 +1,5 @@
-using AmesaBackend.Models;
+extern alias MainApp;
+using MainApp::AmesaBackend.Models;
 using Bogus;
 
 namespace AmesaBackend.Tests.TestHelpers;
