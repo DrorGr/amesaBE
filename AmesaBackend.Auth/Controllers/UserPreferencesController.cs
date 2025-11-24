@@ -33,15 +33,21 @@ namespace AmesaBackend.Auth.Controllers
         public async Task<ActionResult<ApiResponse<UserPreferencesDto>>> GetPreferences()
         {
             // #region agent log
-            _logger.LogInformation("[DEBUG] GetPreferences:entry userId={UserId}", GetCurrentUserId());
+            _logger.LogDebug("[DEBUG] GetPreferences:entry");
             // #endregion
             try
             {
+                // #region agent log
+                _logger.LogDebug("[DEBUG] GetPreferences:before-GetCurrentUserId");
+                // #endregion
                 var userId = GetCurrentUserId();
+                // #region agent log
+                _logger.LogDebug("[DEBUG] GetPreferences:after-GetCurrentUserId userId={UserId} hasUserId={HasUserId}", userId, userId != null);
+                // #endregion
                 if (userId == null)
                 {
                     // #region agent log
-                    _logger.LogWarning("[DEBUG] GetPreferences:unauthorized");
+                    _logger.LogWarning("[DEBUG] GetPreferences:userId-null returning Unauthorized");
                     // #endregion
                     return Unauthorized(new ApiResponse<UserPreferencesDto>
                     {
@@ -51,19 +57,15 @@ namespace AmesaBackend.Auth.Controllers
                 }
 
                 // #region agent log
-                _logger.LogInformation("[DEBUG] GetPreferences:before-query userId={UserId}", userId);
-                try {
-                    var canConnect = await _context.Database.CanConnectAsync();
-                    _logger.LogInformation("[DEBUG] GetPreferences:db-connection canConnect={CanConnect}", canConnect);
-                } catch (Exception dbEx) {
-                    _logger.LogError(dbEx, "[DEBUG] GetPreferences:db-connection-error exType={ExType} exMessage={ExMessage}", dbEx.GetType().Name, dbEx.Message);
-                }
+                _logger.LogDebug("[DEBUG] GetPreferences:before-db-query userId={UserId}", userId);
+                var canConnect = await _context.Database.CanConnectAsync();
+                _logger.LogDebug("[DEBUG] GetPreferences:db-connection canConnect={CanConnect}", canConnect);
                 // #endregion
                 var userPreferences = await _context.UserPreferences
                     .AsNoTracking()
                     .FirstOrDefaultAsync(up => up.UserId == userId);
                 // #region agent log
-                _logger.LogInformation("[DEBUG] GetPreferences:after-query userId={UserId} found={Found}", userId, userPreferences != null);
+                _logger.LogDebug("[DEBUG] GetPreferences:after-db-query hasPreferences={HasPreferences}", userPreferences != null);
                 // #endregion
 
                 if (userPreferences == null)
@@ -88,7 +90,7 @@ namespace AmesaBackend.Auth.Controllers
             catch (Exception ex)
             {
                 // #region agent log
-                _logger.LogError(ex, "[DEBUG] GetPreferences:exception exType={ExType} exMessage={ExMessage} innerExType={InnerExType} innerExMessage={InnerExMessage} stackTrace={StackTrace}",
+                _logger.LogError(ex, "[DEBUG] GetPreferences:catch exType={ExType} exMessage={ExMessage} innerExType={InnerExType} innerExMessage={InnerExMessage} stackTrace={StackTrace}",
                     ex.GetType().Name,
                     ex.Message,
                     ex.InnerException?.GetType().Name ?? "null",
@@ -118,16 +120,23 @@ namespace AmesaBackend.Auth.Controllers
         public async Task<ActionResult<ApiResponse<UserPreferencesDto>>> UpdatePreferences([FromBody] UpdateUserPreferencesRequest request)
         {
             // #region agent log
-            _logger.LogInformation("[DEBUG] UpdatePreferences:entry userId={UserId} hasRequest={HasRequest} requestVersion={RequestVersion}",
-                GetCurrentUserId(), request != null, request?.Version);
+            _logger.LogDebug("[DEBUG] UpdatePreferences:entry hasRequest={HasRequest} hasPreferences={HasPreferences}",
+                request != null,
+                request?.Preferences.ToString() ?? "null");
             // #endregion
             try
             {
+                // #region agent log
+                _logger.LogDebug("[DEBUG] UpdatePreferences:before-GetCurrentUserId");
+                // #endregion
                 var userId = GetCurrentUserId();
+                // #region agent log
+                _logger.LogDebug("[DEBUG] UpdatePreferences:after-GetCurrentUserId userId={UserId} hasUserId={HasUserId}", userId, userId != null);
+                // #endregion
                 if (userId == null)
                 {
                     // #region agent log
-                    _logger.LogWarning("[DEBUG] UpdatePreferences:unauthorized");
+                    _logger.LogWarning("[DEBUG] UpdatePreferences:userId-null returning Unauthorized");
                     // #endregion
                     return Unauthorized(new ApiResponse<UserPreferencesDto>
                     {
@@ -137,18 +146,14 @@ namespace AmesaBackend.Auth.Controllers
                 }
 
                 // #region agent log
-                _logger.LogInformation("[DEBUG] UpdatePreferences:before-query userId={UserId}", userId);
-                try {
-                    var canConnect = await _context.Database.CanConnectAsync();
-                    _logger.LogInformation("[DEBUG] UpdatePreferences:db-connection canConnect={CanConnect}", canConnect);
-                } catch (Exception dbEx) {
-                    _logger.LogError(dbEx, "[DEBUG] UpdatePreferences:db-connection-error exType={ExType} exMessage={ExMessage}", dbEx.GetType().Name, dbEx.Message);
-                }
+                _logger.LogDebug("[DEBUG] UpdatePreferences:before-db-query userId={UserId}", userId);
+                var canConnect = await _context.Database.CanConnectAsync();
+                _logger.LogDebug("[DEBUG] UpdatePreferences:db-connection canConnect={CanConnect}", canConnect);
                 // #endregion
                 var existingPreferences = await _context.UserPreferences
                     .FirstOrDefaultAsync(up => up.UserId == userId);
                 // #region agent log
-                _logger.LogInformation("[DEBUG] UpdatePreferences:after-query userId={UserId} found={Found}", userId, existingPreferences != null);
+                _logger.LogDebug("[DEBUG] UpdatePreferences:after-db-query hasPreferences={HasPreferences}", existingPreferences != null);
                 // #endregion
 
                 if (existingPreferences == null)
@@ -201,7 +206,7 @@ namespace AmesaBackend.Auth.Controllers
             catch (Exception ex)
             {
                 // #region agent log
-                _logger.LogError(ex, "[DEBUG] UpdatePreferences:exception exType={ExType} exMessage={ExMessage} innerExType={InnerExType} innerExMessage={InnerExMessage} stackTrace={StackTrace}",
+                _logger.LogError(ex, "[DEBUG] UpdatePreferences:catch exType={ExType} exMessage={ExMessage} innerExType={InnerExType} innerExMessage={InnerExMessage} stackTrace={StackTrace}",
                     ex.GetType().Name,
                     ex.Message,
                     ex.InnerException?.GetType().Name ?? "null",
