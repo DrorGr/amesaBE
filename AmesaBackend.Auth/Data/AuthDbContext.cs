@@ -21,6 +21,9 @@ namespace AmesaBackend.Auth.Data
         public DbSet<UserPreferences> UserPreferences { get; set; }
         public DbSet<UserPreferenceHistory> UserPreferenceHistory { get; set; }
         public DbSet<UserPreferenceSyncLog> UserPreferenceSyncLog { get; set; }
+        
+        // System configuration tables
+        public DbSet<SystemConfiguration> SystemConfigurations { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -67,6 +70,12 @@ namespace AmesaBackend.Auth.Data
                 entity.HasKey(e => e.Id);
                 entity.Property(e => e.DocumentType).IsRequired().HasMaxLength(50);
                 entity.Property(e => e.DocumentNumber).IsRequired().HasMaxLength(100);
+                entity.Property(e => e.ValidationKey).IsRequired();
+                entity.HasIndex(e => e.ValidationKey).IsUnique();
+                entity.Property(e => e.LivenessScore).HasColumnType("decimal(5,2)");
+                entity.Property(e => e.FaceMatchScore).HasColumnType("decimal(5,2)");
+                entity.Property(e => e.VerificationProvider).HasMaxLength(50);
+                entity.Property(e => e.VerificationMetadata).HasColumnType("jsonb");
                 entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId);
             });
 
@@ -90,10 +99,15 @@ namespace AmesaBackend.Auth.Data
             // Configure UserPreferences entity
             modelBuilder.Entity<UserPreferences>(entity =>
             {
+                entity.ToTable("user_preferences", "amesa_auth");
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => e.UserId).IsUnique();
                 entity.Property(e => e.PreferencesJson).IsRequired().HasColumnType("jsonb");
                 entity.Property(e => e.Version).IsRequired().HasMaxLength(20);
+                // Ignore BaseEntity properties that don't exist in user_preferences table
+                entity.Ignore(e => e.DeletedAt);
+                entity.Ignore(e => e.DeletedBy);
+                entity.Ignore(e => e.IsDeleted);
                 // Configure foreign key without requiring User entity to be loaded
                 // This prevents EF Core from querying User table during SaveChangesAsync validation
                 entity.HasOne(e => e.User)
@@ -122,6 +136,16 @@ namespace AmesaBackend.Auth.Data
                 entity.Property(e => e.SyncStatus).IsRequired().HasMaxLength(20);
                 entity.HasOne(e => e.UserPreferences).WithMany().HasForeignKey(e => e.UserPreferencesId);
                 entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId);
+            });
+
+            // Configure SystemConfiguration entity
+            modelBuilder.Entity<SystemConfiguration>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.Key).IsUnique();
+                entity.Property(e => e.Key).IsRequired().HasMaxLength(100);
+                entity.Property(e => e.Value).IsRequired().HasColumnType("jsonb");
+                entity.ToTable("system_configurations", "amesa_auth");
             });
         }
     }
