@@ -94,8 +94,10 @@ builder.Services.AddAuthentication(options =>
             var path = context.HttpContext.Request.Path;
             var hasToken = !string.IsNullOrEmpty(accessToken);
             var isWsPath = path.StartsWithSegments("/ws");
-            Log.Information("[DEBUG] OnMessageReceived: path={Path} hasToken={HasToken} isWsPath={IsWsPath} tokenLength={TokenLength}", 
-                path, hasToken, isWsPath, accessToken.ToString().Length);
+            var queryString = context.Request.QueryString.ToString();
+            var allQueryParams = string.Join(", ", context.Request.Query.Select(q => $"{q.Key}={q.Value}"));
+            Log.Information("[DEBUG] OnMessageReceived: path={Path} hasToken={HasToken} isWsPath={IsWsPath} tokenLength={TokenLength} queryString={QueryString} allParams={AllParams}", 
+                path, hasToken, isWsPath, accessToken.ToString().Length, queryString, allQueryParams);
             // #endregion
             
             if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/ws"))
@@ -108,9 +110,28 @@ builder.Services.AddAuthentication(options =>
             else
             {
                 // #region agent log
-                Log.Warning("[DEBUG] OnMessageReceived: token NOT set - hasToken={HasToken} isWsPath={IsWsPath}", hasToken, isWsPath);
+                Log.Warning("[DEBUG] OnMessageReceived: token NOT set - hasToken={HasToken} isWsPath={IsWsPath} path={Path}", hasToken, isWsPath, path);
                 // #endregion
             }
+            return Task.CompletedTask;
+        },
+        OnAuthenticationFailed = context =>
+        {
+            // #region agent log
+            var path = context.HttpContext.Request.Path;
+            var queryString = context.Request.QueryString.ToString();
+            Log.Warning("[DEBUG] OnAuthenticationFailed: path={Path} queryString={QueryString} exception={Exception}", 
+                path, queryString, context.Exception?.Message ?? "null");
+            // #endregion
+            return Task.CompletedTask;
+        },
+        OnChallenge = context =>
+        {
+            // #region agent log
+            var path = context.HttpContext.Request.Path;
+            var queryString = context.Request.QueryString.ToString();
+            Log.Warning("[DEBUG] OnChallenge: path={Path} queryString={QueryString}", path, queryString);
+            // #endregion
             return Task.CompletedTask;
         }
     };
