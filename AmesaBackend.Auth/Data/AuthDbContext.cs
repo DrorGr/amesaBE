@@ -41,10 +41,8 @@ namespace AmesaBackend.Auth.Data
                 entity.Property(e => e.VerificationStatus).HasConversion<string>();
                 entity.Property(e => e.AuthProvider).HasConversion<string>();
                 entity.Property(e => e.Gender).HasConversion<string>();
-                // Temporarily ignore DeletedAt property until deleted_at column is added to production database
-                // TODO: Remove this Ignore() and uncomment the HasColumnName() line after executing AddDeletedAtToUsers.sql
-                entity.Ignore(e => e.DeletedAt);
-                // entity.Property(e => e.DeletedAt).HasColumnName("deleted_at");
+                // Map DeletedAt to deleted_at column (nullable, for soft deletes)
+                entity.Property(e => e.DeletedAt).HasColumnName("deleted_at");
             });
 
             // Configure UserAddress entity
