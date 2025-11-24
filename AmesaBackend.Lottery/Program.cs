@@ -84,7 +84,7 @@ builder.Services.AddAuthentication(options =>
         ClockSkew = TimeSpan.Zero
     };
 
-    // Extract JWT token from query string for SignalR WebSocket connections
+    // Extract JWT token from query string for SignalR WebSocket connections and HTTP negotiate requests
     options.Events = new JwtBearerEvents
     {
         OnMessageReceived = context =>
@@ -113,6 +113,16 @@ builder.Services.AddAuthentication(options =>
                 Log.Warning("[DEBUG] OnMessageReceived: token NOT set - hasToken={HasToken} isWsPath={IsWsPath} path={Path}", hasToken, isWsPath, path);
                 // #endregion
             }
+            return Task.CompletedTask;
+        },
+        OnTokenValidated = context =>
+        {
+            // #region agent log
+            var path = context.HttpContext.Request.Path;
+            var queryString = context.HttpContext.Request.QueryString.ToString();
+            var hasToken = !string.IsNullOrEmpty(context.Token);
+            Log.Information("[DEBUG] OnTokenValidated: path={Path} hasToken={HasToken} queryString={QueryString}", path, hasToken, queryString);
+            // #endregion
             return Task.CompletedTask;
         },
         OnAuthenticationFailed = context =>
@@ -167,6 +177,36 @@ if (builder.Configuration.GetValue<bool>("XRay:Enabled", false))
 app.UseAmesaMiddleware();
 app.UseAmesaLogging();
 app.UseRouting();
+
+// Extract JWT token from query string for SignalR HTTP requests (negotiate endpoint)
+app.Use(async (context, next) =>
+{
+    // #region agent log
+    var path = context.Request.Path;
+    var isWsPath = path.StartsWithSegments("/ws");
+    var accessToken = context.Request.Query["access_token"].ToString();
+    var hasToken = !string.IsNullOrEmpty(accessToken);
+    var hasAuthHeader = context.Request.Headers.ContainsKey("Authorization");
+    // #endregion
+    
+    if (isWsPath && hasToken && !hasAuthHeader)
+    {
+        // #region agent log
+        Log.Information("[DEBUG] SignalRTokenExtractor: path={Path} extracting token from query string, tokenLength={TokenLength}", path, accessToken.Length);
+        // #endregion
+        // Add token to Authorization header for JWT middleware
+        context.Request.Headers["Authorization"] = $"Bearer {accessToken}";
+    }
+    else
+    {
+        // #region agent log
+        Log.Information("[DEBUG] SignalRTokenExtractor: path={Path} isWsPath={IsWsPath} hasToken={HasToken} hasAuthHeader={HasAuthHeader}", path, isWsPath, hasToken, hasAuthHeader);
+        // #endregion
+    }
+    
+    await next();
+});
+
 app.UseAuthentication();
 app.UseAuthorization();
 
