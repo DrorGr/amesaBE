@@ -18,11 +18,10 @@ namespace AmesaBackend.Shared.Rest
             new(statusCode, true, string.Empty, value);
 
         /// <summary>
-        /// Creates a failure result.
+        /// Creates an empty result.
         /// </summary>
-        /// <param name="message">The error message.</param>
-        /// <param name="statusCode">The HTTP status code. Defaults to BadRequest (400).</param>
-        /// <returns>A new instance of <see cref="HttpResult{T}"/> representing a failed operation.</returns>
+        /// <param name="statusCode">The HTTP status code. Defaults to NoContent (204).</param>
+        /// <returns>A new instance of <see cref="HttpResult{T}"/> representing an empty operation.</returns>
         public static HttpResult<T> Empty(HttpStatusCode statusCode = HttpStatusCode.NoContent) =>
             new(statusCode, false, string.Empty, default);
 

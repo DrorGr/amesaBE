@@ -633,8 +633,8 @@ namespace AmesaBackend.Auth.Services
 
                 var response = new AuthResponse
                 {
-                    AccessToken = tokens.AccessToken,
-                    RefreshToken = tokens.RefreshToken,
+                    AccessToken = tokens.AccessToken!,
+                    RefreshToken = tokens.RefreshToken!,
                     ExpiresAt = tokens.ExpiresAt,
                     User = MapToUserDto(user)
                 };
