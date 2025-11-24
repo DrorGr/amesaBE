@@ -20,6 +20,7 @@ using System.Linq;
 using Amazon.SecretsManager;
 using Amazon.SecretsManager.Model;
 using Amazon.EventBridge;
+using Amazon.Rekognition;
 using System.Text.Json;
 using Microsoft.AspNetCore.HttpOverrides;
 
@@ -154,12 +155,12 @@ builder.Services.AddDbContext<AuthDbContext>(options =>
 // Load OAuth credentials from AWS Secrets Manager (only in Production)
 if (builder.Environment.IsProduction())
 {
-    var awsRegion = builder.Configuration["Aws:Region"] ?? Environment.GetEnvironmentVariable("AWS_REGION") ?? "eu-north-1";
+    var oauthAwsRegion = builder.Configuration["Aws:Region"] ?? Environment.GetEnvironmentVariable("AWS_REGION") ?? "eu-north-1";
     var googleSecretId = builder.Configuration["Authentication:Google:SecretId"] ?? "amesa-google_people_API";
     
     try
     {
-        var client = new AmazonSecretsManagerClient(Amazon.RegionEndpoint.GetBySystemName(awsRegion));
+        var client = new AmazonSecretsManagerClient(Amazon.RegionEndpoint.GetBySystemName(oauthAwsRegion));
         var request = new GetSecretValueRequest
         {
             SecretId = googleSecretId
@@ -580,11 +581,22 @@ builder.Services.AddCors(options =>
 // Add Shared Library Services
 builder.Services.AddAmesaBackendShared(builder.Configuration);
 
+// Add AWS Services
+var awsRegion = builder.Configuration["Aws:Region"] ?? Environment.GetEnvironmentVariable("AWS_REGION") ?? "eu-north-1";
+builder.Services.AddSingleton<IAmazonRekognition>(sp =>
+{
+    var region = Amazon.RegionEndpoint.GetBySystemName(awsRegion);
+    return new AmazonRekognitionClient(region);
+});
+
 // Add Application Services
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IAdminAuthService, AdminAuthService>();
 builder.Services.AddScoped<IUserPreferencesService, UserPreferencesService>();
+builder.Services.AddScoped<IConfigurationService, ConfigurationService>();
+builder.Services.AddScoped<AwsRekognitionService>();
+builder.Services.AddScoped<IIdentityVerificationService, IdentityVerificationService>();
 builder.Services.AddHttpContextAccessor();
 
 // Add Memory Cache
