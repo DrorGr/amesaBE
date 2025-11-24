@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 
 namespace AmesaBackend.Auth.Services
 {
-    public class AwsRekognitionService
+    public class AwsRekognitionService : IAwsRekognitionService
     {
         private readonly IAmazonRekognition _rekognitionClient;
         private readonly ILogger<AwsRekognitionService> _logger;

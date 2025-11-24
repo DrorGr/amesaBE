@@ -34,7 +34,7 @@ namespace AmesaBackend.Auth.Controllers
                 var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (userIdClaim == null || !Guid.TryParse(userIdClaim, out var userId))
                 {
-                    return Unauthorized(new ApiResponse<IdentityVerificationResult>
+                    return new UnauthorizedObjectResult(new ApiResponse<IdentityVerificationResult>
                     {
                         Success = false,
                         Message = "User not authenticated"
@@ -85,7 +85,7 @@ namespace AmesaBackend.Auth.Controllers
                 var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (userIdClaim == null || !Guid.TryParse(userIdClaim, out var userId))
                 {
-                    return Unauthorized(new ApiResponse<IdentityVerificationStatusDto>
+                    return new UnauthorizedObjectResult(new ApiResponse<IdentityVerificationStatusDto>
                     {
                         Success = false,
                         Message = "User not authenticated"
@@ -123,7 +123,7 @@ namespace AmesaBackend.Auth.Controllers
                 var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (userIdClaim == null || !Guid.TryParse(userIdClaim, out var userId))
                 {
-                    return Unauthorized(new ApiResponse<IdentityVerificationResult>
+                    return new UnauthorizedObjectResult(new ApiResponse<IdentityVerificationResult>
                     {
                         Success = false,
                         Message = "User not authenticated"

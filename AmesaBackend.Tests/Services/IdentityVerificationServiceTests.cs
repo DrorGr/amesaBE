@@ -22,7 +22,7 @@ namespace AmesaBackend.Tests.Services
 {
     public class IdentityVerificationServiceTests
     {
-        private readonly Mock<AwsRekognitionService> _mockRekognitionService;
+        private readonly Mock<IAwsRekognitionService> _mockRekognitionService;
         private readonly Mock<ILogger<IdentityVerificationService>> _mockLogger;
         private readonly AuthDbContext _context;
         private readonly IdentityVerificationService _service;
@@ -35,11 +35,7 @@ namespace AmesaBackend.Tests.Services
                 .Options;
             _context = new AuthDbContext(options);
 
-            var mockRekognitionClient = new Mock<IAmazonRekognition>();
-            var mockRekognitionLogger = new Mock<ILogger<AwsRekognitionService>>();
-            _mockRekognitionService = new Mock<AwsRekognitionService>(
-                mockRekognitionClient.Object,
-                mockRekognitionLogger.Object);
+            _mockRekognitionService = new Mock<IAwsRekognitionService>();
             
             _mockLogger = new Mock<ILogger<IdentityVerificationService>>();
 

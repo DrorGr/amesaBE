@@ -10,14 +10,14 @@ namespace AmesaBackend.Auth.Services
     public class IdentityVerificationService : IIdentityVerificationService
     {
         private readonly AuthDbContext _context;
-        private readonly AwsRekognitionService _rekognitionService;
+        private readonly IAwsRekognitionService _rekognitionService;
         private readonly ILogger<IdentityVerificationService> _logger;
         private const decimal MIN_LIVENESS_SCORE = 80.0m;
         private const decimal MIN_FACE_MATCH_SCORE = 90.0m;
 
         public IdentityVerificationService(
             AuthDbContext context,
-            AwsRekognitionService rekognitionService,
+            IAwsRekognitionService rekognitionService,
             ILogger<IdentityVerificationService> logger)
         {
             _context = context;
