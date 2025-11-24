@@ -144,7 +144,7 @@ namespace AmesaBackend.Auth.Controllers
                     {
                         Id = Guid.NewGuid(),
                         UserId = userId.Value,
-                        PreferencesJson = JsonSerializer.Serialize(request.Preferences),
+                        PreferencesJson = request.Preferences.GetRawText(),
                         Version = request.Version ?? "1.0.0",
                         CreatedAt = DateTime.UtcNow,
                         UpdatedAt = DateTime.UtcNow,
@@ -180,7 +180,7 @@ namespace AmesaBackend.Auth.Controllers
                 else
                 {
                     // Update existing preferences
-                    existingPreferences.PreferencesJson = JsonSerializer.Serialize(request.Preferences);
+                    existingPreferences.PreferencesJson = request.Preferences.GetRawText();
                     existingPreferences.Version = request.Version ?? existingPreferences.Version;
                     existingPreferences.UpdatedAt = DateTime.UtcNow;
                     existingPreferences.UpdatedBy = userId.ToString()!;
