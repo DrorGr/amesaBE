@@ -214,8 +214,8 @@ namespace AmesaBackend.Tests.Services
 
             var request = new VerifyIdentityRequest
             {
-                IdFrontImage = Convert.ToBase64String(new byte[] { 1, 2, 3 }),
-                SelfieImage = Convert.ToBase64String(new byte[] { 4, 5, 6 }),
+                IdFrontImage = Convert.ToBase64String(new byte[] { 1, 2, 3, 4 }), // Different length for ID
+                SelfieImage = Convert.ToBase64String(new byte[] { 4, 5, 6 }), // Length 3 for selfie
                 DocumentType = "passport"
             };
 

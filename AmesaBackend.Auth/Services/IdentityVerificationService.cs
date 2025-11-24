@@ -56,7 +56,7 @@ namespace AmesaBackend.Auth.Services
 
                 // Step 2: Detect faces in ID document
                 var idFacesResponse = await _rekognitionService.DetectFacesAsync(idFrontBytes);
-                if (idFacesResponse.FaceDetails == null || idFacesResponse.FaceDetails.Count == 0)
+                if (idFacesResponse?.FaceDetails == null || idFacesResponse.FaceDetails.Count == 0)
                 {
                     return new IdentityVerificationResult
                     {
@@ -71,7 +71,7 @@ namespace AmesaBackend.Auth.Services
 
                 // Step 3: Compare faces (ID photo vs selfie)
                 var compareResponse = await _rekognitionService.CompareFacesAsync(idFrontBytes, selfieBytes);
-                var faceMatchScore = (decimal)(compareResponse.FaceMatches?.FirstOrDefault()?.Similarity ?? 0);
+                var faceMatchScore = (decimal)(compareResponse?.FaceMatches?.FirstOrDefault()?.Similarity ?? 0);
 
                 // Step 4: Extract text from ID (optional, for document number validation)
                 var textResponse = await _rekognitionService.DetectTextAsync(idFrontBytes);
@@ -125,6 +125,8 @@ namespace AmesaBackend.Auth.Services
                 else
                 {
                     document.ValidationKey = validationKey;
+                    document.DocumentType = request.DocumentType; // Update document type
+                    document.DocumentNumber = request.DocumentNumber ?? document.DocumentNumber ?? extractedText;
                     document.LivenessScore = livenessScore;
                     document.FaceMatchScore = (decimal)faceMatchScore;
                     document.VerificationMetadata = JsonSerializer.Serialize(metadata);

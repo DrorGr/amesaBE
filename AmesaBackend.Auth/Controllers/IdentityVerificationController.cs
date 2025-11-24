@@ -8,7 +8,6 @@ namespace AmesaBackend.Auth.Controllers
 {
     [ApiController]
     [Route("api/v1/auth/identity")]
-    [Authorize]
     public class IdentityVerificationController : ControllerBase
     {
         private readonly IIdentityVerificationService _verificationService;
@@ -31,7 +30,7 @@ namespace AmesaBackend.Auth.Controllers
         {
             try
             {
-                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                var userIdClaim = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (userIdClaim == null || !Guid.TryParse(userIdClaim, out var userId))
                 {
                     return new UnauthorizedObjectResult(new ApiResponse<IdentityVerificationResult>
@@ -82,7 +81,7 @@ namespace AmesaBackend.Auth.Controllers
         {
             try
             {
-                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                var userIdClaim = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (userIdClaim == null || !Guid.TryParse(userIdClaim, out var userId))
                 {
                     return new UnauthorizedObjectResult(new ApiResponse<IdentityVerificationStatusDto>
@@ -120,7 +119,7 @@ namespace AmesaBackend.Auth.Controllers
         {
             try
             {
-                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                var userIdClaim = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (userIdClaim == null || !Guid.TryParse(userIdClaim, out var userId))
                 {
                     return new UnauthorizedObjectResult(new ApiResponse<IdentityVerificationResult>
