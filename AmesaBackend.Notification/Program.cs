@@ -173,20 +173,37 @@ app.Use(async (context, next) =>
 {
     // #region agent log
     var path = context.Request.Path;
+    var method = context.Request.Method;
     var isWsPath = path.StartsWithSegments("/ws");
     var accessToken = context.Request.Query["access_token"].ToString();
     var hasToken = !string.IsNullOrEmpty(accessToken);
-    var hasAuthHeader = context.Request.Headers.ContainsKey("Authorization");
-    Log.Information("[DEBUG] SignalRTokenExtractor: path={Path} isWsPath={IsWsPath} hasToken={HasToken} hasAuthHeader={HasAuthHeader}", path, isWsPath, hasToken, hasAuthHeader);
+    var existingAuthHeader = context.Request.Headers["Authorization"].ToString();
+    var hasAuthHeader = !string.IsNullOrEmpty(existingAuthHeader);
     // #endregion
     
-    if (isWsPath && hasToken && !hasAuthHeader)
+    // For SignalR negotiate requests, extract token from query string if not in header
+    if (isWsPath && hasToken)
+    {
+        if (!hasAuthHeader)
+        {
+            // #region agent log
+            Log.Information("[DEBUG] SignalRTokenExtractor: path={Path} method={Method} extracting token from query string, tokenLength={TokenLength}", path, method, accessToken.Length);
+            // #endregion
+            // Add token to Authorization header for JWT middleware
+            context.Request.Headers["Authorization"] = $"Bearer {accessToken}";
+        }
+        else
+        {
+            // #region agent log
+            Log.Information("[DEBUG] SignalRTokenExtractor: path={Path} method={Method} token already in header, existingHeader={ExistingHeader}", path, method, existingAuthHeader);
+            // #endregion
+        }
+    }
+    else
     {
         // #region agent log
-        Log.Information("[DEBUG] SignalRTokenExtractor: extracting token from query string, tokenLength={TokenLength}", accessToken.Length);
+        Log.Information("[DEBUG] SignalRTokenExtractor: path={Path} method={Method} isWsPath={IsWsPath} hasToken={HasToken} hasAuthHeader={HasAuthHeader}", path, method, isWsPath, hasToken, hasAuthHeader);
         // #endregion
-        // Add token to Authorization header for JWT middleware
-        context.Request.Headers["Authorization"] = $"Bearer {accessToken}";
     }
     
     await next();
