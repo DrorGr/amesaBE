@@ -54,36 +54,40 @@ builder.Services.AddDbContext<NotificationDbContext>(options =>
 
 builder.Services.AddAmesaBackendShared(builder.Configuration);
 
-// Configure JWT Authentication
+// Configure JWT Authentication (required for SignalR [Authorize] attribute)
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var secretKey = jwtSettings["SecretKey"] 
     ?? Environment.GetEnvironmentVariable("JwtSettings__SecretKey");
 
-if (string.IsNullOrWhiteSpace(secretKey))
+if (!string.IsNullOrWhiteSpace(secretKey))
 {
-    throw new InvalidOperationException("JWT SecretKey is not configured. Set JwtSettings__SecretKey environment variable or configure JwtSettings:SecretKey in appsettings.");
-}
-
-builder.Services.AddAuthentication(options =>
-{
-    options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
-    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-})
-.AddJwtBearer(options =>
-{
-    options.TokenValidationParameters = new TokenValidationParameters
+    builder.Services.AddAuthentication(options =>
     {
-        ValidateIssuer = true,
-        ValidateAudience = true,
-        ValidateLifetime = true,
-        ValidateIssuerSigningKey = true,
-        ValidIssuer = jwtSettings["Issuer"] ?? "AmesaBackend",
-        ValidAudience = jwtSettings["Audience"] ?? "AmesaFrontend",
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey!)),
-        ClockSkew = TimeSpan.Zero
-    };
-});
+        options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    })
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = jwtSettings["Issuer"] ?? "AmesaBackend",
+            ValidAudience = jwtSettings["Audience"] ?? "AmesaFrontend",
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey!)),
+            ClockSkew = TimeSpan.Zero
+        };
+    });
+}
+else
+{
+    // JWT not configured - SignalR will not work with [Authorize] until JWT is configured
+    // This allows the service to start, but SignalR authentication will fail
+    Log.Warning("JWT SecretKey is not configured. SignalR authentication will not work. Set JwtSettings__SecretKey environment variable or configure JwtSettings:SecretKey in appsettings.");
+}
 
 // Add Services
 builder.Services.AddScoped<INotificationService, NotificationService>();
