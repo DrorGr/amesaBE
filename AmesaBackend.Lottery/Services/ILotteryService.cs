@@ -19,5 +19,8 @@ namespace AmesaBackend.Lottery.Services
         // Entry management methods
         Task<List<LotteryTicketDto>> GetUserActiveEntriesAsync(Guid userId);
         Task<UserLotteryStatsDto> GetUserLotteryStatsAsync(Guid userId);
+        
+        // Verification check
+        Task CheckVerificationRequirementAsync(Guid userId);
     }
 }

@@ -250,6 +250,9 @@ namespace AmesaBackend.Lottery.Controllers
                     });
                 }
 
+                // Check ID verification requirement
+                await _lotteryService.CheckVerificationRequirementAsync(userId);
+
                 // This would integrate with payment service
                 // Fixed: Response structure matches API contract
                 var response = new QuickEntryResponse
@@ -266,6 +269,16 @@ namespace AmesaBackend.Lottery.Controllers
                     Success = true,
                     Data = response,
                     Message = "Quick entry initiated"
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                _logger.LogWarning(ex, "Verification check failed for quick entry");
+                return Unauthorized(new ApiResponse<QuickEntryResponse>
+                {
+                    Success = false,
+                    Message = ex.Message,
+                    Error = new ErrorResponse { Code = "ID_VERIFICATION_REQUIRED", Message = ex.Message }
                 });
             }
             catch (Exception ex)

@@ -4,6 +4,8 @@ using AmesaBackend.Lottery.DTOs;
 using AmesaBackend.Lottery.Models;
 using AmesaBackend.Shared.Events;
 using AmesaBackend.Auth.Services;
+using ConfigService = AmesaBackend.Shared.Configuration.IConfigurationService;
+using System.Data.Common;
 
 namespace AmesaBackend.Lottery.Services
 {
@@ -13,17 +15,74 @@ namespace AmesaBackend.Lottery.Services
         private readonly IEventPublisher _eventPublisher;
         private readonly ILogger<LotteryService> _logger;
         private readonly IUserPreferencesService? _userPreferencesService;
+        private readonly ConfigService? _configurationService;
 
         public LotteryService(
             LotteryDbContext context, 
             IEventPublisher eventPublisher, 
             ILogger<LotteryService> logger,
-            IUserPreferencesService? userPreferencesService = null)
+            IUserPreferencesService? userPreferencesService = null,
+            ConfigService? configurationService = null)
         {
             _context = context;
             _eventPublisher = eventPublisher;
             _logger = logger;
             _userPreferencesService = userPreferencesService;
+            _configurationService = configurationService;
+        }
+
+        /// <summary>
+        /// Check if user verification is required and if user is verified
+        /// </summary>
+        public async Task CheckVerificationRequirementAsync(Guid userId)
+        {
+            if (_configurationService == null)
+            {
+                return; // Configuration service not available, skip check
+            }
+
+            var isRequired = await _configurationService.IsFeatureEnabledAsync("id_verification_required");
+            if (!isRequired)
+            {
+                return; // Verification not required
+            }
+
+            // Check user verification status from amesa_auth.users table using raw SQL
+            var connection = _context.Database.GetDbConnection();
+            var wasOpen = connection.State == System.Data.ConnectionState.Open;
+            if (!wasOpen)
+            {
+                await connection.OpenAsync();
+            }
+            
+            try
+            {
+                using var command = connection.CreateCommand();
+                var param = command.CreateParameter();
+                param.ParameterName = "@userId";
+                param.Value = userId;
+                command.Parameters.Add(param);
+                command.CommandText = @"
+                    SELECT verification_status 
+                    FROM amesa_auth.users 
+                    WHERE id = @userId AND deleted_at IS NULL 
+                    LIMIT 1";
+                
+                var result = await command.ExecuteScalarAsync();
+                var verificationStatus = result?.ToString();
+                
+                if (verificationStatus != "IdentityVerified")
+                {
+                    throw new UnauthorizedAccessException("ID_VERIFICATION_REQUIRED: Identity verification required to purchase lottery tickets");
+                }
+            }
+            finally
+            {
+                if (!wasOpen)
+                {
+                    await connection.CloseAsync();
+                }
+            }
         }
 
         public async Task<List<LotteryTicketDto>> GetUserTicketsAsync(Guid userId)

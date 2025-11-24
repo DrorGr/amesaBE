@@ -143,6 +143,7 @@ builder.Services.AddAuthentication(options =>
 // and register: builder.Services.AddScoped<IUserPreferencesService, UserPreferencesService>();
 builder.Services.AddScoped<ILotteryService, LotteryService>();
 builder.Services.AddScoped<IFileService, FileService>();
+builder.Services.AddScoped<AmesaBackend.Shared.Configuration.IConfigurationService, AmesaBackend.Lottery.Services.ConfigurationService>();
 
 // Add Background Service for lottery draws
 builder.Services.AddHostedService<LotteryDrawService>();

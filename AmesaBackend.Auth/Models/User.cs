@@ -176,11 +176,32 @@ namespace AmesaBackend.Auth.Models
         [MaxLength(100)]
         public string DocumentNumber { get; set; } = string.Empty;
 
+        // Image URLs - deprecated, images not stored (processed in-memory only)
         public string? FrontImageUrl { get; set; }
 
         public string? BackImageUrl { get; set; }
 
         public string? SelfieImageUrl { get; set; }
+
+        // Verification metadata
+        [Required]
+        public Guid ValidationKey { get; set; } = Guid.NewGuid();
+
+        [Column(TypeName = "decimal(5,2)")]
+        public decimal? LivenessScore { get; set; }
+
+        [Column(TypeName = "decimal(5,2)")]
+        public decimal? FaceMatchScore { get; set; }
+
+        [MaxLength(50)]
+        public string VerificationProvider { get; set; } = "aws_rekognition";
+
+        [Column(TypeName = "jsonb")]
+        public string? VerificationMetadata { get; set; }
+
+        public int VerificationAttempts { get; set; } = 0;
+
+        public DateTime? LastVerificationAttempt { get; set; }
 
         [MaxLength(20)]
         public string VerificationStatus { get; set; } = "pending";

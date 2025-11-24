@@ -17,7 +17,6 @@ namespace AmesaBackend.Auth.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasDefaultSchema("amesa_auth")
                 .HasAnnotation("ProductVersion", "8.0.0")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
@@ -145,7 +144,7 @@ namespace AmesaBackend.Auth.Migrations
                     b.HasIndex("Username")
                         .IsUnique();
 
-                    b.ToTable("users", "amesa_auth");
+                    b.ToTable("users");
                 });
 
             modelBuilder.Entity("AmesaBackend.Auth.Models.UserActivityLog", b =>
@@ -200,7 +199,7 @@ namespace AmesaBackend.Auth.Migrations
 
                     b.HasIndex("UserSessionId");
 
-                    b.ToTable("user_activity_logs", "amesa_auth");
+                    b.ToTable("user_activity_logs");
                 });
 
             modelBuilder.Entity("AmesaBackend.Auth.Models.UserAddress", b =>
@@ -255,7 +254,7 @@ namespace AmesaBackend.Auth.Migrations
 
                     b.HasIndex("UserId1");
 
-                    b.ToTable("user_addresses", "amesa_auth");
+                    b.ToTable("user_addresses");
                 });
 
             modelBuilder.Entity("AmesaBackend.Auth.Models.UserIdentityDocument", b =>
@@ -315,7 +314,7 @@ namespace AmesaBackend.Auth.Migrations
 
                     b.HasIndex("UserId1");
 
-                    b.ToTable("user_identity_documents", "amesa_auth");
+                    b.ToTable("user_identity_documents");
                 });
 
             modelBuilder.Entity("AmesaBackend.Auth.Models.UserPhone", b =>
@@ -360,7 +359,269 @@ namespace AmesaBackend.Auth.Migrations
 
                     b.HasIndex("UserId1");
 
-                    b.ToTable("user_phones", "amesa_auth");
+                    b.ToTable("user_phones");
+                });
+
+            modelBuilder.Entity("AmesaBackend.Auth.Models.UserPreferenceHistory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("category");
+
+                    b.Property<string>("ChangeReason")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("change_reason");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(36)
+                        .HasColumnType("character varying(36)")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasMaxLength(36)
+                        .HasColumnType("character varying(36)")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<string>("IpAddress")
+                        .HasMaxLength(45)
+                        .HasColumnType("character varying(45)")
+                        .HasColumnName("ip_address");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("NewValue")
+                        .HasColumnType("text")
+                        .HasColumnName("new_value");
+
+                    b.Property<string>("OldValue")
+                        .HasColumnType("text")
+                        .HasColumnName("old_value");
+
+                    b.Property<string>("PropertyName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("property_name");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(36)
+                        .HasColumnType("character varying(36)")
+                        .HasColumnName("updated_by");
+
+                    b.Property<string>("UserAgent")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("user_agent");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<Guid>("UserPreferencesId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_preferences_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("UserPreferencesId");
+
+                    b.ToTable("user_preference_history", "amesa_auth");
+                });
+
+            modelBuilder.Entity("AmesaBackend.Auth.Models.UserPreferenceSyncLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ClientVersion")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("client_version");
+
+                    b.Property<string>("ConflictResolution")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("conflict_resolution");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(36)
+                        .HasColumnType("character varying(36)")
+                        .HasColumnName("created_by");
+
+                    b.Property<long>("DataSizeBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("data_size_bytes");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasMaxLength(36)
+                        .HasColumnType("character varying(36)")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasColumnType("text")
+                        .HasColumnName("error_message");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<int>("PreferencesCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("preferences_count");
+
+                    b.Property<string>("ServerVersion")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("server_version");
+
+                    b.Property<int?>("SyncDurationMs")
+                        .HasColumnType("integer")
+                        .HasColumnName("sync_duration_ms");
+
+                    b.Property<string>("SyncStatus")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("sync_status");
+
+                    b.Property<string>("SyncType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("sync_type");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(36)
+                        .HasColumnType("character varying(36)")
+                        .HasColumnName("updated_by");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<Guid>("UserPreferencesId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_preferences_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("UserPreferencesId");
+
+                    b.ToTable("user_preference_sync_log", "amesa_auth");
+                });
+
+            modelBuilder.Entity("AmesaBackend.Auth.Models.UserPreferences", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(36)
+                        .HasColumnType("character varying(36)")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasMaxLength(36)
+                        .HasColumnType("character varying(36)")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<DateTime?>("LastSyncAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_sync_at");
+
+                    b.Property<string>("PreferencesHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("preferences_hash");
+
+                    b.Property<string>("PreferencesJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("preferences_json");
+
+                    b.Property<bool>("SyncEnabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("sync_enabled");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(36)
+                        .HasColumnType("character varying(36)")
+                        .HasColumnName("updated_by");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<string>("Version")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId")
+                        .IsUnique();
+
+                    b.ToTable("user_preferences", "amesa_auth");
                 });
 
             modelBuilder.Entity("AmesaBackend.Auth.Models.UserSession", b =>
@@ -424,7 +685,7 @@ namespace AmesaBackend.Auth.Migrations
 
                     b.HasIndex("UserId1");
 
-                    b.ToTable("user_sessions", "amesa_auth");
+                    b.ToTable("user_sessions");
                 });
 
             modelBuilder.Entity("AmesaBackend.Auth.Models.UserActivityLog", b =>
@@ -495,6 +756,55 @@ namespace AmesaBackend.Auth.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("AmesaBackend.Auth.Models.UserPreferenceHistory", b =>
+                {
+                    b.HasOne("AmesaBackend.Auth.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("AmesaBackend.Auth.Models.UserPreferences", "UserPreferences")
+                        .WithMany("History")
+                        .HasForeignKey("UserPreferencesId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+
+                    b.Navigation("UserPreferences");
+                });
+
+            modelBuilder.Entity("AmesaBackend.Auth.Models.UserPreferenceSyncLog", b =>
+                {
+                    b.HasOne("AmesaBackend.Auth.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("AmesaBackend.Auth.Models.UserPreferences", "UserPreferences")
+                        .WithMany()
+                        .HasForeignKey("UserPreferencesId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+
+                    b.Navigation("UserPreferences");
+                });
+
+            modelBuilder.Entity("AmesaBackend.Auth.Models.UserPreferences", b =>
+                {
+                    b.HasOne("AmesaBackend.Auth.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("AmesaBackend.Auth.Models.UserSession", b =>
                 {
                     b.HasOne("AmesaBackend.Auth.Models.User", "User")
@@ -519,6 +829,11 @@ namespace AmesaBackend.Auth.Migrations
                     b.Navigation("Phones");
 
                     b.Navigation("Sessions");
+                });
+
+            modelBuilder.Entity("AmesaBackend.Auth.Models.UserPreferences", b =>
+                {
+                    b.Navigation("History");
                 });
 
             modelBuilder.Entity("AmesaBackend.Auth.Models.UserSession", b =>
