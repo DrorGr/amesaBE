@@ -94,7 +94,14 @@ namespace AmesaBackend.Auth.Data
                 entity.HasIndex(e => e.UserId).IsUnique();
                 entity.Property(e => e.PreferencesJson).IsRequired().HasColumnType("jsonb");
                 entity.Property(e => e.Version).IsRequired().HasMaxLength(20);
-                entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId);
+                // Configure foreign key without requiring User entity to be loaded
+                // This prevents EF Core from querying User table during SaveChangesAsync validation
+                entity.HasOne(e => e.User)
+                    .WithMany()
+                    .HasForeignKey(e => e.UserId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                // Explicitly tell EF Core not to include User in queries unless explicitly requested
+                entity.Navigation(e => e.User).AutoInclude(false);
             });
 
             // Configure UserPreferenceHistory entity

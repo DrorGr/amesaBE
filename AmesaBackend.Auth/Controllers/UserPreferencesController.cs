@@ -45,9 +45,17 @@ namespace AmesaBackend.Auth.Controllers
                     });
                 }
 
+                // #region agent log
+                _logger.LogInformation("[DEBUG] GetUserPreferences:before-query userId={UserId}", userId);
+                // #endregion
+                
                 var userPreferences = await _context.UserPreferences
                     .AsNoTracking()
                     .FirstOrDefaultAsync(up => up.UserId == userId);
+                
+                // #region agent log
+                _logger.LogInformation("[DEBUG] GetUserPreferences:after-query found={Found}", userPreferences != null);
+                // #endregion
 
                 if (userPreferences == null)
                 {

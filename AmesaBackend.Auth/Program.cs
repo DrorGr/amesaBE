@@ -134,6 +134,21 @@ builder.Services.AddDbContext<AuthDbContext>(options =>
         options.EnableSensitiveDataLogging();
         options.EnableDetailedErrors();
     }
+    
+    // #region agent log - Enable SQL logging to diagnose deleted_at column error
+    // Log all EF Core SQL queries to diagnose the deleted_at column error
+    options.LogTo((message) => {
+        // Log all SQL queries and commands
+        if (message.Contains("Executing") || message.Contains("Executed") || message.Contains("Failed"))
+        {
+            Log.Information("[SQL DEBUG] {Message}", message);
+        }
+    }, new[] { 
+        Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.CommandExecuting,
+        Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.CommandExecuted,
+        Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.CommandError
+    });
+    // #endregion
 });
 
 // Load OAuth credentials from AWS Secrets Manager (only in Production)
