@@ -26,10 +26,13 @@
     <PackageReference Include="Bogus" Version="35.6.0" />
     <PackageReference Include="AutoFixture" Version="4.18.1" />
     <PackageReference Include="AutoFixture.Xunit2" Version="4.18.1" />
+    <PackageReference Include="AWSSDK.Rekognition" Version="3.7.400" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\AmesaBackend\AmesaBackend.csproj" />
+    <ProjectReference Include="..\AmesaBackend.Auth\AmesaBackend.Auth.csproj" />
+    <ProjectReference Include="..\AmesaBackend.Shared\AmesaBackend.Shared.csproj" />
   </ItemGroup>
 
   <ItemGroup>
