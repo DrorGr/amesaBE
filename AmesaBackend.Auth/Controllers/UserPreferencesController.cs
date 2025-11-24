@@ -32,23 +32,11 @@ namespace AmesaBackend.Auth.Controllers
         [HttpGet]
         public async Task<ActionResult<ApiResponse<UserPreferencesDto>>> GetPreferences()
         {
-            // #region agent log
-            _logger.LogDebug("[DEBUG] GetPreferences:entry");
-            // #endregion
             try
             {
-                // #region agent log
-                _logger.LogDebug("[DEBUG] GetPreferences:before-GetCurrentUserId");
-                // #endregion
                 var userId = GetCurrentUserId();
-                // #region agent log
-                _logger.LogDebug("[DEBUG] GetPreferences:after-GetCurrentUserId userId={UserId} hasUserId={HasUserId}", userId, userId != null);
-                // #endregion
                 if (userId == null)
                 {
-                    // #region agent log
-                    _logger.LogWarning("[DEBUG] GetPreferences:userId-null returning Unauthorized");
-                    // #endregion
                     return Unauthorized(new ApiResponse<UserPreferencesDto>
                     {
                         Success = false,
@@ -56,17 +44,9 @@ namespace AmesaBackend.Auth.Controllers
                     });
                 }
 
-                // #region agent log
-                _logger.LogDebug("[DEBUG] GetPreferences:before-db-query userId={UserId}", userId);
-                var canConnect = await _context.Database.CanConnectAsync();
-                _logger.LogDebug("[DEBUG] GetPreferences:db-connection canConnect={CanConnect}", canConnect);
-                // #endregion
                 var userPreferences = await _context.UserPreferences
                     .AsNoTracking()
                     .FirstOrDefaultAsync(up => up.UserId == userId);
-                // #region agent log
-                _logger.LogDebug("[DEBUG] GetPreferences:after-db-query hasPreferences={HasPreferences}", userPreferences != null);
-                // #endregion
 
                 if (userPreferences == null)
                 {
@@ -89,15 +69,10 @@ namespace AmesaBackend.Auth.Controllers
             }
             catch (Exception ex)
             {
-                // #region agent log
-                _logger.LogError(ex, "[DEBUG] GetPreferences:catch exType={ExType} exMessage={ExMessage} innerExType={InnerExType} innerExMessage={InnerExMessage} stackTrace={StackTrace}",
+                _logger.LogError(ex, "Error retrieving user preferences. Exception: {ExceptionType}, Message: {Message}, InnerException: {InnerException}",
                     ex.GetType().Name,
                     ex.Message,
-                    ex.InnerException?.GetType().Name ?? "null",
-                    ex.InnerException?.Message ?? "null",
-                    ex.StackTrace);
-                // #endregion
-                _logger.LogError(ex, "Error retrieving user preferences");
+                    ex.InnerException?.ToString() ?? "None");
                 return StatusCode(500, new ApiResponse<UserPreferencesDto>
                 {
                     Success = false,
@@ -119,25 +94,11 @@ namespace AmesaBackend.Auth.Controllers
         [HttpPost]
         public async Task<ActionResult<ApiResponse<UserPreferencesDto>>> UpdatePreferences([FromBody] UpdateUserPreferencesRequest request)
         {
-            // #region agent log
-            _logger.LogDebug("[DEBUG] UpdatePreferences:entry hasRequest={HasRequest} hasPreferences={HasPreferences}",
-                request != null,
-                request?.Preferences.ToString() ?? "null");
-            // #endregion
             try
             {
-                // #region agent log
-                _logger.LogDebug("[DEBUG] UpdatePreferences:before-GetCurrentUserId");
-                // #endregion
                 var userId = GetCurrentUserId();
-                // #region agent log
-                _logger.LogDebug("[DEBUG] UpdatePreferences:after-GetCurrentUserId userId={UserId} hasUserId={HasUserId}", userId, userId != null);
-                // #endregion
                 if (userId == null)
                 {
-                    // #region agent log
-                    _logger.LogWarning("[DEBUG] UpdatePreferences:userId-null returning Unauthorized");
-                    // #endregion
                     return Unauthorized(new ApiResponse<UserPreferencesDto>
                     {
                         Success = false,
@@ -145,16 +106,8 @@ namespace AmesaBackend.Auth.Controllers
                     });
                 }
 
-                // #region agent log
-                _logger.LogDebug("[DEBUG] UpdatePreferences:before-db-query userId={UserId}", userId);
-                var canConnect = await _context.Database.CanConnectAsync();
-                _logger.LogDebug("[DEBUG] UpdatePreferences:db-connection canConnect={CanConnect}", canConnect);
-                // #endregion
                 var existingPreferences = await _context.UserPreferences
                     .FirstOrDefaultAsync(up => up.UserId == userId);
-                // #region agent log
-                _logger.LogDebug("[DEBUG] UpdatePreferences:after-db-query hasPreferences={HasPreferences}", existingPreferences != null);
-                // #endregion
 
                 if (existingPreferences == null)
                 {
@@ -205,15 +158,10 @@ namespace AmesaBackend.Auth.Controllers
             }
             catch (Exception ex)
             {
-                // #region agent log
-                _logger.LogError(ex, "[DEBUG] UpdatePreferences:catch exType={ExType} exMessage={ExMessage} innerExType={InnerExType} innerExMessage={InnerExMessage} stackTrace={StackTrace}",
+                _logger.LogError(ex, "Error updating user preferences. Exception: {ExceptionType}, Message: {Message}, InnerException: {InnerException}",
                     ex.GetType().Name,
                     ex.Message,
-                    ex.InnerException?.GetType().Name ?? "null",
-                    ex.InnerException?.Message ?? "null",
-                    ex.StackTrace);
-                // #endregion
-                _logger.LogError(ex, "Error updating user preferences");
+                    ex.InnerException?.ToString() ?? "None");
                 return StatusCode(500, new ApiResponse<UserPreferencesDto>
                 {
                     Success = false,
