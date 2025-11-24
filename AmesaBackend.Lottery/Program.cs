@@ -187,10 +187,13 @@ app.Use(async (context, next) =>
     var path = context.Request.Path;
     var method = context.Request.Method;
     var isWsPath = path.StartsWithSegments("/ws");
-    var accessToken = context.Request.Query["access_token"].ToString();
-    var hasToken = !string.IsNullOrEmpty(accessToken);
+    var accessTokenQuery = context.Request.Query["access_token"];
+    var accessToken = accessTokenQuery.ToString();
+    var hasToken = !string.IsNullOrWhiteSpace(accessToken);
     var existingAuthHeader = context.Request.Headers["Authorization"].ToString();
-    var hasAuthHeader = !string.IsNullOrEmpty(existingAuthHeader);
+    var hasAuthHeader = !string.IsNullOrWhiteSpace(existingAuthHeader);
+    Log.Information("[DEBUG] SignalRTokenExtractor:entry path={Path} method={Method} isWsPath={IsWsPath} hasToken={HasToken} hasAuthHeader={HasAuthHeader} tokenLength={TokenLength}", 
+        path, method, isWsPath, hasToken, hasAuthHeader, accessToken.Length);
     // #endregion
     
     // For SignalR negotiate requests, extract token from query string if not in header
@@ -199,26 +202,27 @@ app.Use(async (context, next) =>
         if (!hasAuthHeader)
         {
             // #region agent log
-            Log.Information("[DEBUG] SignalRTokenExtractor: path={Path} method={Method} extracting token from query string, tokenLength={TokenLength}", path, method, accessToken.Length);
+            Log.Information("[DEBUG] SignalRTokenExtractor:extracting path={Path} method={Method} tokenLength={TokenLength}", path, method, accessToken.Length);
             // #endregion
             // Add token to Authorization header for JWT middleware
             context.Request.Headers["Authorization"] = $"Bearer {accessToken}";
+            // #region agent log
+            Log.Information("[DEBUG] SignalRTokenExtractor:extracted path={Path} method={Method} headerSet={HeaderSet}", path, method, context.Request.Headers.ContainsKey("Authorization"));
+            // #endregion
         }
         else
         {
             // #region agent log
-            Log.Information("[DEBUG] SignalRTokenExtractor: path={Path} method={Method} token already in header, existingHeader={ExistingHeader}", path, method, existingAuthHeader);
+            Log.Information("[DEBUG] SignalRTokenExtractor:skipped path={Path} method={Method} existingHeader={ExistingHeader}", path, method, existingAuthHeader);
             // #endregion
         }
     }
-    else
-    {
-        // #region agent log
-        Log.Information("[DEBUG] SignalRTokenExtractor: path={Path} method={Method} isWsPath={IsWsPath} hasToken={HasToken} hasAuthHeader={HasAuthHeader}", path, method, isWsPath, hasToken, hasAuthHeader);
-        // #endregion
-    }
     
     await next();
+    
+    // #region agent log
+    Log.Information("[DEBUG] SignalRTokenExtractor:exit path={Path} method={Method} statusCode={StatusCode}", path, method, context.Response.StatusCode);
+    // #endregion
 });
 
 app.UseAuthentication();
