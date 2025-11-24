@@ -4,6 +4,7 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using AmesaBackend.Lottery.Data;
 using AmesaBackend.Lottery.Services;
+using AmesaBackend.Lottery.Hubs;
 using AmesaBackend.Shared.Extensions;
 using AmesaBackend.Shared.Middleware.Extensions;
 using Serilog;
@@ -93,6 +94,9 @@ builder.Services.AddScoped<IFileService, FileService>();
 // Add Background Service for lottery draws
 builder.Services.AddHostedService<LotteryDrawService>();
 
+// Add SignalR for real-time updates
+builder.Services.AddSignalR();
+
 builder.Services.AddHealthChecks();
 
 var app = builder.Build();
@@ -114,6 +118,9 @@ app.UseAuthorization();
 
 app.MapHealthChecks("/health");
 app.MapControllers();
+
+// Map SignalR hubs
+app.MapHub<LotteryHub>("/ws/lottery");
 
 // Ensure database is created
 using (var scope = app.Services.CreateScope())

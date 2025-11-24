@@ -1,7 +1,11 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 using AmesaBackend.Notification.Data;
 using AmesaBackend.Notification.Services;
 using AmesaBackend.Notification.Handlers;
+using AmesaBackend.Notification.Hubs;
 using AmesaBackend.Shared.Extensions;
 using AmesaBackend.Shared.Middleware.Extensions;
 using Serilog;
@@ -50,12 +54,46 @@ builder.Services.AddDbContext<NotificationDbContext>(options =>
 
 builder.Services.AddAmesaBackendShared(builder.Configuration);
 
+// Configure JWT Authentication
+var jwtSettings = builder.Configuration.GetSection("JwtSettings");
+var secretKey = jwtSettings["SecretKey"] 
+    ?? Environment.GetEnvironmentVariable("JwtSettings__SecretKey");
+
+if (string.IsNullOrWhiteSpace(secretKey))
+{
+    throw new InvalidOperationException("JWT SecretKey is not configured. Set JwtSettings__SecretKey environment variable or configure JwtSettings:SecretKey in appsettings.");
+}
+
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = jwtSettings["Issuer"] ?? "AmesaBackend",
+        ValidAudience = jwtSettings["Audience"] ?? "AmesaFrontend",
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey!)),
+        ClockSkew = TimeSpan.Zero
+    };
+});
+
 // Add Services
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 
 // Add Background Service for EventBridge events
 builder.Services.AddHostedService<EventBridgeEventHandler>();
+
+// Add SignalR for real-time updates
+builder.Services.AddSignalR();
 
 builder.Services.AddHealthChecks();
 
@@ -78,6 +116,9 @@ app.UseAuthorization();
 
 app.MapHealthChecks("/health");
 app.MapControllers();
+
+// Map SignalR hubs
+app.MapHub<NotificationHub>("/ws/notifications");
 
 // Ensure database is created
 using (var scope = app.Services.CreateScope())

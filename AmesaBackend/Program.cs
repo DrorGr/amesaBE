@@ -11,7 +11,6 @@ using AmesaBackend.Services;
 using AmesaBackend.Middleware;
 using AmesaBackend.Configuration;
 using AmesaBackend.Models;
-using AmesaBackend.Hubs;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using Serilog;
@@ -597,8 +596,9 @@ builder.Services.AddServerSideBlazor();
 builder.Services.AddHostedService<LotteryDrawService>();
 builder.Services.AddHostedService<NotificationBackgroundService>();
 
-// Add SignalR for real-time updates
-builder.Services.AddSignalR();
+// SignalR hubs moved to microservices:
+// - LotteryHub moved to AmesaBackend.Lottery
+// - NotificationHub moved to AmesaBackend.Notification
 
 // Add Memory Cache
 builder.Services.AddMemoryCache();
@@ -683,9 +683,9 @@ app.MapHealthChecks("/health");
 // Map controllers
 app.MapControllers();
 
-// Map SignalR hubs
-app.MapHub<LotteryHub>("/ws/lottery");
-app.MapHub<NotificationHub>("/ws/notifications");
+// SignalR hubs moved to microservices:
+// - /ws/lottery -> AmesaBackend.Lottery (amesa-lottery-service)
+// - /ws/notifications -> AmesaBackend.Notification (amesa-notification-service)
 
 // Map Blazor Admin Panel
 app.MapBlazorHub();
