@@ -409,19 +409,20 @@ namespace AmesaBackend.Auth.Services
             try
             {
                 // Query the user_lottery_dashboard view
+                // Use column aliases to match PascalCase property names in UserLotteryDashboardResult
                 var sql = @"
                     SELECT 
-                        favorite_houses_count,
-                        active_entries_count,
-                        total_entries_count,
-                        total_wins,
-                        total_spending,
-                        total_winnings,
-                        win_rate_percentage,
-                        average_spending_per_entry,
-                        favorite_house_id,
-                        most_active_month,
-                        last_entry_date
+                        favorite_houses_count AS ""FavoriteHousesCount"",
+                        active_entries_count AS ""ActiveEntriesCount"",
+                        total_entries_count AS ""TotalEntriesCount"",
+                        total_wins AS ""TotalWins"",
+                        total_spending AS ""TotalSpending"",
+                        total_winnings AS ""TotalWinnings"",
+                        win_rate_percentage AS ""WinRatePercentage"",
+                        average_spending_per_entry AS ""AverageSpendingPerEntry"",
+                        favorite_house_id AS ""FavoriteHouseId"",
+                        most_active_month AS ""MostActiveMonth"",
+                        last_entry_date AS ""LastEntryDate""
                     FROM amesa_auth.user_lottery_dashboard
                     WHERE user_id = {0}";
 
