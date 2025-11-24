@@ -120,8 +120,10 @@ builder.Services.AddAuthentication(options =>
             // #region agent log
             var path = context.HttpContext.Request.Path;
             var queryString = context.HttpContext.Request.QueryString.ToString();
-            var hasToken = !string.IsNullOrEmpty(context.Token);
-            Log.Information("[DEBUG] OnTokenValidated: path={Path} hasToken={HasToken} queryString={QueryString}", path, hasToken, queryString);
+            var principal = context.Principal;
+            var hasPrincipal = principal != null;
+            var userId = principal?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "null";
+            Log.Information("[DEBUG] OnTokenValidated: path={Path} hasPrincipal={HasPrincipal} userId={UserId} queryString={QueryString}", path, hasPrincipal, userId, queryString);
             // #endregion
             return Task.CompletedTask;
         },
