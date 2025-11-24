@@ -6,6 +6,7 @@ using AmesaBackend.Auth.DTOs;
 using AmesaBackend.Auth.Models;
 using System.Security.Claims;
 using System.Text.Json;
+using Npgsql;
 
 namespace AmesaBackend.Auth.Controllers
 {
@@ -69,10 +70,21 @@ namespace AmesaBackend.Auth.Controllers
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error retrieving user preferences. Exception: {ExceptionType}, Message: {Message}, InnerException: {InnerException}",
+                // #region agent log
+                var innerEx = ex.InnerException;
+                var postgresEx = innerEx as Npgsql.PostgresException;
+                _logger.LogError(ex, "[DEBUG] GetPreferences:catch exType={ExType} exMessage={ExMessage} innerExType={InnerExType} innerExMessage={InnerExMessage} innerExFull={InnerExFull} stackTrace={StackTrace} postgresSqlState={PostgresSqlState} postgresMessageText={PostgresMessageText} postgresDetail={PostgresDetail}",
                     ex.GetType().Name,
                     ex.Message,
-                    ex.InnerException?.ToString() ?? "None");
+                    innerEx?.GetType().Name ?? "null",
+                    innerEx?.Message ?? "null",
+                    innerEx?.ToString() ?? "null",
+                    ex.StackTrace,
+                    postgresEx?.SqlState ?? "N/A",
+                    postgresEx?.MessageText ?? "N/A",
+                    postgresEx?.Detail ?? "N/A");
+                // #endregion
+                _logger.LogError(ex, "Error retrieving user preferences");
                 return StatusCode(500, new ApiResponse<UserPreferencesDto>
                 {
                     Success = false,
@@ -158,10 +170,21 @@ namespace AmesaBackend.Auth.Controllers
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error updating user preferences. Exception: {ExceptionType}, Message: {Message}, InnerException: {InnerException}",
+                // #region agent log
+                var innerEx = ex.InnerException;
+                var postgresEx = innerEx as Npgsql.PostgresException;
+                _logger.LogError(ex, "[DEBUG] UpdatePreferences:catch exType={ExType} exMessage={ExMessage} innerExType={InnerExType} innerExMessage={InnerExMessage} innerExFull={InnerExFull} stackTrace={StackTrace} postgresSqlState={PostgresSqlState} postgresMessageText={PostgresMessageText} postgresDetail={PostgresDetail}",
                     ex.GetType().Name,
                     ex.Message,
-                    ex.InnerException?.ToString() ?? "None");
+                    innerEx?.GetType().Name ?? "null",
+                    innerEx?.Message ?? "null",
+                    innerEx?.ToString() ?? "null",
+                    ex.StackTrace,
+                    postgresEx?.SqlState ?? "N/A",
+                    postgresEx?.MessageText ?? "N/A",
+                    postgresEx?.Detail ?? "N/A");
+                // #endregion
+                _logger.LogError(ex, "Error updating user preferences");
                 return StatusCode(500, new ApiResponse<UserPreferencesDto>
                 {
                     Success = false,
