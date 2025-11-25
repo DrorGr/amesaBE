@@ -180,6 +180,15 @@ namespace AmesaBackend.Auth.Controllers
                     string preferencesJson = "ERROR";
                     try
                     {
+                        if (request.Preferences.ValueKind == JsonValueKind.Undefined || request.Preferences.ValueKind == JsonValueKind.Null)
+                        {
+                            _logger.LogWarning("[DEBUG] UpdatePreferences:getRawText-skipped ValueKind={ValueKind}", request.Preferences.ValueKind);
+                            return BadRequest(new ApiResponse<UserPreferencesDto>
+                            {
+                                Success = false,
+                                Message = "Preferences field is required and cannot be null or undefined"
+                            });
+                        }
                         preferencesJson = request.Preferences.GetRawText();
                         _logger.LogInformation("[DEBUG] UpdatePreferences:getRawText-success length={Length}", preferencesJson.Length);
                     }
@@ -235,6 +244,15 @@ namespace AmesaBackend.Auth.Controllers
                     string preferencesJson = "ERROR";
                     try
                     {
+                        if (request.Preferences.ValueKind == JsonValueKind.Undefined || request.Preferences.ValueKind == JsonValueKind.Null)
+                        {
+                            _logger.LogWarning("[DEBUG] UpdatePreferences:getRawText-update-skipped ValueKind={ValueKind}", request.Preferences.ValueKind);
+                            return BadRequest(new ApiResponse<UserPreferencesDto>
+                            {
+                                Success = false,
+                                Message = "Preferences field is required and cannot be null or undefined"
+                            });
+                        }
                         preferencesJson = request.Preferences.GetRawText();
                         _logger.LogInformation("[DEBUG] UpdatePreferences:getRawText-update-success length={Length}", preferencesJson.Length);
                     }
