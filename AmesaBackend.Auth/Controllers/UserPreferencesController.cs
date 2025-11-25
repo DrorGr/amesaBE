@@ -116,9 +116,45 @@ namespace AmesaBackend.Auth.Controllers
         {
             try
             {
+                // #region agent log
+                _logger.LogInformation("[DEBUG] UpdatePreferences:entry requestNull={RequestNull} requestVersion={RequestVersion}", 
+                    request == null, request?.Version ?? "null");
+                if (request != null)
+                {
+                    var preferencesValueKind = request.Preferences.ValueKind.ToString();
+                    var preferencesHasValue = request.Preferences.ValueKind != System.Text.Json.JsonValueKind.Undefined;
+                    string preferencesRawText = "N/A";
+                    try
+                    {
+                        preferencesRawText = request.Preferences.GetRawText();
+                    }
+                    catch (Exception ex)
+                    {
+                        preferencesRawText = $"ERROR: {ex.Message}";
+                    }
+                    _logger.LogInformation("[DEBUG] UpdatePreferences:request-details preferencesValueKind={ValueKind} preferencesHasValue={HasValue} preferencesLength={Length}", 
+                        preferencesValueKind, preferencesHasValue, preferencesRawText.Length);
+                }
+                // #endregion
+                
+                if (request == null)
+                {
+                    // #region agent log
+                    _logger.LogWarning("[DEBUG] UpdatePreferences:bad-request request is null");
+                    // #endregion
+                    return BadRequest(new ApiResponse<UserPreferencesDto>
+                    {
+                        Success = false,
+                        Message = "Request body is required"
+                    });
+                }
+                
                 var userId = GetCurrentUserId();
                 if (userId == null)
                 {
+                    // #region agent log
+                    _logger.LogWarning("[DEBUG] UpdatePreferences:unauthorized userId is null");
+                    // #endregion
                     return Unauthorized(new ApiResponse<UserPreferencesDto>
                     {
                         Success = false,
@@ -140,11 +176,26 @@ namespace AmesaBackend.Auth.Controllers
                 if (existingPreferences == null)
                 {
                     // Create new preferences
+                    // #region agent log
+                    string preferencesJson = "ERROR";
+                    try
+                    {
+                        preferencesJson = request.Preferences.GetRawText();
+                        _logger.LogInformation("[DEBUG] UpdatePreferences:getRawText-success length={Length}", preferencesJson.Length);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "[DEBUG] UpdatePreferences:getRawText-failed exType={ExType} exMessage={ExMessage}", 
+                            ex.GetType().Name, ex.Message);
+                        throw;
+                    }
+                    // #endregion
+                    
                     var newPreferences = new UserPreferences
                     {
                         Id = Guid.NewGuid(),
                         UserId = userId.Value,
-                        PreferencesJson = request.Preferences.GetRawText(),
+                        PreferencesJson = preferencesJson,
                         Version = request.Version ?? "1.0.0",
                         CreatedAt = DateTime.UtcNow,
                         UpdatedAt = DateTime.UtcNow,
@@ -180,7 +231,22 @@ namespace AmesaBackend.Auth.Controllers
                 else
                 {
                     // Update existing preferences
-                    existingPreferences.PreferencesJson = request.Preferences.GetRawText();
+                    // #region agent log
+                    string preferencesJson = "ERROR";
+                    try
+                    {
+                        preferencesJson = request.Preferences.GetRawText();
+                        _logger.LogInformation("[DEBUG] UpdatePreferences:getRawText-update-success length={Length}", preferencesJson.Length);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "[DEBUG] UpdatePreferences:getRawText-update-failed exType={ExType} exMessage={ExMessage}", 
+                            ex.GetType().Name, ex.Message);
+                        throw;
+                    }
+                    // #endregion
+                    
+                    existingPreferences.PreferencesJson = preferencesJson;
                     existingPreferences.Version = request.Version ?? existingPreferences.Version;
                     existingPreferences.UpdatedAt = DateTime.UtcNow;
                     existingPreferences.UpdatedBy = userId.ToString()!;
