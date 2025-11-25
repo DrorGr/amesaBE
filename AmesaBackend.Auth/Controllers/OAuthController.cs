@@ -155,12 +155,19 @@ namespace AmesaBackend.Auth.Controllers
 
                         var fallbackTempToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
                         var cacheKey = $"oauth_token_{fallbackTempToken}";
+                        _logger.LogInformation("[DEBUG] GoogleCallback:creating-token-cache cacheKey={CacheKey} hasAccessToken={HasAccessToken} isNewUser={IsNewUser} userAlreadyExists={UserAlreadyExists}", 
+                            cacheKey,
+                            !string.IsNullOrEmpty(authResponse.Response.AccessToken),
+                            authResponse.IsNewUser,
+                            !authResponse.IsNewUser);
                         _memoryCache.Set(cacheKey, new OAuthTokenCache
                         {
                             AccessToken = authResponse.Response.AccessToken,
                             RefreshToken = authResponse.Response.RefreshToken,
-                            ExpiresAt = authResponse.Response.ExpiresAt
-                        }, TimeSpan.FromMinutes(5));
+                            ExpiresAt = authResponse.Response.ExpiresAt,
+                            IsNewUser = authResponse.IsNewUser,
+                            UserAlreadyExists = !authResponse.IsNewUser
+                        }, TimeSpan.FromMinutes(10)); // Increased from 5 to 10 minutes to handle delays
 
                         await HttpContext.SignOutAsync("Cookies");
                         await HttpContext.SignOutAsync(GoogleDefaults.AuthenticationScheme);
@@ -276,12 +283,19 @@ namespace AmesaBackend.Auth.Controllers
                 var tempToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
                 
                 var cacheKey = $"oauth_token_{tempToken}";
+                _logger.LogInformation("[DEBUG] MetaCallback:creating-token-cache cacheKey={CacheKey} hasAccessToken={HasAccessToken} isNewUser={IsNewUser} userAlreadyExists={UserAlreadyExists}", 
+                    cacheKey,
+                    !string.IsNullOrEmpty(authResponse.Response.AccessToken),
+                    authResponse.IsNewUser,
+                    !authResponse.IsNewUser);
                 _memoryCache.Set(cacheKey, new OAuthTokenCache
                 {
                     AccessToken = authResponse.Response.AccessToken,
                     RefreshToken = authResponse.Response.RefreshToken,
-                    ExpiresAt = authResponse.Response.ExpiresAt
-                }, TimeSpan.FromMinutes(5));
+                    ExpiresAt = authResponse.Response.ExpiresAt,
+                    IsNewUser = authResponse.IsNewUser,
+                    UserAlreadyExists = !authResponse.IsNewUser
+                }, TimeSpan.FromMinutes(10)); // Increased from 5 to 10 minutes to handle delays
 
                 return Redirect($"{frontendUrl}/auth/callback?code={Uri.EscapeDataString(tempToken)}");
             }
@@ -305,13 +319,40 @@ namespace AmesaBackend.Auth.Controllers
                 }
 
                 var cacheKey = $"oauth_token_{request.Code}";
-                _logger.LogInformation("Attempting to exchange token with cache key: {CacheKey}", cacheKey);
+                _logger.LogInformation("[DEBUG] ExchangeToken:entry codeLength={CodeLength} codePreview={CodePreview} cacheKey={CacheKey}", 
+                    request.Code?.Length ?? 0, 
+                    request.Code != null ? request.Code.Substring(0, Math.Min(20, request.Code.Length)) : "null",
+                    cacheKey);
                 
                 if (!_memoryCache.TryGetValue(cacheKey, out OAuthTokenCache? cachedData) || cachedData == null)
                 {
+                    _logger.LogWarning("[DEBUG] ExchangeToken:cache-miss codeLength={CodeLength} cacheKey={CacheKey} cacheExists={CacheExists}", 
+                        request.Code?.Length ?? 0, 
+                        cacheKey,
+                        _memoryCache.TryGetValue(cacheKey, out _));
                     _logger.LogWarning("Invalid or expired OAuth exchange token");
-                    return Unauthorized(new { error = "Invalid or expired token" });
+                    return Unauthorized(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Error = new ErrorResponse
+                        {
+                            Code = "OAUTH_TOKEN_EXPIRED",
+                            Message = "Invalid or expired token. Please try logging in again.",
+                            Details = new Dictionary<string, object>
+                            {
+                                { "reason", "OAuth exchange code expired or not found in cache" },
+                                { "codeLength", request.Code?.Length ?? 0 },
+                                { "cacheKey", cacheKey }
+                            }
+                        }
+                    });
                 }
+                
+                _logger.LogInformation("[DEBUG] ExchangeToken:cache-hit hasAccessToken={HasAccessToken} hasRefreshToken={HasRefreshToken} isNewUser={IsNewUser} userAlreadyExists={UserAlreadyExists}", 
+                    !string.IsNullOrEmpty(cachedData.AccessToken),
+                    !string.IsNullOrEmpty(cachedData.RefreshToken),
+                    cachedData.IsNewUser,
+                    cachedData.UserAlreadyExists);
                 
                 _logger.LogInformation("Successfully retrieved tokens from cache for code");
 
