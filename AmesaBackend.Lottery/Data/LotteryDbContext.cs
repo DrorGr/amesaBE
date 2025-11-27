@@ -13,6 +13,8 @@ namespace AmesaBackend.Lottery.Data
         public DbSet<HouseImage> HouseImages { get; set; }
         public DbSet<LotteryTicket> LotteryTickets { get; set; }
         public DbSet<LotteryDraw> LotteryDraws { get; set; }
+        public DbSet<UserWatchlist> UserWatchlist { get; set; }
+        public DbSet<LotteryParticipants> LotteryParticipants { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -59,6 +61,21 @@ namespace AmesaBackend.Lottery.Data
                 entity.HasIndex(e => e.HouseId);
                 entity.HasIndex(e => e.DrawDate);
                 entity.HasOne(e => e.House).WithMany(h => h.Draws).HasForeignKey(e => e.HouseId);
+            });
+
+            modelBuilder.Entity<UserWatchlist>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.UserId);
+                entity.HasIndex(e => e.HouseId);
+                entity.HasIndex(e => new { e.UserId, e.HouseId }).IsUnique();
+                entity.HasOne(e => e.House).WithMany().HasForeignKey(e => e.HouseId);
+            });
+
+            modelBuilder.Entity<LotteryParticipants>(entity =>
+            {
+                entity.ToView("lottery_participants", "amesa_lottery");
+                entity.HasNoKey(); // View has no primary key
             });
         }
     }

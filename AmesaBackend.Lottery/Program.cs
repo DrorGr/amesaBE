@@ -24,7 +24,12 @@ Log.Logger = new LoggerConfiguration()
 
 builder.Host.UseSerilog();
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+        options.JsonSerializerOptions.WriteIndented = false;
+    });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
@@ -154,6 +159,7 @@ builder.Services.AddAuthentication(options =>
 // If you want favorites functionality, add project reference to AmesaBackend.Auth
 // and register: builder.Services.AddScoped<IUserPreferencesService, UserPreferencesService>();
 builder.Services.AddScoped<ILotteryService, LotteryService>();
+builder.Services.AddScoped<IWatchlistService, WatchlistService>();
 builder.Services.AddScoped<IFileService, FileService>();
 builder.Services.AddScoped<AmesaBackend.Shared.Configuration.IConfigurationService, AmesaBackend.Lottery.Services.ConfigurationService>();
 
@@ -187,19 +193,86 @@ app.Use(async (context, next) =>
     var path = context.Request.Path;
     var method = context.Request.Method;
     var isWsPath = path.StartsWithSegments("/ws");
+    var rawQueryString = context.Request.QueryString.ToString();
+    var fullUrl = $"{context.Request.Scheme}://{context.Request.Host}{context.Request.Path}{rawQueryString}";
     var accessTokenQuery = context.Request.Query["access_token"];
     var accessToken = accessTokenQuery.ToString();
     var hasToken = !string.IsNullOrWhiteSpace(accessToken);
     var existingAuthHeader = context.Request.Headers["Authorization"].ToString();
     var hasAuthHeader = !string.IsNullOrWhiteSpace(existingAuthHeader);
-    Log.Information("[DEBUG] SignalRTokenExtractor:entry path={Path} method={Method} isWsPath={IsWsPath} hasToken={HasToken} hasAuthHeader={HasAuthHeader} tokenLength={TokenLength}", 
-        path, method, isWsPath, hasToken, hasAuthHeader, accessToken.Length);
+    var allQueryKeys = string.Join(", ", context.Request.Query.Keys);
+    var allHeaders = string.Join("; ", context.Request.Headers.Select(h => $"{h.Key}={h.Value}"));
+    Log.Information("[DEBUG] SignalRTokenExtractor:entry path={Path} method={Method} isWsPath={IsWsPath} hasToken={HasToken} hasAuthHeader={HasAuthHeader} tokenLength={TokenLength} rawQueryString={RawQueryString} fullUrl={FullUrl} allQueryKeys={AllQueryKeys} allHeaders={AllHeaders}", 
+        path, method, isWsPath, hasToken, hasAuthHeader, accessToken.Length, rawQueryString, fullUrl, allQueryKeys, allHeaders);
     // #endregion
     
     // For SignalR negotiate requests, extract token from query string if not in header
     if (isWsPath && hasToken)
     {
         if (!hasAuthHeader)
+        {
+            // #region agent log
+            Log.Information("[DEBUG] SignalRTokenExtractor:extracting path={Path} method={Method} tokenLength={TokenLength}", path, method, accessToken.Length);
+            // #endregion
+            // Add token to Authorization header for JWT middleware
+            context.Request.Headers["Authorization"] = $"Bearer {accessToken}";
+            // #region agent log
+            Log.Information("[DEBUG] SignalRTokenExtractor:extracted path={Path} method={Method} headerSet={HeaderSet}", path, method, context.Request.Headers.ContainsKey("Authorization"));
+            // #endregion
+        }
+        else
+        {
+            // #region agent log
+            Log.Information("[DEBUG] SignalRTokenExtractor:skipped path={Path} method={Method} existingHeader={ExistingHeader}", path, method, existingAuthHeader);
+            // #endregion
+        }
+    }
+    
+    await next();
+    
+    // #region agent log
+    Log.Information("[DEBUG] SignalRTokenExtractor:exit path={Path} method={Method} statusCode={StatusCode}", path, method, context.Response.StatusCode);
+    // #endregion
+});
+
+app.UseAuthentication();
+app.UseAuthorization();
+
+app.MapHealthChecks("/health");
+app.MapControllers();
+
+// Map SignalR hubs
+app.MapHub<LotteryHub>("/ws/lottery");
+
+// Ensure database is created
+using (var scope = app.Services.CreateScope())
+{
+    var context = scope.ServiceProvider.GetRequiredService<LotteryDbContext>();
+    try
+    {
+        if (builder.Environment.IsDevelopment())
+        {
+            Log.Information("Development mode: Ensuring Lottery database tables are created...");
+            await context.Database.EnsureCreatedAsync();
+            Log.Information("Lottery database setup completed successfully");
+        }
+        else
+        {
+            Log.Information("Production mode: Skipping EnsureCreated (use migrations)");
+        }
+    }
+    catch (Exception ex)
+    {
+        Log.Error(ex, "Error setting up database");
+    }
+}
+
+Log.Information("Starting Amesa Lottery Service");
+await app.RunAsync();
+
+public partial class Program { }
+
+
         {
             // #region agent log
             Log.Information("[DEBUG] SignalRTokenExtractor:extracting path={Path} method={Method} tokenLength={TokenLength}", path, method, accessToken.Length);

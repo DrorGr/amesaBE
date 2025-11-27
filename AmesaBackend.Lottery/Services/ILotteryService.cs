@@ -22,5 +22,17 @@ namespace AmesaBackend.Lottery.Services
         
         // Verification check
         Task CheckVerificationRequirementAsync(Guid userId);
+        
+        // Participant cap methods
+        Task<bool> IsParticipantCapReachedAsync(Guid houseId);
+        Task<int> GetParticipantCountAsync(Guid houseId);
+        Task<bool> CanUserEnterLotteryAsync(Guid userId, Guid houseId);
+        Task<LotteryParticipantStatsDto> GetParticipantStatsAsync(Guid houseId);
+    }
+}
+
+        Task<int> GetParticipantCountAsync(Guid houseId);
+        Task<bool> CanUserEnterLotteryAsync(Guid userId, Guid houseId);
+        Task<LotteryParticipantStatsDto> GetParticipantStatsAsync(Guid houseId);
     }
 }

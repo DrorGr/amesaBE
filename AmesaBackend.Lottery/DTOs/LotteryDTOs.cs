@@ -27,6 +27,10 @@ namespace AmesaBackend.Lottery.DTOs
         public int TicketsSold { get; set; }
         public decimal ParticipationPercentage { get; set; }
         public bool CanExecute { get; set; }
+        public int? MaxParticipants { get; set; }
+        public int UniqueParticipants { get; set; }
+        public bool IsParticipantCapReached { get; set; }
+        public int? RemainingParticipantSlots { get; set; }
         public List<HouseImageDto> Images { get; set; } = new();
         public DateTime CreatedAt { get; set; }
     }
@@ -99,6 +103,9 @@ namespace AmesaBackend.Lottery.DTOs
 
         [Range(0.01, 100.00)]
         public decimal MinimumParticipationPercentage { get; set; } = 75.00m;
+
+        [Range(1, int.MaxValue)]
+        public int? MaxParticipants { get; set; }
     }
 
     public class UpdateHouseRequest
@@ -148,6 +155,9 @@ namespace AmesaBackend.Lottery.DTOs
 
         [Range(0.01, 100.00)]
         public decimal? MinimumParticipationPercentage { get; set; }
+
+        [Range(1, int.MaxValue)]
+        public int? MaxParticipants { get; set; }
     }
 
     public class LotteryTicketDto
@@ -262,6 +272,146 @@ namespace AmesaBackend.Lottery.DTOs
         public DateTime? StartDate { get; set; }
         public DateTime? EndDate { get; set; }
         public bool? IsWinner { get; set; }
+    }
+
+    /// <summary>
+    /// Lottery participant statistics DTO
+    /// </summary>
+    public class LotteryParticipantStatsDto
+    {
+        public Guid HouseId { get; set; }
+        public string HouseTitle { get; set; } = string.Empty;
+        public int UniqueParticipants { get; set; }
+        public int TotalTickets { get; set; }
+        public int? MaxParticipants { get; set; }
+        public bool IsCapReached { get; set; }
+        public int? RemainingSlots { get; set; }
+        public DateTime? LastEntryDate { get; set; }
+    }
+
+    /// <summary>
+    /// Watchlist item DTO
+    /// </summary>
+    public class WatchlistItemDto
+    {
+        public Guid Id { get; set; }
+        public Guid HouseId { get; set; }
+        public HouseDto House { get; set; } = null!;
+        public bool NotificationEnabled { get; set; }
+        public DateTime AddedAt { get; set; }
+    }
+
+    /// <summary>
+    /// Response for can-enter lottery check
+    /// </summary>
+    public class CanEnterLotteryResponse
+    {
+        public bool CanEnter { get; set; }
+        public string? Reason { get; set; }
+        public bool IsExistingParticipant { get; set; }
+    }
+
+    /// <summary>
+    /// Request to add house to watchlist
+    /// </summary>
+    public class AddToWatchlistRequest
+    {
+        public bool NotificationEnabled { get; set; } = true;
+    }
+
+    /// <summary>
+    /// Request to toggle notification for watchlist item
+    /// </summary>
+    public class ToggleNotificationRequest
+    {
+        [Required]
+        public bool Enabled { get; set; }
+    }
+}
+
+    /// <summary>
+    /// User lottery statistics DTO
+    /// </summary>
+    public class UserLotteryStatsDto
+    {
+        public int TotalEntries { get; set; }
+        public int ActiveEntries { get; set; }
+        public int TotalWins { get; set; }
+        public decimal TotalSpending { get; set; }
+        public decimal TotalWinnings { get; set; }
+        public decimal WinRate { get; set; }
+        public decimal AverageSpendingPerEntry { get; set; }
+        public Guid? FavoriteHouseId { get; set; }
+        public string? MostActiveMonth { get; set; }
+        public DateTime? LastEntryDate { get; set; }
+    }
+
+    /// <summary>
+    /// Entry filters for querying user entries
+    /// </summary>
+    public class EntryFilters
+    {
+        public int Page { get; set; } = 1;
+        public int Limit { get; set; } = 20;
+        public string? Status { get; set; }
+        public Guid? HouseId { get; set; }
+        public DateTime? StartDate { get; set; }
+        public DateTime? EndDate { get; set; }
+        public bool? IsWinner { get; set; }
+    }
+
+    /// <summary>
+    /// Lottery participant statistics DTO
+    /// </summary>
+    public class LotteryParticipantStatsDto
+    {
+        public Guid HouseId { get; set; }
+        public string HouseTitle { get; set; } = string.Empty;
+        public int UniqueParticipants { get; set; }
+        public int TotalTickets { get; set; }
+        public int? MaxParticipants { get; set; }
+        public bool IsCapReached { get; set; }
+        public int? RemainingSlots { get; set; }
+        public DateTime? LastEntryDate { get; set; }
+    }
+
+    /// <summary>
+    /// Watchlist item DTO
+    /// </summary>
+    public class WatchlistItemDto
+    {
+        public Guid Id { get; set; }
+        public Guid HouseId { get; set; }
+        public HouseDto House { get; set; } = null!;
+        public bool NotificationEnabled { get; set; }
+        public DateTime AddedAt { get; set; }
+    }
+
+    /// <summary>
+    /// Response for can-enter lottery check
+    /// </summary>
+    public class CanEnterLotteryResponse
+    {
+        public bool CanEnter { get; set; }
+        public string? Reason { get; set; }
+        public bool IsExistingParticipant { get; set; }
+    }
+
+    /// <summary>
+    /// Request to add house to watchlist
+    /// </summary>
+    public class AddToWatchlistRequest
+    {
+        public bool NotificationEnabled { get; set; } = true;
+    }
+
+    /// <summary>
+    /// Request to toggle notification for watchlist item
+    /// </summary>
+    public class ToggleNotificationRequest
+    {
+        [Required]
+        public bool Enabled { get; set; }
     }
 }
 

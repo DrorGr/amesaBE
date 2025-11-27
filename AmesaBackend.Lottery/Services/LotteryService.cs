@@ -208,20 +208,42 @@ namespace AmesaBackend.Lottery.Services
 
         public async Task<bool> AddHouseToFavoritesAsync(Guid userId, Guid houseId)
         {
+            // #region agent log
+            _logger.LogInformation("[DEBUG] LotteryService.AddHouseToFavoritesAsync:entry houseId={HouseId} userId={UserId} userPreferencesServiceNull={Null}", houseId, userId, _userPreferencesService == null);
+            // #endregion
             if (_userPreferencesService == null)
             {
+                // #region agent log
+                _logger.LogWarning("[DEBUG] LotteryService.AddHouseToFavoritesAsync:null-service houseId={HouseId} userId={UserId}", houseId, userId);
+                // #endregion
                 _logger.LogWarning("UserPreferencesService not available");
                 return false;
             }
 
             // Verify house exists
+            // #region agent log
+            _logger.LogInformation("[DEBUG] LotteryService.AddHouseToFavoritesAsync:before-house-check houseId={HouseId} userId={UserId}", houseId, userId);
+            // #endregion
             var house = await _context.Houses.FindAsync(houseId);
+            // #region agent log
+            _logger.LogInformation("[DEBUG] LotteryService.AddHouseToFavoritesAsync:after-house-check houseId={HouseId} userId={UserId} houseIsNull={IsNull} deletedAt={DeletedAt}", houseId, userId, house == null, house?.DeletedAt);
+            // #endregion
             if (house == null || house.DeletedAt != null)
             {
+                // #region agent log
+                _logger.LogWarning("[DEBUG] LotteryService.AddHouseToFavoritesAsync:house-not-found houseId={HouseId} userId={UserId} houseIsNull={IsNull} deletedAt={DeletedAt}", houseId, userId, house == null, house?.DeletedAt);
+                // #endregion
                 return false;
             }
 
-            return await _userPreferencesService.AddHouseToFavoritesAsync(userId, houseId);
+            // #region agent log
+            _logger.LogInformation("[DEBUG] LotteryService.AddHouseToFavoritesAsync:before-userprefs houseId={HouseId} userId={UserId}", houseId, userId);
+            // #endregion
+            var result = await _userPreferencesService.AddHouseToFavoritesAsync(userId, houseId);
+            // #region agent log
+            _logger.LogInformation("[DEBUG] LotteryService.AddHouseToFavoritesAsync:after-userprefs houseId={HouseId} userId={UserId} result={Result}", houseId, userId, result);
+            // #endregion
+            return result;
         }
 
         public async Task<bool> RemoveHouseFromFavoritesAsync(Guid userId, Guid houseId)
@@ -343,6 +365,124 @@ namespace AmesaBackend.Lottery.Services
             };
         }
 
+        public async Task<bool> IsParticipantCapReachedAsync(Guid houseId)
+        {
+            try
+            {
+                var house = await _context.Houses.FindAsync(houseId);
+                if (house == null || !house.MaxParticipants.HasValue)
+                {
+                    return false; // No cap or house not found
+                }
+
+                var currentCount = await GetParticipantCountAsync(houseId);
+                return currentCount >= house.MaxParticipants.Value;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error checking participant cap for house {HouseId}", houseId);
+                throw;
+            }
+        }
+
+        public async Task<int> GetParticipantCountAsync(Guid houseId)
+        {
+            try
+            {
+                // Use the lottery_participants view for better performance
+                var viewData = await _context.Set<LotteryParticipants>()
+                    .FirstOrDefaultAsync(p => p.HouseId == houseId);
+                
+                return viewData?.UniqueParticipants ?? 0;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting participant count for house {HouseId}", houseId);
+                throw;
+            }
+        }
+
+        public async Task<bool> CanUserEnterLotteryAsync(Guid userId, Guid houseId)
+        {
+            try
+            {
+                var house = await _context.Houses.FindAsync(houseId);
+                if (house == null || !house.MaxParticipants.HasValue)
+                {
+                    return true; // No cap or house not found
+                }
+
+                // Check if user already participates (existing participants can always enter)
+                var isExistingParticipant = await _context.LotteryTickets
+                    .AnyAsync(t => t.HouseId == houseId 
+                        && t.UserId == userId 
+                        && t.Status == "Active");
+
+                if (isExistingParticipant)
+                {
+                    return true; // Existing participant can always enter
+                }
+
+                // Check if cap is reached
+                var currentCount = await GetParticipantCountAsync(houseId);
+                return currentCount < house.MaxParticipants.Value;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error checking if user {UserId} can enter lottery for house {HouseId}", userId, houseId);
+                throw;
+            }
+        }
+
+        public async Task<LotteryParticipantStatsDto> GetParticipantStatsAsync(Guid houseId)
+        {
+            try
+            {
+                var house = await _context.Houses
+                    .FirstOrDefaultAsync(h => h.Id == houseId);
+
+                if (house == null)
+                {
+                    throw new KeyNotFoundException("House not found");
+                }
+
+                // Use the lottery_participants view for better performance
+                var viewData = await _context.Set<LotteryParticipants>()
+                    .FirstOrDefaultAsync(p => p.HouseId == houseId);
+
+                var uniqueParticipants = viewData?.UniqueParticipants ?? 0;
+                var totalTickets = viewData?.TotalTickets ?? 0;
+                var lastEntryDate = viewData?.LastEntryDate;
+
+                var isCapReached = house.MaxParticipants.HasValue 
+                    && uniqueParticipants >= house.MaxParticipants.Value;
+                var remainingSlots = house.MaxParticipants.HasValue
+                    ? Math.Max(0, house.MaxParticipants.Value - uniqueParticipants)
+                    : (int?)null;
+
+                return new LotteryParticipantStatsDto
+                {
+                    HouseId = house.Id,
+                    HouseTitle = house.Title,
+                    UniqueParticipants = uniqueParticipants,
+                    TotalTickets = totalTickets,
+                    MaxParticipants = house.MaxParticipants,
+                    IsCapReached = isCapReached,
+                    RemainingSlots = remainingSlots,
+                    LastEntryDate = lastEntryDate
+                };
+            }
+            catch (KeyNotFoundException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting participant stats for house {HouseId}", houseId);
+                throw;
+            }
+        }
+
         private HouseDto MapToHouseDto(House house)
         {
             var ticketsSold = house.Tickets?.Count(t => t.Status == "Active") ?? 0;
@@ -350,6 +490,19 @@ namespace AmesaBackend.Lottery.Services
                 ? (decimal)ticketsSold / house.TotalTickets * 100 
                 : 0;
             var canExecute = participationPercentage >= house.MinimumParticipationPercentage;
+
+            // Get unique participants count
+            var uniqueParticipants = house.Tickets?
+                .Where(t => t.Status == "Active")
+                .Select(t => t.UserId)
+                .Distinct()
+                .Count() ?? 0;
+
+            var isCapReached = house.MaxParticipants.HasValue 
+                && uniqueParticipants >= house.MaxParticipants.Value;
+            var remainingSlots = house.MaxParticipants.HasValue
+                ? Math.Max(0, house.MaxParticipants.Value - uniqueParticipants)
+                : (int?)null;
 
             return new HouseDto
             {
@@ -376,6 +529,113 @@ namespace AmesaBackend.Lottery.Services
                 TicketsSold = ticketsSold,
                 ParticipationPercentage = participationPercentage,
                 CanExecute = canExecute,
+                MaxParticipants = house.MaxParticipants,
+                UniqueParticipants = uniqueParticipants,
+                IsParticipantCapReached = isCapReached,
+                RemainingParticipantSlots = remainingSlots,
+                Images = house.Images?.Select(img => new HouseImageDto
+                {
+                    Id = img.Id,
+                    ImageUrl = img.ImageUrl,
+                    AltText = img.AltText,
+                    DisplayOrder = img.DisplayOrder,
+                    IsPrimary = img.IsPrimary,
+                    MediaType = img.MediaType,
+                    FileSize = img.FileSize,
+                    Width = img.Width,
+                    Height = img.Height
+                }).ToList() ?? new List<HouseImageDto>(),
+                CreatedAt = house.CreatedAt
+            };
+        }
+
+        private LotteryTicketDto MapToTicketDto(LotteryTicket ticket)
+        {
+            return new LotteryTicketDto
+            {
+                Id = ticket.Id,
+                TicketNumber = ticket.TicketNumber,
+                HouseId = ticket.HouseId,
+                HouseTitle = ticket.House?.Title ?? "",
+                PurchasePrice = ticket.PurchasePrice,
+                Status = ticket.Status,
+                PurchaseDate = ticket.PurchaseDate,
+                IsWinner = ticket.IsWinner,
+                CreatedAt = ticket.CreatedAt
+            };
+        }
+
+        private LotteryDrawDto MapToDrawDto(LotteryDraw draw)
+        {
+            return new LotteryDrawDto
+            {
+                Id = draw.Id,
+                HouseId = draw.HouseId,
+                HouseTitle = draw.House?.Title ?? "",
+                DrawDate = draw.DrawDate,
+                TotalTicketsSold = draw.TotalTicketsSold,
+                TotalParticipationPercentage = draw.TotalParticipationPercentage,
+                WinningTicketNumber = draw.WinningTicketNumber,
+                WinnerUserId = draw.WinnerUserId,
+                DrawStatus = draw.DrawStatus,
+                DrawMethod = draw.DrawMethod,
+                ConductedAt = draw.ConductedAt,
+                CreatedAt = draw.CreatedAt
+            };
+        }
+    }
+}
+
+        private HouseDto MapToHouseDto(House house)
+        {
+            var ticketsSold = house.Tickets?.Count(t => t.Status == "Active") ?? 0;
+            var participationPercentage = house.TotalTickets > 0 
+                ? (decimal)ticketsSold / house.TotalTickets * 100 
+                : 0;
+            var canExecute = participationPercentage >= house.MinimumParticipationPercentage;
+
+            // Get unique participants count
+            var uniqueParticipants = house.Tickets?
+                .Where(t => t.Status == "Active")
+                .Select(t => t.UserId)
+                .Distinct()
+                .Count() ?? 0;
+
+            var isCapReached = house.MaxParticipants.HasValue 
+                && uniqueParticipants >= house.MaxParticipants.Value;
+            var remainingSlots = house.MaxParticipants.HasValue
+                ? Math.Max(0, house.MaxParticipants.Value - uniqueParticipants)
+                : (int?)null;
+
+            return new HouseDto
+            {
+                Id = house.Id,
+                Title = house.Title,
+                Description = house.Description,
+                Price = house.Price,
+                Location = house.Location,
+                Address = house.Address,
+                Bedrooms = house.Bedrooms,
+                Bathrooms = house.Bathrooms,
+                SquareFeet = house.SquareFeet,
+                PropertyType = house.PropertyType,
+                YearBuilt = house.YearBuilt,
+                LotSize = house.LotSize,
+                Features = house.Features,
+                Status = house.Status,
+                TotalTickets = house.TotalTickets,
+                TicketPrice = house.TicketPrice,
+                LotteryStartDate = house.LotteryStartDate,
+                LotteryEndDate = house.LotteryEndDate,
+                DrawDate = house.DrawDate,
+                MinimumParticipationPercentage = house.MinimumParticipationPercentage,
+                TicketsSold = ticketsSold,
+                ParticipationPercentage = participationPercentage,
+                CanExecute = canExecute,
+                MaxParticipants = house.MaxParticipants,
+                UniqueParticipants = uniqueParticipants,
+                IsParticipantCapReached = isCapReached,
+                RemainingParticipantSlots = remainingSlots,
                 Images = house.Images?.Select(img => new HouseImageDto
                 {
                     Id = img.Id,

@@ -64,6 +64,8 @@ namespace AmesaBackend.Lottery.Models
         [Column(TypeName = "decimal(5,2)")]
         public decimal MinimumParticipationPercentage { get; set; } = 75.00m;
 
+        public int? MaxParticipants { get; set; }
+
         public Guid? CreatedBy { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
@@ -195,5 +197,39 @@ namespace AmesaBackend.Lottery.Models
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
         public virtual House House { get; set; } = null!;
+    }
+
+    [Table("user_watchlist")]
+    public class UserWatchlist
+    {
+        [Key]
+        public Guid Id { get; set; }
+
+        [Required]
+        public Guid UserId { get; set; }
+
+        [Required]
+        public Guid HouseId { get; set; }
+
+        public bool NotificationEnabled { get; set; } = true;
+
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+        public virtual House House { get; set; } = null!;
+    }
+
+    // View model for lottery_participants view (read-only)
+    [Table("lottery_participants", Schema = "amesa_lottery")]
+    public class LotteryParticipants
+    {
+        public Guid HouseId { get; set; }
+
+        public int UniqueParticipants { get; set; }
+
+        public int TotalTickets { get; set; }
+
+        public DateTime? LastEntryDate { get; set; }
     }
 }

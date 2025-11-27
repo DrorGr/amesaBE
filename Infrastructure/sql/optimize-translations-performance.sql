@@ -19,3 +19,12 @@ WHERE tablename = 'translations'
 ORDER BY indexname;
 
 
+
+
+
+
+
+
+
+
+

@@ -53,3 +53,10 @@ ON CONFLICT (key) DO NOTHING;
 -- Note: FrontImageUrl, BackImageUrl, SelfieImageUrl columns remain for backward compatibility
 -- but should be set to NULL for new verifications (images are not stored)
 
+
+
+
+
+
+
+

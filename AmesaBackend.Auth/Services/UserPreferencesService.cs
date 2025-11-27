@@ -270,19 +270,38 @@ namespace AmesaBackend.Auth.Services
 
         public async Task<bool> AddHouseToFavoritesAsync(Guid userId, Guid houseId)
         {
+            // #region agent log
+            _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:entry houseId={HouseId} userId={UserId}", houseId, userId);
+            // #endregion
             try
             {
+                // #region agent log
+                _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:before-get-favorites houseId={HouseId} userId={UserId}", houseId, userId);
+                // #endregion
                 var favoriteIds = await GetFavoriteHouseIdsAsync(userId);
+                // #region agent log
+                _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:after-get-favorites houseId={HouseId} userId={UserId} favoriteIdsCount={Count} isAlreadyFavorite={AlreadyFavorite}", houseId, userId, favoriteIds.Count, favoriteIds.Contains(houseId));
+                // #endregion
                 
                 if (favoriteIds.Contains(houseId))
                 {
-                    return false; // Already in favorites
+                    // #region agent log
+                    _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:already-favorite houseId={HouseId} userId={UserId} - returning true (idempotent)", houseId, userId);
+                    // #endregion
+                    // Idempotent operation: adding an already-favorited house should succeed
+                    return true;
                 }
 
                 favoriteIds.Add(houseId);
 
                 // Update favorites in preferences
+                // #region agent log
+                _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:before-get-preferences houseId={HouseId} userId={UserId}", houseId, userId);
+                // #endregion
                 var preferences = await GetUserPreferencesAsync(userId);
+                // #region agent log
+                _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:after-get-preferences houseId={HouseId} userId={UserId} preferencesIsNull={IsNull} preferencesJsonLength={Length}", houseId, userId, preferences == null, preferences?.PreferencesJson?.Length ?? 0);
+                // #endregion
                 JsonDocument? jsonDoc = null;
                 JsonElement rootElement;
 
@@ -351,13 +370,38 @@ namespace AmesaBackend.Auth.Services
                 existingPrefs["lotteryPreferences"] = lotteryPrefsDict;
 
                 // Serialize the entire preferences dictionary back to JSON
+                // #region agent log
+                _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:before-update houseId={HouseId} userId={UserId} existingPrefsKeys={Keys} favoriteIdsCount={Count}", houseId, userId, string.Join(",", existingPrefs.Keys), favoriteIds.Count);
+                // #endregion
                 await UpdateUserPreferencesAsync(userId, JsonSerializer.SerializeToElement(existingPrefs));
+                // #region agent log
+                _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:after-update houseId={HouseId} userId={UserId}", houseId, userId);
+                // #endregion
 
                 _logger.LogInformation("Added house {HouseId} to favorites for user {UserId}", houseId, userId);
                 return true;
             }
+            catch (JsonException ex)
+            {
+                // #region agent log
+                _logger.LogError(ex, "[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:json-exception houseId={HouseId} userId={UserId} message={Message}", houseId, userId, ex.Message);
+                // #endregion
+                _logger.LogError(ex, "JSON serialization error adding house {HouseId} to favorites for user {UserId}", houseId, userId);
+                return false;
+            }
+            catch (DbUpdateException ex)
+            {
+                // #region agent log
+                _logger.LogError(ex, "[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:db-exception houseId={HouseId} userId={UserId} message={Message}", houseId, userId, ex.Message);
+                // #endregion
+                _logger.LogError(ex, "Database error adding house {HouseId} to favorites for user {UserId}", houseId, userId);
+                return false;
+            }
             catch (Exception ex)
             {
+                // #region agent log
+                _logger.LogError(ex, "[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:exception houseId={HouseId} userId={UserId} exceptionType={Type} message={Message}", houseId, userId, ex.GetType().Name, ex.Message);
+                // #endregion
                 _logger.LogError(ex, "Error adding house {HouseId} to favorites for user {UserId}", houseId, userId);
                 return false;
             }
@@ -371,7 +415,9 @@ namespace AmesaBackend.Auth.Services
                 
                 if (!favoriteIds.Contains(houseId))
                 {
-                    return false; // Not in favorites
+                    // Idempotent operation: removing a non-favorited house should succeed
+                    _logger.LogInformation("House {HouseId} not in favorites for user {UserId} - returning true (idempotent)", houseId, userId);
+                    return true;
                 }
 
                 favoriteIds.Remove(houseId);

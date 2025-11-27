@@ -15,7 +15,10 @@ AmesaBE is the backend API for the Amesa lottery management system. Built with .
 - **AmesaBackend.Tests**: Unit and integration tests
 - **AmesaBackend.DatabaseSeeder**: Database seeding tool (excluded from repository, in .gitignore)
 - **Related Repos**: amesaFE (Frontend), amesaDevOps (Infrastructure)
-- **Scripts**: All SQL and PowerShell scripts in `MetaData/Scripts/` folder
+- **Scripts**: 
+  - SQL scripts: `MetaData/Scripts/` (organized by category, e.g., `Translation/` subfolder)
+  - Translation scripts: `MetaData/Scripts/Translation/` (error messages, house keys, etc.)
+  - Database migrations: `MetaData/Documentation/Database/Migrations/` (manual migration scripts)
 
 ## Technology Stack
 - **Backend**: .NET 8.0, ASP.NET Core, Entity Framework Core
@@ -30,17 +33,35 @@ AmesaBE is the backend API for the Amesa lottery management system. Built with .
 - **Version Control**: Git with GitHub repository
 - **Package Management**: NuGet
 
-## Current Status (2025-01-XX)
+## Current Status (2025-01-25)
 - **Repository**: https://github.com/DrorGr/amesaBE
-- **Main branch**: Stable, deployed with Lottery Favorites Phase 1 ✅
+- **Main branch**: Stable, deployed with Lottery-User Link System complete ✅
+- **Lottery-User Link System**: ✅ **COMPLETE** (2025-01-25) - Migration applied, all features implemented and tested
+  - **Migration**: ✅ Applied (2025-01-25 17:17:04) - `MetaData/Documentation/Database/Migrations/lottery-user-link-migration.sql`
+  - **Backend**: ✅ WatchlistService, participant cap enforcement, optimized queries using view
+  - **Frontend**: ✅ HouseDetailComponent, WatchlistComponent, ParticipantStatsComponent, all enhancements
+  - **Enhancements**: ✅ Loading states, retry logic, error handling, accessibility, empty states
+- **OAuth Profile Population**: ✅ **IMPLEMENTED** - Populates firstName, lastName, dateOfBirth, gender, profileImageUrl from OAuth providers (commit 9491870)
+- **Profile Verification Lock**: ✅ **IMPLEMENTED** - Fields locked after identity verification, can only be updated from ID document OCR
+- **ID Verification**: ✅ **IMPLEMENTED** - AWS Rekognition integration complete, IAM configured, code pushed (commit 6cf5f7a)
 - **Admin Panel**: Blazor Server admin panel deployed to production ✅
-- **Database**: Fully seeded with comprehensive test data ✅
+- **OAuth Authentication**: ✅ **FIXED** - JWT Audience claim, ApiResponse wrapper, camelCase JSON
+- **User Preferences**: ✅ **ROUTING FIXED** - ALB rule added (priority 97) for /api/v1/user/*
+- **SignalR WebSocket**: ✅ **ENABLED** - LotteryHub and NotificationHub mapped, CloudFront routing pending
+- **Database**: Manual seeding only (automatic seeding disabled) ✅
 - **Translations**: 4 languages supported (EN, ES, FR, PL) - 507 keys each ✅
-- **User Preferences**: Complete CRUD API implemented ✅
+- **User Preferences API**: Complete CRUD API implemented ✅
 - **Lottery Favorites**: Phase 1 complete, deployed to production ✅
+- **Microservices**: All 8 services deployed and ACTIVE ✅
+- **Infrastructure**: Single ALB with path-based routing, single Aurora cluster ✅
+- **AWS IAM**: ✅ **CONFIGURED** - Rekognition permissions added to ecsTaskExecutionRole ✅
+- **Testing Infrastructure**: Complete (xUnit, FluentAssertions, Bogus, AutoFixture) ✅
+- **Test Status**: All 52 tests passing ✅
+- **CI/CD**: Test workflows integrated, concurrency rules added, tests block deployment ✅
+- **Documentation**: Comprehensive revision in progress (API, database, infrastructure documented) ✅
 - **Deployment**: ECS Fargate with Docker containers
-- **Latest**: Docker build fix for amesa-lottery-service, production deployment complete
 - **Database Seeder**: Excluded from repository (in .gitignore) ✅
+- **PowerShell Scripts**: Excluded from git tracking (*.ps1 in .gitignore) ✅
 
 ## Environment Configuration
 
@@ -59,19 +80,44 @@ AmesaBE is the backend API for the Amesa lottery management system. Built with .
 - **Deployment**: Auto on push to main branch
 
 ## AWS Infrastructure
+
+### Actual Infrastructure (Discovered via AWS CLI)
 - **Region**: eu-north-1 (Stockholm)
 - **Account**: 129394705401
-- **ECR Repository**: amesabe
-- **ECS Cluster**: Amesa
-- **Aurora PostgreSQL**: Serverless v2 production cluster
-- **ALB**: Application Load Balancer for production
+- **ECS Cluster**: `Amesa` with 8 microservices (all ACTIVE)
+- **ALB**: Single ALB (`amesa-backend-alb`) with path-based routing (NOT API Gateway)
+- **Database**: Single Aurora PostgreSQL cluster (`amesa-prod`, 17.4) with schemas (NOT 8 separate databases)
+- **CloudFront**: 1 production distribution (E3GU3QXUR43ZOH)
+- **EventBridge**: Event bus deployed (`amesa-event-bus`)
+- **ElastiCache Redis**: Redis cluster deployed (`amesa-redis`, Redis 7.0.7)
+- **ECR**: Service-specific repositories (amesa-auth-service, amesa-lottery-service, etc.)
+- **S3**: Frontend bucket (`amesa-frontend-prod`)
 - **CloudWatch**: Logs and monitoring
+
+### Microservices (8 Services)
+1. `amesa-auth-service` - Authentication & user management
+2. `amesa-lottery-service` - Lottery & favorites management
+3. `amesa-payment-service` - Payment processing
+4. `amesa-notification-service` - Notifications
+5. `amesa-content-service` - Content management
+6. `amesa-lottery-results-service` - Lottery results
+7. `amesa-analytics-service` - Analytics
+8. `amesa-admin-service` - Admin panel (Blazor Server)
+
+**Note**: Terraform defines 8 separate databases and API Gateway, but actual uses single Aurora cluster with schemas and single ALB with path-based routing.
 
 ## API Structure
 
 ### Core Endpoints
 - **Health**: `/health` - Service health check
 - **Auth**: `/api/v1/auth/*` - Authentication and user management
+- **Identity Verification**: `/api/v1/auth/identity/*` - ID verification with AWS Rekognition ✅ NEW
+  - `POST /api/v1/auth/identity/verify` - Submit ID and selfie for verification
+  - `GET /api/v1/auth/identity/status` - Get current verification status
+  - `POST /api/v1/auth/identity/retry` - Retry verification after rejection
+- **Configuration**: `/api/v1/admin/config/*` - System configuration management ✅ NEW
+  - `GET /api/v1/admin/config/{key}` - Get configuration value
+  - `PUT /api/v1/admin/config/{key}` - Update configuration value
 - **Houses**: `/api/v1/houses/*` - Lottery properties and tickets
 - **Translations**: `/api/v1/translations/*` - Internationalization
 - **Lottery Results**: `/api/v1/lottery-results/*` - Draw results
@@ -114,6 +160,8 @@ AmesaBE is the backend API for the Amesa lottery management system. Built with .
 - Input sanitization
 - SQL injection prevention (parameterized queries)
 - Secrets management via AWS Secrets Manager
+- **ID Verification**: AWS Rekognition for liveness detection and face matching ✅ NEW
+- **No Image Storage**: Images processed in-memory only, not stored ✅ NEW
 
 ### Database
 - PostgreSQL in production (Aurora Serverless v2)
@@ -309,6 +357,14 @@ git checkout main
 - `README.md` - Project documentation
 
 ### In Monorepo MetaData/ (Cross-cutting):
+- `../MetaData/Documentation/README.md` - Master documentation index
+- `../MetaData/Documentation/API/API_REFERENCE_MASTER.md` - Complete API reference (50+ endpoints)
+- `../MetaData/Documentation/Infrastructure/AWS_INFRASTRUCTURE_DISCOVERY.md` - Actual AWS infrastructure state
+- `../MetaData/Documentation/Infrastructure/DEPLOYMENT_GUIDE.md` - Complete deployment guide
+- `../MetaData/Documentation/Database/SCHEMA_REFERENCE.md` - Complete database schema
+- `../MetaData/Documentation/Database/MIGRATION_GUIDE.md` - Database migration procedures
+- `../MetaData/Documentation/Database/Migrations/lottery-user-link-migration.sql` - Lottery-User Link migration script (participant caps & watchlist)
+- `../MetaData/Documentation/TESTING_SUITE_HANDOFF.md` - Complete testing infrastructure
 - `../MetaData/Documentation/AWS_INFRASTRUCTURE_DETAILS.md` - Infrastructure details
 - `../MetaData/Documentation/ENVIRONMENT_URLS_REFERENCE.md` - Comprehensive URLs
 - `../MetaData/Reference/ENVIRONMENT_URLS_GRID.csv` - CSV for team sharing
@@ -324,17 +380,29 @@ git checkout main
    - Read `BE/.cursorrules` (this file - backend context)
    - Review `MetaData/Documentation/` for recent session documentation
    - Check "Recent Changes" and "Recent Major Work" sections
-2. **Understand current backend status** before starting any work:
+2. **Review comprehensive documentation** - **MANDATORY**:
+   - Read `MetaData/Documentation/README.md` - Master documentation index
+   - Review `MetaData/Documentation/API/API_REFERENCE_MASTER.md` - All API endpoints (50+)
+   - Review `MetaData/Documentation/Database/SCHEMA_REFERENCE.md` - Complete database schema
+   - Review `MetaData/Documentation/Database/MIGRATION_GUIDE.md` - Migration procedures
+   - Review `MetaData/Documentation/Infrastructure/AWS_INFRASTRUCTURE_DISCOVERY.md` - Actual infrastructure
+   - Review `MetaData/Documentation/Infrastructure/DEPLOYMENT_GUIDE.md` - Deployment procedures
+   - Review `MetaData/Documentation/Architecture/SYSTEM_ARCHITECTURE.md` - System architecture
+   - Review `MetaData/Documentation/Development/ONBOARDING_GUIDE.md` - Development setup
+   - Review `MetaData/Documentation/Operations/TROUBLESHOOTING_GUIDE.md` - Common issues
+3. **Understand current backend status** before starting any work:
    - Review "Current Status" section
    - Check deployment status and environment configuration
    - Review API structure and endpoints
    - Identify any ongoing work or pending tasks
    - Note any known issues or limitations
-3. **Familiarize yourself with backend architecture**:
+4. **Familiarize yourself with backend architecture**:
    - Understand .NET 8.0 project structure
    - Know database schema and Entity Framework setup
    - Understand deployment process (ECS, Docker, ECR)
    - Review AWS infrastructure configuration
+   - Review microservices architecture (8 services)
+   - Review testing infrastructure (xUnit, FluentAssertions)
 
 ### 📋 **General Agent Guidelines**
 - Always check context files for current project status
@@ -353,7 +421,17 @@ git checkout main
    - Run tests if applicable: `dotnet test`
    - Fix any build errors before pushing to repository
    - This prevents CI/CD failures and broken deployments
-3. **Update context files IMMEDIATELY upon task completion**:
+3. **UPDATE DOCUMENTATION WHEN CHANGES OCCUR** - **MANDATORY**:
+   - **New/modified API endpoints**: Update `MetaData/Documentation/API/API_REFERENCE_MASTER.md`
+   - **New/modified controllers**: Document endpoints in API reference
+   - **Database schema changes**: Update `MetaData/Documentation/Database/SCHEMA_REFERENCE.md`
+   - **New migrations**: Update `MetaData/Documentation/Database/MIGRATION_GUIDE.md`
+   - **Infrastructure changes**: Update `MetaData/Documentation/Infrastructure/AWS_INFRASTRUCTURE_DISCOVERY.md` and `DEPLOYMENT_GUIDE.md`
+   - **New services**: Update architecture, deployment, and API documentation
+   - **Deployment changes**: Update `MetaData/Documentation/Infrastructure/DEPLOYMENT_GUIDE.md`
+   - **Architecture changes**: Update `MetaData/Documentation/Architecture/SYSTEM_ARCHITECTURE.md`
+   - **Update master index**: Update `MetaData/Documentation/README.md` if adding new documents
+4. **Update context files IMMEDIATELY upon task completion**:
    - Update `BE/.cursorrules` "Recent Major Work" section
    - Update root `.cursorrules` "Recent Changes" section
    - Update `CONTEXT_QUICK_REFERENCE.md` if applicable
@@ -362,21 +440,31 @@ git checkout main
      - Clear descriptions of what was fixed/implemented
      - Technical details for future reference
      - Date and session information
-4. **Commit context updates** to the BE repository:
+5. **Commit context updates** to the BE repository:
    - All backend context updates → commit to BE repository
    - Include context updates in the same commit as code changes when possible
-5. **Provide summary** of what was accomplished for chat continuity
+6. **Provide summary** of what was accomplished for chat continuity
 
 **Why This Matters**: This ensures that when a new agent session starts, the context contains complete, up-to-date information about recent backend work and current status. Without updating context files, new agents will be working with outdated information.
 
 ### 🔧 **CRITICAL UPDATE TRIGGERS**
-**CRITICAL**: If any changes relate to the following, you MUST update context files:
+**CRITICAL**: If any changes relate to the following, you MUST update context files AND documentation:
+
+**Context Files** (`.cursorrules`):
 - API design or endpoint changes
 - Database schema or migrations
 - Deployment processes or infrastructure
 - Environment configuration
 - Authentication/authorization changes
 - New features or major refactoring
+
+**Documentation Files** (`MetaData/Documentation/`):
+- **API changes** → Update `API/API_REFERENCE_MASTER.md`
+- **Database changes** → Update `Database/SCHEMA_REFERENCE.md` and `MIGRATION_GUIDE.md`
+- **Infrastructure changes** → Update `Infrastructure/AWS_INFRASTRUCTURE_DISCOVERY.md` and `DEPLOYMENT_GUIDE.md`
+- **Architecture changes** → Update `Architecture/SYSTEM_ARCHITECTURE.md`
+- **New services** → Update all relevant documentation
+- **Always** → Update `README.md` master index when adding documents
 
 ## Architecture Overview
 
@@ -404,9 +492,139 @@ Client → CloudFront /api/* → ALB → ECS Task → .NET API → Aurora Postgr
 - **Payment Processing**: Secure Stripe integration
 - **Multi-language**: Internationalization support
 - **Real-time Features**: Live lottery updates via SignalR
-- **Identity Verification**: KYC/AML compliance
+- **Identity Verification**: ✅ **IMPLEMENTED** - AWS Rekognition integration for KYC/AML compliance with liveness detection
 
-## Recent Major Work (2025-01-XX) - LOTTERY FAVORITES DEPLOYMENT & DOCKER BUILD FIX
+## Recent Changes (2025-01-25) - LOTTERY-USER LINK SYSTEM COMPLETE IMPLEMENTATION
+1. ✅ **Lottery-User Link System - Complete Implementation** - See "Recent Changes" section above for full details
+   - **Migration**: ✅ Applied (2025-01-25 17:17:04) - `MetaData/Documentation/Database/Migrations/lottery-user-link-migration.sql`
+   - **Backend**: ✅ Complete - WatchlistService, participant cap enforcement, optimized queries
+   - **Enhancements**: ✅ All complete - Backend optimization, API serialization verified
+   - **Translation Keys**: ✅ Added - Error messages and Polish house keys in `MetaData/Scripts/Translation/`
+   - **Status**: ✅ All features implemented, tested, and ready for production
+
+## Previous Changes (2025-01-25) - OAUTH PROFILE POPULATION & VERIFICATION LOCK
+1. ✅ **OAuth Profile Population and Verification Lock** - Complete implementation
+   - **OAuth Profile Population**:
+     - Enhanced `CreateOrUpdateOAuthUserAsync` to accept and populate dateOfBirth, gender, profileImageUrl from OAuth providers
+     - Updated Google OAuth callback to extract birthdate, gender, picture claims
+     - Updated Meta OAuth callback to extract birthday, gender, picture claims
+     - Updated Program.cs OnCreatingTicket handler to extract and pass additional claims
+     - Only updates empty/null fields, doesn't overwrite existing data
+   - **Profile Update Validation**:
+     - Added verification status check in `UserService.UpdateUserProfileAsync`
+     - Locks FirstName, LastName, DateOfBirth, Gender after identity verification
+     - Returns `PROFILE_LOCKED_AFTER_VERIFICATION` error when attempting to update locked fields
+     - Allows IdNumber updates even when verified (extracted from ID document)
+     - Allows PreferredLanguage and Timezone updates always
+   - **ID Document Data Extraction**:
+     - Enhanced `IdentityVerificationService` to extract and update user profile from ID document OCR after successful verification
+     - Extracts IdNumber and DateOfBirth from OCR text using regex patterns
+     - Logs which fields were updated from ID document
+   - **API Endpoints**:
+     - Added `PUT /api/v1/auth/profile` endpoint in AuthController
+     - Handles `PROFILE_LOCKED_AFTER_VERIFICATION` error code properly
+   - **Files Modified**: AuthService, OAuthController, UserService, IdentityVerificationService, AuthController, UserDTOs (12 files)
+   - **Status**: Committed and pushed (commit 9491870)
+   - **Impact**: User profiles automatically populated from OAuth providers, fields locked after verification for data integrity
+
+## Previous Major Work (2025-11-24) - ID VERIFICATION WITH AWS REKOGNITION IMPLEMENTATION
+- ✅ **ID Verification System Implemented** - Complete AWS Rekognition integration with liveness detection
+  - **SystemConfiguration Service**: Feature flag system for enabling/disabling verification requirement
+    - Created `SystemConfiguration` model in `AmesaBackend.Shared.Configuration`
+    - Implemented `ConfigurationService` in Auth service for CRUD operations
+    - Created `ConfigurationController` for admin API to toggle feature flags
+    - Database table: `amesa_auth.system_configurations` (created via migration)
+  - **Identity Verification Service**: Core verification logic with AWS Rekognition
+    - Created `IdentityVerificationService` with verify, status, and retry methods
+    - Implemented `AwsRekognitionService` for AWS API integration
+    - Added `IdentityVerificationController` with endpoints:
+      - `POST /api/v1/auth/identity/verify` - Submit ID and selfie for verification
+      - `GET /api/v1/auth/identity/status` - Get verification status
+      - `POST /api/v1/auth/identity/retry` - Retry verification after rejection
+    - Features: Liveness detection, face comparison, OCR (optional)
+    - **No image storage**: Only validation keys and metadata stored
+  - **Database Schema Updates**: Modified `UserIdentityDocument` model
+    - Removed image URL fields (FrontImageUrl, BackImageUrl, SelfieImageUrl)
+    - Added: validation_key (UUID), liveness_score, face_match_score, verification_provider, verification_metadata (JSONB), verification_attempts, last_verification_attempt, verified_at
+    - Migration: `AddIdentityVerificationMigration.sql` (already applied)
+  - **Lottery Service Integration**: Verification check before ticket purchase
+    - Added `ConfigurationService` to Lottery service (cross-schema access to auth config)
+    - Modified `PurchaseTicketAsync()` and `QuickEntryFromFavoriteAsync()` to check verification
+    - Throws `UnauthorizedAccessException` with "ID_VERIFICATION_REQUIRED" when verification required but not completed
+  - **AWS Infrastructure**: IAM permissions configured
+    - Policy: `RekognitionIDVerificationPolicy` added to `ecsTaskExecutionRole`
+    - Permissions: `rekognition:DetectFaces`, `rekognition:CompareFaces`, `rekognition:DetectText`
+    - Scripts: `add-rekognition-permissions.sh`, `verify-task-role.ps1`, `rekognition-policy.json`
+  - **Files Created**:
+    - `AmesaBackend.Auth/Controllers/IdentityVerificationController.cs`
+    - `AmesaBackend.Auth/Services/IdentityVerificationService.cs`
+    - `AmesaBackend.Auth/Services/AwsRekognitionService.cs`
+    - `AmesaBackend.Auth/DTOs/IdentityVerificationDTOs.cs`
+    - `AmesaBackend.Shared/Configuration/SystemConfiguration.cs`
+    - `AmesaBackend.Shared/Configuration/IConfigurationService.cs`
+    - `AmesaBackend.Lottery/Services/ConfigurationService.cs`
+    - `AmesaBackend.Auth/Infrastructure/AddIdentityVerificationMigration.sql`
+    - `Infrastructure/rekognition-policy.json`
+    - `Infrastructure/add-rekognition-permissions.sh`
+  - **Files Modified**:
+    - `AmesaBackend.Auth/Models/UserIdentityDocument.cs` - Removed image URLs, added metadata fields
+    - `AmesaBackend.Auth/Data/AuthDbContext.cs` - Added SystemConfiguration DbSet
+    - `AmesaBackend.Auth/Program.cs` - Registered Rekognition client and services
+    - `AmesaBackend.Lottery/Services/LotteryService.cs` - Added verification check
+    - `AmesaBackend.Lottery/Program.cs` - Registered ConfigurationService
+  - **Status**: ✅ Code committed and pushed (commit 6cf5f7a), IAM configured, ready for deployment
+  - **Next Steps**: Deployment via CI/CD, translation keys (Phase 5), testing
+
+## Previous Major Work (2025-11-24) - OAUTH FIX, USER PREFERENCES ROUTING, SIGNALR ENABLED
+- ✅ **OAuth Authentication Fixed** - Complete OAuth flow now working
+  - Fixed JWT token generation in `JwtTokenManager.cs` to include Audience claim (matches AddJwtBearer validation)
+  - Fixed ExchangeToken endpoint in `OAuthController.cs` to return ApiResponse wrapper (frontend compatibility)
+  - Fixed JSON serialization in `Program.cs` to use camelCase (AddJsonOptions with JsonNamingPolicy.CamelCase)
+  - Fixed frontend token clearing logic to not clear token on OAuth exchange 401 errors
+  - OAuth login now successfully authenticates users and fetches user profile
+- ✅ **User Preferences Routing Fixed** - Added ALB routing rule for /api/v1/user/*
+  - Created PowerShell script: `MetaData/Scripts/add-user-preferences-alb-rule.ps1`
+  - Added ALB routing rule (priority 97) to route /api/v1/user/* to amesa-auth-service-tg
+  - Resolves 503 Service Unavailable errors on /api/v1/user/preferences endpoint
+  - User preferences endpoints now properly route to auth service
+- ✅ **SignalR WebSocket Support Enabled** - Enabled SignalR hubs in main backend
+  - Uncommented MapHub calls in `AmesaBackend/Program.cs` for LotteryHub (/ws/lottery) and NotificationHub (/ws/notifications)
+  - Created CloudFront cache behavior script: `MetaData/Scripts/add-cloudfront-websocket-rule.ps1`
+  - CloudFront configuration needs manual application (script prepared, config file generated in temp folder)
+  - Once CloudFront is updated, SignalR WebSocket connections will work properly
+  - SignalR hubs require authentication (Authorize attribute on hubs)
+
+## Previous Major Work (2025-01-XX) - BACKEND TESTS FIXED, SEEDING DISABLED, CI/CD IMPROVEMENTS
+- ✅ **Backend Tests Fixed** - All 52 tests now passing (previously 25 failures)
+  - Fixed JSON parsing error in appsettings.Development.json (removed merge conflict markers)
+  - Fixed QRCodeService.GenerateQRCodeImageUrl to handle empty input
+  - Fixed test database isolation issues by ensuring consistent database names in test fixtures
+  - Fixed LotteryResultsController by removing unnecessary Draw Include() that caused query failures
+  - Fixed QR code validation tests by ensuring LotteryResultId matches between QR code generation and database records
+- ✅ **Automatic Database Seeding Disabled** - CRITICAL: Removed all automatic seeding from Program.cs
+  - Database seeding now requires manual activation only
+  - No data will be seeded automatically on builds or deployments
+  - Use AmesaBackend.DatabaseSeeder project for manual seeding
+  - Only database schema creation (EnsureCreatedAsync) remains automatic
+- ✅ **PowerShell Scripts Excluded from Git** - Added *.ps1 to .gitignore
+  - All 40 .ps1 files removed from git tracking
+  - Scripts remain in working directory but are no longer tracked
+  - Prevents accidental commits of local utility scripts
+- ✅ **CI/CD Concurrency Rules Added** - GitHub workflows now cancel previous runs
+  - Added concurrency groups to test.yml and build-and-deploy.yml
+  - New workflow runs automatically cancel previous runs of the same workflow on the same branch
+  - Prevents resource waste and deployment conflicts
+
+## Previous Major Work (2025-01-XX) - COMPREHENSIVE DOCUMENTATION REVISION
+- ✅ **Documentation Revision** - Complete revision of all documentation, context files, and technical docs
+- ✅ **AWS Infrastructure Discovery** - Actual AWS state documented (8 services, single ALB, single Aurora cluster)
+- ✅ **API Documentation** - Master API reference created (50+ endpoints across all 8 microservices)
+- ✅ **Database Documentation** - Complete schema reference and migration guide created
+- ✅ **Deployment Guide** - Complete deployment guide for all services
+- ✅ **Testing Infrastructure** - Complete testing suite documented (xUnit, FluentAssertions, CI/CD)
+- ✅ **Infrastructure Gaps** - Identified differences between Terraform and actual infrastructure
+
+## Previous Major Work (2025-01-XX) - LOTTERY FAVORITES DEPLOYMENT & DOCKER BUILD FIX
 - ✅ **Docker Build Error Fixed** - Resolved NETSDK1152 error for amesa-lottery-service
 - ✅ **Dockerfile Workaround** - Added temporary rename of Auth appsettings.json during publish
 - ✅ **Project Reference Updated** - Modified AmesaBackend.Lottery.csproj to handle referenced project content
@@ -446,7 +664,272 @@ Client → CloudFront /api/* → ALB → ECS Task → .NET API → Aurora Postgr
 - Schema reference files
 - Safety measures and validation
 
+## Testing Infrastructure
+
+### Unit & Integration Testing (xUnit)
+- **Framework**: xUnit 2.6.1
+- **Assertions**: FluentAssertions 6.12.0
+- **Mocking**: Moq 4.20.69
+- **Test Data**: Bogus 35.6.0, AutoFixture 4.18.1
+- **Integration**: Microsoft.AspNetCore.Mvc.Testing 8.0.0
+- **Database**: Microsoft.EntityFrameworkCore.InMemory 8.0.0
+- **Coverage**: coverlet.collector 6.0.0
+- **Configuration**: `coverlet.runsettings`
+
+### Test Structure
+- **Unit Tests**: `AmesaBackend.Tests/Controllers/` (AuthControllerTests, LotteryResultsControllerTests)
+- **Integration Tests**: `AmesaBackend.Tests/Integration/` (HousesControllerIntegrationTests)
+- **Test Utilities**: `AmesaBackend.Tests/TestHelpers/` (TestDataBuilder), `TestFixtures/` (WebApplicationFixture)
+
+### CI/CD Integration
+- **Test Workflow**: `.github/workflows/test.yml` (standalone test workflow)
+- **Deploy Workflow**: `.github/workflows/build-and-deploy.yml` (tests block deployment)
+- **Coverage**: Codecov integration for coverage reporting
+
+### Test Coverage Status
+- **Unit Tests**: 3 controllers/services tested (AuthController, LotteryResultsController, QRCodeService)
+- **Integration Tests**: 2 controllers tested (HousesController, LotteryResultsController)
+- **Remaining**: 15+ controllers, all services need tests
+
 ---
-**Last Updated**: 2025-11-21
+**Last Updated**: 2025-01-XX (Comprehensive Documentation Revision)
+**Note**: This file should be updated whenever API design, database schema, deployment processes, or infrastructure changes.
+
+
+**Documentation Files** (`MetaData/Documentation/`):
+- **API changes** → Update `API/API_REFERENCE_MASTER.md`
+- **Database changes** → Update `Database/SCHEMA_REFERENCE.md` and `MIGRATION_GUIDE.md`
+- **Infrastructure changes** → Update `Infrastructure/AWS_INFRASTRUCTURE_DISCOVERY.md` and `DEPLOYMENT_GUIDE.md`
+- **Architecture changes** → Update `Architecture/SYSTEM_ARCHITECTURE.md`
+- **New services** → Update all relevant documentation
+- **Always** → Update `README.md` master index when adding documents
+
+## Architecture Overview
+
+### System Architecture
+```
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│   Frontend      │───▶│     Backend      │───▶│    Database     │
+│                 │    │                  │    │                 │
+│ Angular 20.2.1  │    │ .NET 8.0         │    │ Aurora PostgreSQL│
+│ S3 + CloudFront │    │ ECS Fargate      │    │ Serverless v2   │
+└─────────────────┘    │ Docker + ALB     │    └─────────────────┘
+                       │ SignalR Hubs     │
+                       └──────────────────┘
+```
+
+### Request Flow
+```
+Client → CloudFront /api/* → ALB → ECS Task → .NET API → Aurora PostgreSQL
+                                              → SignalR Hub → WebSocket Connection
+```
+
+## Business Context
+- **4Wins Model**: Property lottery platform
+- **Legal Compliance**: Gaming regulations, responsible gambling
+- **Payment Processing**: Secure Stripe integration
+- **Multi-language**: Internationalization support
+- **Real-time Features**: Live lottery updates via SignalR
+- **Identity Verification**: ✅ **IMPLEMENTED** - AWS Rekognition integration for KYC/AML compliance with liveness detection
+
+## Recent Changes (2025-01-25) - LOTTERY-USER LINK SYSTEM COMPLETE IMPLEMENTATION
+1. ✅ **Lottery-User Link System - Complete Implementation** - See "Recent Changes" section above for full details
+   - **Migration**: ✅ Applied (2025-01-25 17:17:04) - `MetaData/Documentation/Database/Migrations/lottery-user-link-migration.sql`
+   - **Backend**: ✅ Complete - WatchlistService, participant cap enforcement, optimized queries
+   - **Enhancements**: ✅ All complete - Backend optimization, API serialization verified
+   - **Translation Keys**: ✅ Added - Error messages and Polish house keys in `MetaData/Scripts/Translation/`
+   - **Status**: ✅ All features implemented, tested, and ready for production
+
+## Previous Changes (2025-01-25) - OAUTH PROFILE POPULATION & VERIFICATION LOCK
+1. ✅ **OAuth Profile Population and Verification Lock** - Complete implementation
+   - **OAuth Profile Population**:
+     - Enhanced `CreateOrUpdateOAuthUserAsync` to accept and populate dateOfBirth, gender, profileImageUrl from OAuth providers
+     - Updated Google OAuth callback to extract birthdate, gender, picture claims
+     - Updated Meta OAuth callback to extract birthday, gender, picture claims
+     - Updated Program.cs OnCreatingTicket handler to extract and pass additional claims
+     - Only updates empty/null fields, doesn't overwrite existing data
+   - **Profile Update Validation**:
+     - Added verification status check in `UserService.UpdateUserProfileAsync`
+     - Locks FirstName, LastName, DateOfBirth, Gender after identity verification
+     - Returns `PROFILE_LOCKED_AFTER_VERIFICATION` error when attempting to update locked fields
+     - Allows IdNumber updates even when verified (extracted from ID document)
+     - Allows PreferredLanguage and Timezone updates always
+   - **ID Document Data Extraction**:
+     - Enhanced `IdentityVerificationService` to extract and update user profile from ID document OCR after successful verification
+     - Extracts IdNumber and DateOfBirth from OCR text using regex patterns
+     - Logs which fields were updated from ID document
+   - **API Endpoints**:
+     - Added `PUT /api/v1/auth/profile` endpoint in AuthController
+     - Handles `PROFILE_LOCKED_AFTER_VERIFICATION` error code properly
+   - **Files Modified**: AuthService, OAuthController, UserService, IdentityVerificationService, AuthController, UserDTOs (12 files)
+   - **Status**: Committed and pushed (commit 9491870)
+   - **Impact**: User profiles automatically populated from OAuth providers, fields locked after verification for data integrity
+
+## Previous Major Work (2025-11-24) - ID VERIFICATION WITH AWS REKOGNITION IMPLEMENTATION
+- ✅ **ID Verification System Implemented** - Complete AWS Rekognition integration with liveness detection
+  - **SystemConfiguration Service**: Feature flag system for enabling/disabling verification requirement
+    - Created `SystemConfiguration` model in `AmesaBackend.Shared.Configuration`
+    - Implemented `ConfigurationService` in Auth service for CRUD operations
+    - Created `ConfigurationController` for admin API to toggle feature flags
+    - Database table: `amesa_auth.system_configurations` (created via migration)
+  - **Identity Verification Service**: Core verification logic with AWS Rekognition
+    - Created `IdentityVerificationService` with verify, status, and retry methods
+    - Implemented `AwsRekognitionService` for AWS API integration
+    - Added `IdentityVerificationController` with endpoints:
+      - `POST /api/v1/auth/identity/verify` - Submit ID and selfie for verification
+      - `GET /api/v1/auth/identity/status` - Get verification status
+      - `POST /api/v1/auth/identity/retry` - Retry verification after rejection
+    - Features: Liveness detection, face comparison, OCR (optional)
+    - **No image storage**: Only validation keys and metadata stored
+  - **Database Schema Updates**: Modified `UserIdentityDocument` model
+    - Removed image URL fields (FrontImageUrl, BackImageUrl, SelfieImageUrl)
+    - Added: validation_key (UUID), liveness_score, face_match_score, verification_provider, verification_metadata (JSONB), verification_attempts, last_verification_attempt, verified_at
+    - Migration: `AddIdentityVerificationMigration.sql` (already applied)
+  - **Lottery Service Integration**: Verification check before ticket purchase
+    - Added `ConfigurationService` to Lottery service (cross-schema access to auth config)
+    - Modified `PurchaseTicketAsync()` and `QuickEntryFromFavoriteAsync()` to check verification
+    - Throws `UnauthorizedAccessException` with "ID_VERIFICATION_REQUIRED" when verification required but not completed
+  - **AWS Infrastructure**: IAM permissions configured
+    - Policy: `RekognitionIDVerificationPolicy` added to `ecsTaskExecutionRole`
+    - Permissions: `rekognition:DetectFaces`, `rekognition:CompareFaces`, `rekognition:DetectText`
+    - Scripts: `add-rekognition-permissions.sh`, `verify-task-role.ps1`, `rekognition-policy.json`
+  - **Files Created**:
+    - `AmesaBackend.Auth/Controllers/IdentityVerificationController.cs`
+    - `AmesaBackend.Auth/Services/IdentityVerificationService.cs`
+    - `AmesaBackend.Auth/Services/AwsRekognitionService.cs`
+    - `AmesaBackend.Auth/DTOs/IdentityVerificationDTOs.cs`
+    - `AmesaBackend.Shared/Configuration/SystemConfiguration.cs`
+    - `AmesaBackend.Shared/Configuration/IConfigurationService.cs`
+    - `AmesaBackend.Lottery/Services/ConfigurationService.cs`
+    - `AmesaBackend.Auth/Infrastructure/AddIdentityVerificationMigration.sql`
+    - `Infrastructure/rekognition-policy.json`
+    - `Infrastructure/add-rekognition-permissions.sh`
+  - **Files Modified**:
+    - `AmesaBackend.Auth/Models/UserIdentityDocument.cs` - Removed image URLs, added metadata fields
+    - `AmesaBackend.Auth/Data/AuthDbContext.cs` - Added SystemConfiguration DbSet
+    - `AmesaBackend.Auth/Program.cs` - Registered Rekognition client and services
+    - `AmesaBackend.Lottery/Services/LotteryService.cs` - Added verification check
+    - `AmesaBackend.Lottery/Program.cs` - Registered ConfigurationService
+  - **Status**: ✅ Code committed and pushed (commit 6cf5f7a), IAM configured, ready for deployment
+  - **Next Steps**: Deployment via CI/CD, translation keys (Phase 5), testing
+
+## Previous Major Work (2025-11-24) - OAUTH FIX, USER PREFERENCES ROUTING, SIGNALR ENABLED
+- ✅ **OAuth Authentication Fixed** - Complete OAuth flow now working
+  - Fixed JWT token generation in `JwtTokenManager.cs` to include Audience claim (matches AddJwtBearer validation)
+  - Fixed ExchangeToken endpoint in `OAuthController.cs` to return ApiResponse wrapper (frontend compatibility)
+  - Fixed JSON serialization in `Program.cs` to use camelCase (AddJsonOptions with JsonNamingPolicy.CamelCase)
+  - Fixed frontend token clearing logic to not clear token on OAuth exchange 401 errors
+  - OAuth login now successfully authenticates users and fetches user profile
+- ✅ **User Preferences Routing Fixed** - Added ALB routing rule for /api/v1/user/*
+  - Created PowerShell script: `MetaData/Scripts/add-user-preferences-alb-rule.ps1`
+  - Added ALB routing rule (priority 97) to route /api/v1/user/* to amesa-auth-service-tg
+  - Resolves 503 Service Unavailable errors on /api/v1/user/preferences endpoint
+  - User preferences endpoints now properly route to auth service
+- ✅ **SignalR WebSocket Support Enabled** - Enabled SignalR hubs in main backend
+  - Uncommented MapHub calls in `AmesaBackend/Program.cs` for LotteryHub (/ws/lottery) and NotificationHub (/ws/notifications)
+  - Created CloudFront cache behavior script: `MetaData/Scripts/add-cloudfront-websocket-rule.ps1`
+  - CloudFront configuration needs manual application (script prepared, config file generated in temp folder)
+  - Once CloudFront is updated, SignalR WebSocket connections will work properly
+  - SignalR hubs require authentication (Authorize attribute on hubs)
+
+## Previous Major Work (2025-01-XX) - BACKEND TESTS FIXED, SEEDING DISABLED, CI/CD IMPROVEMENTS
+- ✅ **Backend Tests Fixed** - All 52 tests now passing (previously 25 failures)
+  - Fixed JSON parsing error in appsettings.Development.json (removed merge conflict markers)
+  - Fixed QRCodeService.GenerateQRCodeImageUrl to handle empty input
+  - Fixed test database isolation issues by ensuring consistent database names in test fixtures
+  - Fixed LotteryResultsController by removing unnecessary Draw Include() that caused query failures
+  - Fixed QR code validation tests by ensuring LotteryResultId matches between QR code generation and database records
+- ✅ **Automatic Database Seeding Disabled** - CRITICAL: Removed all automatic seeding from Program.cs
+  - Database seeding now requires manual activation only
+  - No data will be seeded automatically on builds or deployments
+  - Use AmesaBackend.DatabaseSeeder project for manual seeding
+  - Only database schema creation (EnsureCreatedAsync) remains automatic
+- ✅ **PowerShell Scripts Excluded from Git** - Added *.ps1 to .gitignore
+  - All 40 .ps1 files removed from git tracking
+  - Scripts remain in working directory but are no longer tracked
+  - Prevents accidental commits of local utility scripts
+- ✅ **CI/CD Concurrency Rules Added** - GitHub workflows now cancel previous runs
+  - Added concurrency groups to test.yml and build-and-deploy.yml
+  - New workflow runs automatically cancel previous runs of the same workflow on the same branch
+  - Prevents resource waste and deployment conflicts
+
+## Previous Major Work (2025-01-XX) - COMPREHENSIVE DOCUMENTATION REVISION
+- ✅ **Documentation Revision** - Complete revision of all documentation, context files, and technical docs
+- ✅ **AWS Infrastructure Discovery** - Actual AWS state documented (8 services, single ALB, single Aurora cluster)
+- ✅ **API Documentation** - Master API reference created (50+ endpoints across all 8 microservices)
+- ✅ **Database Documentation** - Complete schema reference and migration guide created
+- ✅ **Deployment Guide** - Complete deployment guide for all services
+- ✅ **Testing Infrastructure** - Complete testing suite documented (xUnit, FluentAssertions, CI/CD)
+- ✅ **Infrastructure Gaps** - Identified differences between Terraform and actual infrastructure
+
+## Previous Major Work (2025-01-XX) - LOTTERY FAVORITES DEPLOYMENT & DOCKER BUILD FIX
+- ✅ **Docker Build Error Fixed** - Resolved NETSDK1152 error for amesa-lottery-service
+- ✅ **Dockerfile Workaround** - Added temporary rename of Auth appsettings.json during publish
+- ✅ **Project Reference Updated** - Modified AmesaBackend.Lottery.csproj to handle referenced project content
+- ✅ **Backend Deployed** - Lottery Favorites Phase 1 code deployed to production via CI/CD
+- ✅ **Production Test Script** - Created PowerShell script for testing endpoints on production
+- ✅ **Migration Complete** - Database indexes, views, and translations added to production
+- ✅ **Ready for Testing** - All services deployed, endpoints ready for production verification
+
+## Previous Major Work (2025-11-21) - COMPLETE TRANSLATION SYSTEM OVERHAUL
+- ✅ **Complete Translation Coverage** - All 507 frontend translation keys identified and scripted
+- ✅ **Language Support Reduced** - Removed Hebrew and Arabic, now 4 languages (EN, ES, FR, PL)
+- ✅ **Comprehensive SQL Script** - `COMPLETE_ALL_507_TRANSLATIONS.sql` with all keys for all languages
+- ✅ **Script Organization** - All SQL scripts moved to `MetaData/Scripts/` folder
+- ✅ **Database Seeder Excluded** - Seeder service added to .gitignore, removed from repository
+- ✅ **Translation Loader** - Enhanced UX with loader when switching languages
+
+## Previous Major Work (2025-11-21) - DATABASE SEEDING & TRANSLATION FIXES
+- ✅ **Database Fully Seeded** - Production database populated with comprehensive test data
+- ✅ **Translation System Fixed** - Resolved Entity Framework schema mapping issues  
+- ✅ **Polish Language Added** - Complete Polish translation support (6th language)
+- ✅ **User Preferences API** - Full CRUD implementation with JSONB storage
+- ✅ **Schema Alignment** - EF models now match actual database schemas
+- ✅ **Safety Measures** - Prevented data loss with proper conflict handling
+- ✅ **Database Seeder** - Production-safe comprehensive data population tool (now excluded from repo)
+
+## Previous Work (2025-10-08)
+- ✅ Configured GitHub Actions CI/CD pipeline
+- ✅ Set up ECS/ECR deployment flow
+- ✅ Implemented multi-environment strategy
+- ✅ Added health check endpoints
+- ✅ Configured database authentication
+
+## 📚 **Session Documentation**
+**Latest Session**: [Database Seeding & Translation System Fix](../MetaData/Documentation/2025-11-21-Database-Seeding-And-Translations/README.md)
+- Complete handoff documentation
+- Technical implementation details
+- Schema reference files
+- Safety measures and validation
+
+## Testing Infrastructure
+
+### Unit & Integration Testing (xUnit)
+- **Framework**: xUnit 2.6.1
+- **Assertions**: FluentAssertions 6.12.0
+- **Mocking**: Moq 4.20.69
+- **Test Data**: Bogus 35.6.0, AutoFixture 4.18.1
+- **Integration**: Microsoft.AspNetCore.Mvc.Testing 8.0.0
+- **Database**: Microsoft.EntityFrameworkCore.InMemory 8.0.0
+- **Coverage**: coverlet.collector 6.0.0
+- **Configuration**: `coverlet.runsettings`
+
+### Test Structure
+- **Unit Tests**: `AmesaBackend.Tests/Controllers/` (AuthControllerTests, LotteryResultsControllerTests)
+- **Integration Tests**: `AmesaBackend.Tests/Integration/` (HousesControllerIntegrationTests)
+- **Test Utilities**: `AmesaBackend.Tests/TestHelpers/` (TestDataBuilder), `TestFixtures/` (WebApplicationFixture)
+
+### CI/CD Integration
+- **Test Workflow**: `.github/workflows/test.yml` (standalone test workflow)
+- **Deploy Workflow**: `.github/workflows/build-and-deploy.yml` (tests block deployment)
+- **Coverage**: Codecov integration for coverage reporting
+
+### Test Coverage Status
+- **Unit Tests**: 3 controllers/services tested (AuthController, LotteryResultsController, QRCodeService)
+- **Integration Tests**: 2 controllers tested (HousesController, LotteryResultsController)
+- **Remaining**: 15+ controllers, all services need tests
+
+---
+**Last Updated**: 2025-01-XX (Comprehensive Documentation Revision)
 **Note**: This file should be updated whenever API design, database schema, deployment processes, or infrastructure changes.
 

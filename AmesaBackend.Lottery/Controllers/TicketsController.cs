@@ -253,6 +253,22 @@ namespace AmesaBackend.Lottery.Controllers
                 // Check ID verification requirement
                 await _lotteryService.CheckVerificationRequirementAsync(userId);
 
+                // Check participant cap
+                var canEnter = await _lotteryService.CanUserEnterLotteryAsync(userId, request.HouseId);
+                if (!canEnter)
+                {
+                    return BadRequest(new ApiResponse<QuickEntryResponse>
+                    {
+                        Success = false,
+                        Message = "Participant cap reached. Cannot enter this lottery.",
+                        Error = new ErrorResponse
+                        {
+                            Code = "PARTICIPANT_CAP_REACHED",
+                            Message = "The maximum number of participants for this lottery has been reached."
+                        }
+                    });
+                }
+
                 // This would integrate with payment service
                 // Fixed: Response structure matches API contract
                 var response = new QuickEntryResponse
@@ -282,6 +298,22 @@ namespace AmesaBackend.Lottery.Controllers
                 });
             }
             catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error processing quick entry");
+                return StatusCode(500, new ApiResponse<QuickEntryResponse>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "INTERNAL_ERROR",
+                        Message = ex.Message
+                    }
+                });
+            }
+        }
+    }
+}
+
             {
                 _logger.LogError(ex, "Error processing quick entry");
                 return StatusCode(500, new ApiResponse<QuickEntryResponse>
