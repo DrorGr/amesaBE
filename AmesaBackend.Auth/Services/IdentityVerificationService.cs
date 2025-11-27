@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using AmesaBackend.Auth.Data;
 using AmesaBackend.Auth.DTOs;
 using AmesaBackend.Auth.Models;
@@ -138,14 +139,90 @@ namespace AmesaBackend.Auth.Services
                     document.UpdatedAt = DateTime.UtcNow;
                 }
 
-                // Update user verification status if verified
+                // Update user verification status and profile from ID document if verified
                 if (isVerified)
                 {
                     var user = await _context.Users.FindAsync(userId);
                     if (user != null)
                     {
                         user.VerificationStatus = UserVerificationStatus.IdentityVerified;
+                        
+                        // Extract and update user profile from ID document OCR text
+                        var updatedFields = new List<string>();
+                        
+                        // Extract data from OCR text (extractedText contains all detected text)
+                        if (!string.IsNullOrEmpty(extractedText))
+                        {
+                            // Try to extract ID number (usually a long numeric string)
+                            var idNumberMatch = Regex.Match(extractedText, @"\b\d{6,20}\b");
+                            if (idNumberMatch.Success && string.IsNullOrEmpty(user.IdNumber))
+                            {
+                                user.IdNumber = idNumberMatch.Value;
+                                updatedFields.Add("IdNumber");
+                            }
+                            
+                            // Try to extract date of birth (various formats: DD/MM/YYYY, DD-MM-YYYY, YYYY-MM-DD)
+                            var datePatterns = new[]
+                            {
+                                @"\b(\d{1,2})[/-](\d{1,2})[/-](\d{4})\b",  // DD/MM/YYYY or DD-MM-YYYY
+                                @"\b(\d{4})[/-](\d{1,2})[/-](\d{1,2})\b"   // YYYY-MM-DD or YYYY/MM/DD
+                            };
+                            
+                            foreach (var pattern in datePatterns)
+                            {
+                                var dateMatch = Regex.Match(extractedText, pattern);
+                                if (dateMatch.Success)
+                                {
+                                    try
+                                    {
+                                        int day, month, year;
+                                        if (dateMatch.Groups.Count == 4)
+                                        {
+                                            if (pattern.Contains(@"(\d{4})")) // YYYY-MM-DD format
+                                            {
+                                                year = int.Parse(dateMatch.Groups[1].Value);
+                                                month = int.Parse(dateMatch.Groups[2].Value);
+                                                day = int.Parse(dateMatch.Groups[3].Value);
+                                            }
+                                            else // DD/MM/YYYY format
+                                            {
+                                                day = int.Parse(dateMatch.Groups[1].Value);
+                                                month = int.Parse(dateMatch.Groups[2].Value);
+                                                year = int.Parse(dateMatch.Groups[3].Value);
+                                            }
+                                            
+                                            var dob = new DateTime(year, month, day);
+                                            // Only update if date is reasonable (between 1900 and today, and user is at least 18)
+                                            if (dob.Year >= 1900 && dob <= DateTime.UtcNow.AddYears(-18))
+                                            {
+                                                if (!user.DateOfBirth.HasValue)
+                                                {
+                                                    user.DateOfBirth = dob;
+                                                    updatedFields.Add("DateOfBirth");
+                                                }
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    catch
+                                    {
+                                        // Invalid date, continue
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Note: firstName, lastName, and gender are harder to extract reliably from OCR
+                        // These would typically require more sophisticated parsing or manual review
+                        // For now, we only update fields that can be reliably extracted (IdNumber, DateOfBirth)
+                        
                         user.UpdatedAt = DateTime.UtcNow;
+                        
+                        if (updatedFields.Any())
+                        {
+                            _logger.LogInformation("Updated user profile from ID document OCR for user {UserId}. Fields updated: {Fields}",
+                                userId, string.Join(", ", updatedFields));
+                        }
                     }
                 }
 

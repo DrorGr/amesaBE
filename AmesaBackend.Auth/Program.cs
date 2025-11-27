@@ -357,6 +357,29 @@ if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(goo
                 var googleId = claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
                 var firstName = claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.GivenName)?.Value;
                 var lastName = claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.Surname)?.Value;
+                
+                // Extract additional Google claims
+                var birthdateClaim = claims.FirstOrDefault(c => c.Type == "birthdate")?.Value;
+                var genderClaim = claims.FirstOrDefault(c => c.Type == "gender")?.Value;
+                var pictureClaim = claims.FirstOrDefault(c => c.Type == "picture")?.Value;
+                
+                DateTime? dateOfBirth = null;
+                if (!string.IsNullOrEmpty(birthdateClaim) && DateTime.TryParse(birthdateClaim, out var parsedDate))
+                {
+                    dateOfBirth = parsedDate;
+                }
+                
+                string? gender = null;
+                if (!string.IsNullOrEmpty(genderClaim))
+                {
+                    // Map Google gender to our enum (male/female/other)
+                    gender = genderClaim.ToLower() switch
+                    {
+                        "male" => "Male",
+                        "female" => "Female",
+                        _ => "Other"
+                    };
+                }
 
                 if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(googleId))
                 {
@@ -376,7 +399,10 @@ if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(goo
                     providerId: googleId,
                     provider: AuthProvider.Google,
                     firstName: firstName,
-                    lastName: lastName
+                    lastName: lastName,
+                    dateOfBirth: dateOfBirth,
+                    gender: gender,
+                    profileImageUrl: pictureClaim
                 );
 
                 // #region agent log

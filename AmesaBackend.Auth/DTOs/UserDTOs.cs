@@ -64,6 +64,9 @@ namespace AmesaBackend.Auth.DTOs
 
         public string? Gender { get; set; }
 
+        [StringLength(50)]
+        public string? IdNumber { get; set; }
+
         [StringLength(10)]
         public string? PreferredLanguage { get; set; }
 

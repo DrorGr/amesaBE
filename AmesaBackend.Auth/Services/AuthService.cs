@@ -491,7 +491,15 @@ namespace AmesaBackend.Auth.Services
             public DateTime? LastEntryDate { get; set; }
         }
 
-        public async Task<(AuthResponse Response, bool IsNewUser)> CreateOrUpdateOAuthUserAsync(string email, string providerId, AuthProvider provider, string? firstName = null, string? lastName = null)
+        public async Task<(AuthResponse Response, bool IsNewUser)> CreateOrUpdateOAuthUserAsync(
+            string email, 
+            string providerId, 
+            AuthProvider provider, 
+            string? firstName = null, 
+            string? lastName = null,
+            DateTime? dateOfBirth = null,
+            string? gender = null,
+            string? profileImageUrl = null)
         {
             // #region agent log
             _logger.LogInformation("[DEBUG] CreateOrUpdateOAuthUserAsync:entry hypothesisId=E email={Email} provider={Provider}", email, provider);
@@ -524,6 +532,7 @@ namespace AmesaBackend.Auth.Services
                         _logger.LogInformation("OAuth login for existing {Provider} user {Email}", provider, email);
                     }
 
+                    // Only update empty/null fields, don't overwrite existing data
                     if (!string.IsNullOrWhiteSpace(firstName) && string.IsNullOrWhiteSpace(user.FirstName))
                     {
                         user.FirstName = firstName;
@@ -531,6 +540,21 @@ namespace AmesaBackend.Auth.Services
                     if (!string.IsNullOrWhiteSpace(lastName) && string.IsNullOrWhiteSpace(user.LastName))
                     {
                         user.LastName = lastName;
+                    }
+                    if (dateOfBirth.HasValue && !user.DateOfBirth.HasValue)
+                    {
+                        user.DateOfBirth = dateOfBirth.Value;
+                    }
+                    if (!string.IsNullOrWhiteSpace(gender) && !user.Gender.HasValue)
+                    {
+                        if (Enum.TryParse<GenderType>(gender, true, out var genderEnum))
+                        {
+                            user.Gender = genderEnum;
+                        }
+                    }
+                    if (!string.IsNullOrWhiteSpace(profileImageUrl) && string.IsNullOrWhiteSpace(user.ProfileImageUrl))
+                    {
+                        user.ProfileImageUrl = profileImageUrl;
                     }
 
                     user.LastLoginAt = DateTime.UtcNow;
@@ -561,6 +585,13 @@ namespace AmesaBackend.Auth.Services
                 }
                 else
                 {
+                    // Parse gender if provided
+                    GenderType? genderEnum = null;
+                    if (!string.IsNullOrWhiteSpace(gender) && Enum.TryParse<GenderType>(gender, true, out var parsedGender))
+                    {
+                        genderEnum = parsedGender;
+                    }
+
                     user = new User
                     {
                         Username = email.Split('@')[0] + "_" + provider.ToString().ToLower(),
@@ -568,6 +599,9 @@ namespace AmesaBackend.Auth.Services
                         PasswordHash = "OAUTH_USER_NO_PASSWORD",
                         FirstName = firstName ?? string.Empty,
                         LastName = lastName ?? string.Empty,
+                        DateOfBirth = dateOfBirth,
+                        Gender = genderEnum,
+                        ProfileImageUrl = profileImageUrl,
                         AuthProvider = provider,
                         ProviderId = providerId,
                         Status = UserStatus.Active,

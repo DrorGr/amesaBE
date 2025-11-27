@@ -38,18 +38,59 @@ namespace AmesaBackend.Auth.Services
                 throw new KeyNotFoundException("User not found");
             }
 
-            if (!string.IsNullOrEmpty(request.FirstName))
-                user.FirstName = request.FirstName;
+            // Check if user is verified - if so, lock certain fields
+            bool isVerified = user.VerificationStatus == UserVerificationStatus.IdentityVerified || 
+                             user.VerificationStatus == UserVerificationStatus.FullyVerified;
 
-            if (!string.IsNullOrEmpty(request.LastName))
-                user.LastName = request.LastName;
+            if (isVerified)
+            {
+                // Locked fields after verification - can only be updated from ID document
+                // Note: IdNumber is not locked as it can be updated from ID document OCR
+                var lockedFields = new List<string>();
+                
+                if (!string.IsNullOrEmpty(request.FirstName))
+                    lockedFields.Add("FirstName");
+                if (!string.IsNullOrEmpty(request.LastName))
+                    lockedFields.Add("LastName");
+                if (request.DateOfBirth.HasValue)
+                    lockedFields.Add("DateOfBirth");
+                if (!string.IsNullOrEmpty(request.Gender))
+                    lockedFields.Add("Gender");
+                
+                if (lockedFields.Any())
+                {
+                    throw new InvalidOperationException(
+                        $"PROFILE_LOCKED_AFTER_VERIFICATION: The following fields are locked after ID verification and can only be updated from your ID document: {string.Join(", ", lockedFields)}. " +
+                        "To update these fields, please contact support or re-verify your ID document.");
+                }
+            }
 
-            if (request.DateOfBirth.HasValue)
-                user.DateOfBirth = request.DateOfBirth.Value;
+            // Update locked fields only if not verified
+            if (!isVerified)
+            {
+                if (!string.IsNullOrEmpty(request.FirstName))
+                    user.FirstName = request.FirstName;
 
-            if (!string.IsNullOrEmpty(request.Gender) && Enum.TryParse<GenderType>(request.Gender, out var gender))
-                user.Gender = gender;
+                if (!string.IsNullOrEmpty(request.LastName))
+                    user.LastName = request.LastName;
 
+                if (request.DateOfBirth.HasValue)
+                    user.DateOfBirth = request.DateOfBirth.Value;
+
+                if (!string.IsNullOrEmpty(request.Gender) && Enum.TryParse<GenderType>(request.Gender, out var gender))
+                    user.Gender = gender;
+
+                if (!string.IsNullOrEmpty(request.IdNumber))
+                    user.IdNumber = request.IdNumber;
+            }
+            else
+            {
+                // Even if verified, IdNumber can be updated (it's extracted from ID document)
+                if (!string.IsNullOrEmpty(request.IdNumber))
+                    user.IdNumber = request.IdNumber;
+            }
+
+            // Non-locked fields can always be updated
             if (!string.IsNullOrEmpty(request.PreferredLanguage))
                 user.PreferredLanguage = request.PreferredLanguage;
 

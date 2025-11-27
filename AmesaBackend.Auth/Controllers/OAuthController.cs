@@ -142,6 +142,29 @@ namespace AmesaBackend.Auth.Controllers
                     var googleId = googleResult.Principal?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
                     var firstName = googleResult.Principal?.FindFirst(System.Security.Claims.ClaimTypes.GivenName)?.Value;
                     var lastName = googleResult.Principal?.FindFirst(System.Security.Claims.ClaimTypes.Surname)?.Value;
+                    
+                    // Extract additional Google claims
+                    var birthdateClaim = googleResult.Principal?.FindFirst("birthdate")?.Value;
+                    var genderClaim = googleResult.Principal?.FindFirst("gender")?.Value;
+                    var pictureClaim = googleResult.Principal?.FindFirst("picture")?.Value;
+                    
+                    DateTime? dateOfBirth = null;
+                    if (!string.IsNullOrEmpty(birthdateClaim) && DateTime.TryParse(birthdateClaim, out var parsedDate))
+                    {
+                        dateOfBirth = parsedDate;
+                    }
+                    
+                    string? gender = null;
+                    if (!string.IsNullOrEmpty(genderClaim))
+                    {
+                        // Map Google gender to our enum (male/female/other)
+                        gender = genderClaim.ToLower() switch
+                        {
+                            "male" => "Male",
+                            "female" => "Female",
+                            _ => "Other"
+                        };
+                    }
 
                     if (!string.IsNullOrEmpty(googleId))
                     {
@@ -150,7 +173,10 @@ namespace AmesaBackend.Auth.Controllers
                             providerId: googleId,
                             provider: AuthProvider.Google,
                             firstName: firstName,
-                            lastName: lastName
+                            lastName: lastName,
+                            dateOfBirth: dateOfBirth,
+                            gender: gender,
+                            profileImageUrl: pictureClaim
                         );
 
                         var fallbackTempToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
@@ -263,11 +289,51 @@ namespace AmesaBackend.Auth.Controllers
                 var metaId = claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
                 var firstName = claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.GivenName)?.Value;
                 var lastName = claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.Surname)?.Value;
+                
+                // Extract additional Meta/Facebook claims
+                var birthdayClaim = claims.FirstOrDefault(c => c.Type == "urn:facebook:birthday")?.Value 
+                    ?? claims.FirstOrDefault(c => c.Type == "birthday")?.Value;
+                var genderClaim = claims.FirstOrDefault(c => c.Type == "urn:facebook:gender")?.Value 
+                    ?? claims.FirstOrDefault(c => c.Type == "gender")?.Value;
+                var pictureClaim = claims.FirstOrDefault(c => c.Type == "urn:facebook:picture")?.Value 
+                    ?? claims.FirstOrDefault(c => c.Type == "picture")?.Value;
 
                 if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(metaId))
                 {
                     _logger.LogWarning("Meta authentication: missing email or ID");
                     return Redirect($"{frontendUrl}/auth/callback?error={Uri.EscapeDataString("Invalid Meta authentication data")}");
+                }
+
+                // Parse Meta birthday (format: MM/DD/YYYY or MM/DD)
+                DateTime? dateOfBirth = null;
+                if (!string.IsNullOrEmpty(birthdayClaim))
+                {
+                    // Meta provides birthday in MM/DD/YYYY or MM/DD format
+                    var parts = birthdayClaim.Split('/');
+                    if (parts.Length >= 2 && int.TryParse(parts[0], out var month) && int.TryParse(parts[1], out var day))
+                    {
+                        var year = parts.Length == 3 && int.TryParse(parts[2], out var y) ? y : DateTime.Now.Year - 18; // Default to 18 years ago if year not provided
+                        try
+                        {
+                            dateOfBirth = new DateTime(year, month, day);
+                        }
+                        catch
+                        {
+                            // Invalid date, ignore
+                        }
+                    }
+                }
+                
+                string? gender = null;
+                if (!string.IsNullOrEmpty(genderClaim))
+                {
+                    // Map Meta gender to our enum (male/female/other)
+                    gender = genderClaim.ToLower() switch
+                    {
+                        "male" => "Male",
+                        "female" => "Female",
+                        _ => "Other"
+                    };
                 }
 
                 _logger.LogInformation("Meta authentication successful for email: {Email}", email);
@@ -277,7 +343,10 @@ namespace AmesaBackend.Auth.Controllers
                     providerId: metaId,
                     provider: AuthProvider.Meta,
                     firstName: firstName,
-                    lastName: lastName
+                    lastName: lastName,
+                    dateOfBirth: dateOfBirth,
+                    gender: gender,
+                    profileImageUrl: pictureClaim
                 );
 
                 var tempToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using AmesaBackend.Auth.DTOs;
 using AmesaBackend.Auth.Services;
 using System.Security.Claims;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace AmesaBackend.Auth.Controllers
 {
@@ -338,6 +339,74 @@ namespace AmesaBackend.Auth.Controllers
                     {
                         Code = "INTERNAL_ERROR",
                         Message = "An error occurred while retrieving user information"
+                    }
+                });
+            }
+        }
+
+        [HttpPut("profile")]
+        [Authorize]
+        public async Task<ActionResult<ApiResponse<UserDto>>> UpdateProfile([FromBody] UpdateUserProfileRequest request)
+        {
+            try
+            {
+                var userId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "");
+                var userService = HttpContext.RequestServices.GetRequiredService<IUserService>();
+                var updatedUser = await userService.UpdateUserProfileAsync(userId, request);
+                return Ok(new ApiResponse<UserDto>
+                {
+                    Success = true,
+                    Data = updatedUser,
+                    Message = "Profile updated successfully"
+                });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new ApiResponse<object>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "USER_NOT_FOUND",
+                        Message = ex.Message
+                    }
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                // Handle profile locked after verification
+                if (ex.Message.Contains("PROFILE_LOCKED_AFTER_VERIFICATION"))
+                {
+                    return BadRequest(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Error = new ErrorResponse
+                        {
+                            Code = "PROFILE_LOCKED_AFTER_VERIFICATION",
+                            Message = ex.Message
+                        }
+                    });
+                }
+                return BadRequest(new ApiResponse<object>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "VALIDATION_ERROR",
+                        Message = ex.Message
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating user profile");
+                return StatusCode(500, new ApiResponse<object>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "INTERNAL_ERROR",
+                        Message = "An error occurred while updating profile"
                     }
                 });
             }

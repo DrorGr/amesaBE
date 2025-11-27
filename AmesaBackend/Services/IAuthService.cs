@@ -15,6 +15,14 @@ namespace AmesaBackend.Services
         Task VerifyPhoneAsync(VerifyPhoneRequest request);
         Task<bool> ValidateTokenAsync(string token);
         Task<UserDto> GetCurrentUserAsync(Guid userId);
-        Task<(AuthResponse Response, bool IsNewUser)> CreateOrUpdateOAuthUserAsync(string email, string providerId, AuthProvider provider, string? firstName = null, string? lastName = null);
+        Task<(AuthResponse Response, bool IsNewUser)> CreateOrUpdateOAuthUserAsync(
+            string email, 
+            string providerId, 
+            AuthProvider provider, 
+            string? firstName = null, 
+            string? lastName = null,
+            DateTime? dateOfBirth = null,
+            string? gender = null,
+            string? profileImageUrl = null);
     }
 }
