@@ -306,7 +306,7 @@ namespace AmesaBackend.Auth.Services
                 // Get or create lottery preferences
                 // Parse the entire preferences JSON into a dictionary we can modify
                 Dictionary<string, object> existingPrefs;
-                if (rootElement.ValueKind == JsonValueKind.Object)
+                if (preferences != null && rootElement.ValueKind == JsonValueKind.Object)
                 {
                     // Deserialize the entire preferences JSON to a dictionary
                     existingPrefs = JsonSerializer.Deserialize<Dictionary<string, object>>(preferences.PreferencesJson) 
