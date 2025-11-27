@@ -17,7 +17,6 @@ namespace AmesaBackend.Lottery.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasDefaultSchema("amesa_lottery")
                 .HasAnnotation("ProductVersion", "8.0.0")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
@@ -70,6 +69,10 @@ namespace AmesaBackend.Lottery.Migrations
                     b.Property<DateTime?>("LotteryStartDate")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("MaxParticipants")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_participants");
+
                     b.Property<decimal>("MinimumParticipationPercentage")
                         .HasColumnType("decimal(5,2)");
 
@@ -109,7 +112,7 @@ namespace AmesaBackend.Lottery.Migrations
 
                     b.HasIndex("Status");
 
-                    b.ToTable("houses", "amesa_lottery");
+                    b.ToTable("houses");
                 });
 
             modelBuilder.Entity("AmesaBackend.Lottery.Models.HouseImage", b =>
@@ -156,7 +159,7 @@ namespace AmesaBackend.Lottery.Migrations
 
                     b.HasIndex("HouseId");
 
-                    b.ToTable("house_images", "amesa_lottery");
+                    b.ToTable("house_images");
                 });
 
             modelBuilder.Entity("AmesaBackend.Lottery.Models.LotteryDraw", b =>
@@ -223,7 +226,26 @@ namespace AmesaBackend.Lottery.Migrations
 
                     b.HasIndex("HouseId");
 
-                    b.ToTable("lottery_draws", "amesa_lottery");
+                    b.ToTable("lottery_draws");
+                });
+
+            modelBuilder.Entity("AmesaBackend.Lottery.Models.LotteryParticipants", b =>
+                {
+                    b.Property<Guid>("HouseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("LastEntryDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("TotalTickets")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("UniqueParticipants")
+                        .HasColumnType("integer");
+
+                    b.ToTable("lottery_participants", "amesa_lottery");
+
+                    b.ToView("lottery_participants", "amesa_lottery");
                 });
 
             modelBuilder.Entity("AmesaBackend.Lottery.Models.LotteryTicket", b =>
@@ -274,7 +296,40 @@ namespace AmesaBackend.Lottery.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("lottery_tickets", "amesa_lottery");
+                    b.ToTable("lottery_tickets");
+                });
+
+            modelBuilder.Entity("AmesaBackend.Lottery.Models.UserWatchlist", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("HouseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("NotificationEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("HouseId");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("UserId", "HouseId")
+                        .IsUnique();
+
+                    b.ToTable("user_watchlist");
                 });
 
             modelBuilder.Entity("AmesaBackend.Lottery.Models.HouseImage", b =>
@@ -303,6 +358,17 @@ namespace AmesaBackend.Lottery.Migrations
                 {
                     b.HasOne("AmesaBackend.Lottery.Models.House", "House")
                         .WithMany("Tickets")
+                        .HasForeignKey("HouseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("House");
+                });
+
+            modelBuilder.Entity("AmesaBackend.Lottery.Models.UserWatchlist", b =>
+                {
+                    b.HasOne("AmesaBackend.Lottery.Models.House", "House")
+                        .WithMany()
                         .HasForeignKey("HouseId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
