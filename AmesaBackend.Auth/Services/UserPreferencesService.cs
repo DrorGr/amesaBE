@@ -49,11 +49,32 @@ namespace AmesaBackend.Auth.Services
 
             if (existingPreferences == null)
             {
+                // Ensure lotteryPreferences structure exists in new preferences
+                Dictionary<string, object> prefsDict;
+                if (preferences.ValueKind == JsonValueKind.Object)
+                {
+                    prefsDict = JsonSerializer.Deserialize<Dictionary<string, object>>(preferences.GetRawText()) 
+                        ?? new Dictionary<string, object>();
+                }
+                else
+                {
+                    prefsDict = new Dictionary<string, object>();
+                }
+
+                // Add lotteryPreferences if missing (systemic fix for all code paths)
+                if (!prefsDict.ContainsKey("lotteryPreferences"))
+                {
+                    prefsDict["lotteryPreferences"] = new Dictionary<string, object>
+                    {
+                        ["favoriteHouseIds"] = new List<string>()
+                    };
+                }
+
                 var newPreferences = new UserPreferences
                 {
                     Id = Guid.NewGuid(),
                     UserId = userId,
-                    PreferencesJson = JsonSerializer.Serialize(preferences),
+                    PreferencesJson = JsonSerializer.Serialize(prefsDict),
                     Version = version ?? "1.0.0",
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow,
