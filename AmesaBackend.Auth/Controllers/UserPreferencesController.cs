@@ -560,6 +560,10 @@ namespace AmesaBackend.Auth.Controllers
                     soundEnabled = true,
                     soundVolume = 50,
                     customSounds = false
+                },
+                lotteryPreferences = new
+                {
+                    favoriteHouseIds = new List<string>()
                 }
             });
 
