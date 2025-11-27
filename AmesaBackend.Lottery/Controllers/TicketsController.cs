@@ -313,19 +313,3 @@ namespace AmesaBackend.Lottery.Controllers
         }
     }
 }
-
-            {
-                _logger.LogError(ex, "Error processing quick entry");
-                return StatusCode(500, new ApiResponse<QuickEntryResponse>
-                {
-                    Success = false,
-                    Error = new ErrorResponse
-                    {
-                        Code = "INTERNAL_ERROR",
-                        Message = ex.Message
-                    }
-                });
-            }
-        }
-    }
-}

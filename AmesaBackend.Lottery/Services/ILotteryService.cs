@@ -30,9 +30,3 @@ namespace AmesaBackend.Lottery.Services
         Task<LotteryParticipantStatsDto> GetParticipantStatsAsync(Guid houseId);
     }
 }
-
-        Task<int> GetParticipantCountAsync(Guid houseId);
-        Task<bool> CanUserEnterLotteryAsync(Guid userId, Guid houseId);
-        Task<LotteryParticipantStatsDto> GetParticipantStatsAsync(Guid houseId);
-    }
-}
