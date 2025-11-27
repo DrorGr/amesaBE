@@ -283,34 +283,53 @@ namespace AmesaBackend.Auth.Services
                 }
 
                 // Get or create lottery preferences
-                var existingPrefs = new Dictionary<string, JsonElement>();
+                // Parse the entire preferences JSON into a dictionary we can modify
+                Dictionary<string, object> existingPrefs;
                 if (rootElement.ValueKind == JsonValueKind.Object)
                 {
-                    foreach (var prop in rootElement.EnumerateObject())
-                    {
-                        existingPrefs[prop.Name] = prop.Value;
-                    }
-                }
-
-                JsonElement lotteryPrefsElement;
-                if (existingPrefs.TryGetValue("lotteryPreferences", out var existingLotteryPrefs))
-                {
-                    var lotteryPrefsDict = JsonSerializer.Deserialize<Dictionary<string, object>>(existingLotteryPrefs.GetRawText()) 
+                    // Deserialize the entire preferences JSON to a dictionary
+                    existingPrefs = JsonSerializer.Deserialize<Dictionary<string, object>>(preferences.PreferencesJson) 
                         ?? new Dictionary<string, object>();
-                    lotteryPrefsDict["favoriteHouseIds"] = favoriteIds.Select(id => id.ToString()).ToList();
-                    lotteryPrefsElement = JsonSerializer.SerializeToElement(lotteryPrefsDict);
                 }
                 else
                 {
-                    var lotteryPrefsDict = new Dictionary<string, object>
-                    {
-                        ["favoriteHouseIds"] = favoriteIds.Select(id => id.ToString()).ToList()
-                    };
-                    lotteryPrefsElement = JsonSerializer.SerializeToElement(lotteryPrefsDict);
+                    existingPrefs = new Dictionary<string, object>();
                 }
 
-                existingPrefs["lotteryPreferences"] = lotteryPrefsElement;
+                // Update or create lotteryPreferences
+                Dictionary<string, object> lotteryPrefsDict;
+                if (existingPrefs.TryGetValue("lotteryPreferences", out var existingLotteryPrefsObj))
+                {
+                    // Parse existing lotteryPreferences
+                    if (existingLotteryPrefsObj is JsonElement existingLotteryPrefs)
+                    {
+                        lotteryPrefsDict = JsonSerializer.Deserialize<Dictionary<string, object>>(existingLotteryPrefs.GetRawText()) 
+                            ?? new Dictionary<string, object>();
+                    }
+                    else if (existingLotteryPrefsObj is Dictionary<string, object> existingDict)
+                    {
+                        lotteryPrefsDict = existingDict;
+                    }
+                    else
+                    {
+                        // Try to deserialize from string representation
+                        lotteryPrefsDict = JsonSerializer.Deserialize<Dictionary<string, object>>(
+                            JsonSerializer.Serialize(existingLotteryPrefsObj)) 
+                            ?? new Dictionary<string, object>();
+                    }
+                }
+                else
+                {
+                    lotteryPrefsDict = new Dictionary<string, object>();
+                }
 
+                // Update favoriteHouseIds
+                lotteryPrefsDict["favoriteHouseIds"] = favoriteIds.Select(id => id.ToString()).ToList();
+                
+                // Update the main preferences dictionary
+                existingPrefs["lotteryPreferences"] = lotteryPrefsDict;
+
+                // Serialize the entire preferences dictionary back to JSON
                 await UpdateUserPreferencesAsync(userId, JsonSerializer.SerializeToElement(existingPrefs));
 
                 _logger.LogInformation("Added house {HouseId} to favorites for user {UserId}", houseId, userId);
@@ -356,25 +375,53 @@ namespace AmesaBackend.Auth.Services
                     return false;
                 }
 
-                // Get existing preferences
-                var existingPrefs = new Dictionary<string, JsonElement>();
+                // Get existing preferences - parse entire JSON to dictionary
+                Dictionary<string, object> existingPrefs;
                 if (rootElement.ValueKind == JsonValueKind.Object)
                 {
-                    foreach (var prop in rootElement.EnumerateObject())
+                    // Deserialize the entire preferences JSON to a dictionary
+                    existingPrefs = JsonSerializer.Deserialize<Dictionary<string, object>>(preferences.PreferencesJson) 
+                        ?? new Dictionary<string, object>();
+                }
+                else
+                {
+                    existingPrefs = new Dictionary<string, object>();
+                }
+
+                // Update or create lotteryPreferences
+                Dictionary<string, object> lotteryPrefsDict;
+                if (existingPrefs.TryGetValue("lotteryPreferences", out var existingLotteryPrefsObj))
+                {
+                    // Parse existing lotteryPreferences
+                    if (existingLotteryPrefsObj is JsonElement existingLotteryPrefs)
                     {
-                        existingPrefs[prop.Name] = prop.Value;
+                        lotteryPrefsDict = JsonSerializer.Deserialize<Dictionary<string, object>>(existingLotteryPrefs.GetRawText()) 
+                            ?? new Dictionary<string, object>();
+                    }
+                    else if (existingLotteryPrefsObj is Dictionary<string, object> existingDict)
+                    {
+                        lotteryPrefsDict = existingDict;
+                    }
+                    else
+                    {
+                        // Try to deserialize from string representation
+                        lotteryPrefsDict = JsonSerializer.Deserialize<Dictionary<string, object>>(
+                            JsonSerializer.Serialize(existingLotteryPrefsObj)) 
+                            ?? new Dictionary<string, object>();
                     }
                 }
-
-                // Update lottery preferences
-                if (existingPrefs.TryGetValue("lotteryPreferences", out var existingLotteryPrefs))
+                else
                 {
-                    var lotteryPrefsDict = JsonSerializer.Deserialize<Dictionary<string, object>>(existingLotteryPrefs.GetRawText()) 
-                        ?? new Dictionary<string, object>();
-                    lotteryPrefsDict["favoriteHouseIds"] = favoriteIds.Select(id => id.ToString()).ToList();
-                    existingPrefs["lotteryPreferences"] = JsonSerializer.SerializeToElement(lotteryPrefsDict);
+                    lotteryPrefsDict = new Dictionary<string, object>();
                 }
 
+                // Update favoriteHouseIds
+                lotteryPrefsDict["favoriteHouseIds"] = favoriteIds.Select(id => id.ToString()).ToList();
+                
+                // Update the main preferences dictionary
+                existingPrefs["lotteryPreferences"] = lotteryPrefsDict;
+
+                // Serialize the entire preferences dictionary back to JSON
                 await UpdateUserPreferencesAsync(userId, JsonSerializer.SerializeToElement(existingPrefs));
 
                 _logger.LogInformation("Removed house {HouseId} from favorites for user {UserId}", houseId, userId);
