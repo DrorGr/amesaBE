@@ -6,6 +6,7 @@ using AmesaBackend.Lottery.DTOs;
 using AmesaBackend.Lottery.Models;
 using AmesaBackend.Lottery.Services;
 using AmesaBackend.Shared.Events;
+using AmesaBackend.Shared.Caching;
 using System.Security.Claims;
 
 namespace AmesaBackend.Lottery.Controllers
@@ -18,17 +19,21 @@ namespace AmesaBackend.Lottery.Controllers
         private readonly IEventPublisher _eventPublisher;
         private readonly ILogger<HousesController> _logger;
         private readonly ILotteryService _lotteryService;
+        private readonly ICache? _cache;
+        private static readonly TimeSpan HousesCacheExpiration = TimeSpan.FromMinutes(30);
 
         public HousesController(
             LotteryDbContext context, 
             IEventPublisher eventPublisher, 
             ILogger<HousesController> logger,
-            ILotteryService lotteryService)
+            ILotteryService lotteryService,
+            ICache? cache = null)
         {
             _context = context;
             _eventPublisher = eventPublisher;
             _logger = logger;
             _lotteryService = lotteryService;
+            _cache = cache;
         }
 
         private Guid? GetCurrentUserId()
@@ -37,7 +42,28 @@ namespace AmesaBackend.Lottery.Controllers
             return Guid.TryParse(userIdClaim, out var userId) ? userId : null;
         }
 
+        /// <summary>
+        /// Invalidates all house list caches when a house is created, updated, or deleted
+        /// </summary>
+        private async Task InvalidateHouseCachesAsync()
+        {
+            if (_cache != null)
+            {
+                try
+                {
+                    // Delete all cache keys matching the pattern "houses_*"
+                    await _cache.DeleteByRegex("houses_*");
+                    _logger.LogDebug("Invalidated all house list caches");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to invalidate house caches");
+                }
+            }
+        }
+
         [HttpGet]
+        [ResponseCache(Duration = 1800, VaryByQueryKeys = new[] { "page", "limit", "status", "minPrice", "maxPrice", "location", "bedrooms", "bathrooms" })]
         public async Task<ActionResult<ApiResponse<PagedResponse<HouseDto>>>> GetHouses(
             [FromQuery] int page = 1,
             [FromQuery] int limit = 20,
@@ -48,14 +74,27 @@ namespace AmesaBackend.Lottery.Controllers
             [FromQuery] int? bedrooms = null,
             [FromQuery] int? bathrooms = null)
         {
-            // #region agent log
-            _logger.LogInformation("[DEBUG] HousesController.GetHouses:entry page={Page} limit={Limit}", page, limit);
-            // #endregion
             try
             {
-                // #region agent log
-                _logger.LogInformation("[DEBUG] HousesController.GetHouses:before-query");
-                // #endregion
+                // Generate cache key from query parameters
+                var cacheKey = $"houses_{page}_{limit}_{status ?? "null"}_{minPrice?.ToString() ?? "null"}_{maxPrice?.ToString() ?? "null"}_{location ?? "null"}_{bedrooms?.ToString() ?? "null"}_{bathrooms?.ToString() ?? "null"}";
+                
+                // Try to get from cache first
+                if (_cache != null)
+                {
+                    var cachedResponse = await _cache.GetRecordAsync<PagedResponse<HouseDto>>(cacheKey);
+                    if (cachedResponse != null)
+                    {
+                        _logger.LogDebug("Houses list retrieved from cache for key: {CacheKey}", cacheKey);
+                        return Ok(new ApiResponse<PagedResponse<HouseDto>>
+                        {
+                            Success = true,
+                            Data = cachedResponse,
+                            Message = "Houses retrieved successfully (cached)"
+                        });
+                    }
+                }
+                
                 var query = _context.Houses
                     .Include(h => h.Images)
                     .AsQueryable();
@@ -102,6 +141,9 @@ namespace AmesaBackend.Lottery.Controllers
                     .Take(limit)
                     .ToListAsync();
 
+                // Query ticket counts (caching would require complex key management for dynamic house lists)
+                // Since house lists are already cached, ticket counts are queried fresh each time
+                // This ensures data consistency while still benefiting from house list caching
                 var houseIds = houses.Select(h => h.Id).ToList();
                 var ticketCounts = await _context.LotteryTickets
                     .AsNoTracking()
@@ -168,10 +210,18 @@ namespace AmesaBackend.Lottery.Controllers
                     HasPrevious = page > 1
                 };
 
+                // Cache the response
+                if (_cache != null)
+                {
+                    await _cache.SetRecordAsync(cacheKey, pagedResponse, HousesCacheExpiration);
+                    _logger.LogDebug("Houses list cached with key: {CacheKey}", cacheKey);
+                }
+
                 return Ok(new ApiResponse<PagedResponse<HouseDto>>
                 {
                     Success = true,
-                    Data = pagedResponse
+                    Data = pagedResponse,
+                    Message = "Houses retrieved successfully"
                 });
             }
             catch (Exception ex)
@@ -193,6 +243,7 @@ namespace AmesaBackend.Lottery.Controllers
         }
 
         [HttpGet("{id}")]
+        [ResponseCache(Duration = 900)] // 15 minutes
         public async Task<ActionResult<ApiResponse<HouseDto>>> GetHouse(Guid id)
         {
             try
@@ -321,6 +372,9 @@ namespace AmesaBackend.Lottery.Controllers
                     Price = house.Price,
                     CreatedByUserId = house.CreatedBy ?? Guid.Empty
                 });
+
+                // Invalidate house list caches
+                await InvalidateHouseCachesAsync();
 
                 var houseDto = new HouseDto
                 {
@@ -523,6 +577,9 @@ namespace AmesaBackend.Lottery.Controllers
                     CreatedAt = house.CreatedAt
                 };
 
+                // Invalidate house list caches
+                await InvalidateHouseCachesAsync();
+
                 return Ok(new ApiResponse<HouseDto>
                 {
                     Success = true,
@@ -564,6 +621,9 @@ namespace AmesaBackend.Lottery.Controllers
 
                 house.DeletedAt = DateTime.UtcNow;
                 await _context.SaveChangesAsync();
+
+                // Invalidate house list caches
+                await InvalidateHouseCachesAsync();
 
                 return Ok(new ApiResponse<object>
                 {

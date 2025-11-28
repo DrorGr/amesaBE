@@ -17,6 +17,7 @@ namespace AmesaBackend.Content.Controllers
         private readonly IEventPublisher _eventPublisher;
         private readonly ICache? _cache;
         private static readonly TimeSpan CacheExpiration = TimeSpan.FromMinutes(30);
+        private static readonly TimeSpan LanguagesCacheExpiration = TimeSpan.FromHours(1);
 
         public TranslationsController(
             ContentDbContext context, 
@@ -31,6 +32,7 @@ namespace AmesaBackend.Content.Controllers
         }
 
         [HttpGet("{languageCode}")]
+        [ResponseCache(Duration = 1800)] // 30 minutes
         public async Task<ActionResult<ApiResponse<TranslationsResponseDto>>> GetTranslations(string languageCode)
         {
             try
@@ -98,10 +100,29 @@ namespace AmesaBackend.Content.Controllers
         }
 
         [HttpGet("languages")]
+        [ResponseCache(Duration = 3600)] // 1 hour
         public async Task<ActionResult<ApiResponse<List<LanguageDto>>>> GetLanguages()
         {
             try
             {
+                const string cacheKey = "languages_list";
+                
+                // Try to get from cache first
+                if (_cache != null)
+                {
+                    var cachedResponse = await _cache.GetRecordAsync<List<LanguageDto>>(cacheKey);
+                    if (cachedResponse != null)
+                    {
+                        _logger.LogDebug("Languages list retrieved from cache");
+                        return Ok(new ApiResponse<List<LanguageDto>>
+                        {
+                            Success = true,
+                            Data = cachedResponse,
+                            Message = "Languages retrieved successfully (cached)"
+                        });
+                    }
+                }
+                
                 var languages = await _context.Languages
                     .Where(l => l.IsActive)
                     .OrderBy(l => l.DisplayOrder)
@@ -118,6 +139,13 @@ namespace AmesaBackend.Content.Controllers
                     IsDefault = l.IsDefault,
                     DisplayOrder = l.DisplayOrder
                 }).ToList();
+
+                // Cache the response
+                if (_cache != null)
+                {
+                    await _cache.SetRecordAsync(cacheKey, languageDtos, LanguagesCacheExpiration);
+                    _logger.LogDebug("Languages list cached");
+                }
 
                 return Ok(new ApiResponse<List<LanguageDto>>
                 {

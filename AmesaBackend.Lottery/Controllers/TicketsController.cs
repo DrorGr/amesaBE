@@ -63,11 +63,23 @@ namespace AmesaBackend.Lottery.Controllers
         [HttpGet("active")]
         public async Task<ActionResult<ApiResponse<List<LotteryTicketDto>>>> GetActiveEntries()
         {
+            // #region agent log
+            _logger.LogInformation("[DEBUG] TicketsController.GetActiveEntries:entry");
+            // #endregion
             try
             {
+                // #region agent log
+                _logger.LogInformation("[DEBUG] TicketsController.GetActiveEntries:before-user-claim");
+                // #endregion
                 var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                // #region agent log
+                _logger.LogInformation("[DEBUG] TicketsController.GetActiveEntries:after-user-claim userIdClaim={UserIdClaim}", userIdClaim);
+                // #endregion
                 if (userIdClaim == null || !Guid.TryParse(userIdClaim, out var userId))
                 {
+                    // #region agent log
+                    _logger.LogWarning("[DEBUG] TicketsController.GetActiveEntries:unauthorized");
+                    // #endregion
                     return Unauthorized(new ApiResponse<List<LotteryTicketDto>>
                     {
                         Success = false,
@@ -75,7 +87,13 @@ namespace AmesaBackend.Lottery.Controllers
                     });
                 }
 
+                // #region agent log
+                _logger.LogInformation("[DEBUG] TicketsController.GetActiveEntries:before-service-call userId={UserId}", userId);
+                // #endregion
                 var activeEntries = await _lotteryService.GetUserActiveEntriesAsync(userId);
+                // #region agent log
+                _logger.LogInformation("[DEBUG] TicketsController.GetActiveEntries:after-service-call userId={UserId} entriesCount={Count}", userId, activeEntries.Count);
+                // #endregion
 
                 return Ok(new ApiResponse<List<LotteryTicketDto>>
                 {
@@ -85,6 +103,9 @@ namespace AmesaBackend.Lottery.Controllers
             }
             catch (Exception ex)
             {
+                // #region agent log
+                _logger.LogError(ex, "[DEBUG] TicketsController.GetActiveEntries:exception exceptionType={Type} message={Message} stackTrace={StackTrace}", ex.GetType().Name, ex.Message, ex.StackTrace?.Substring(0, Math.Min(500, ex.StackTrace?.Length ?? 0)));
+                // #endregion
                 _logger.LogError(ex, "Error retrieving active entries");
                 return StatusCode(500, new ApiResponse<List<LotteryTicketDto>>
                 {
