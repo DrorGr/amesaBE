@@ -52,12 +52,22 @@ namespace AmesaBackend.Lottery.Controllers
                 try
                 {
                     // Delete all cache keys matching the pattern "houses_*"
-                    await _cache.DeleteByRegex("houses_*");
-                    _logger.LogDebug("Invalidated all house list caches");
+                    // Note: Redis pattern matching - the actual key format includes instance prefix
+                    // but DeleteByRegex should handle the pattern correctly
+                    var result = await _cache.DeleteByRegex("houses_*");
+                    if (result)
+                    {
+                        _logger.LogDebug("Invalidated all house list caches");
+                    }
+                    else
+                    {
+                        _logger.LogDebug("No house list caches found to invalidate");
+                    }
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Failed to invalidate house caches");
+                    // Log but don't throw - cache invalidation failure shouldn't break the operation
+                    _logger.LogWarning(ex, "Failed to invalidate house caches (non-critical)");
                 }
             }
         }
@@ -76,31 +86,36 @@ namespace AmesaBackend.Lottery.Controllers
         {
             try
             {
-                // Generate cache key from query parameters
-                var cacheKey = $"houses_{page}_{limit}_{status ?? "null"}_{minPrice?.ToString() ?? "null"}_{maxPrice?.ToString() ?? "null"}_{location ?? "null"}_{bedrooms?.ToString() ?? "null"}_{bathrooms?.ToString() ?? "null"}";
+                // Generate cache key from query parameters (sanitize null values)
+                var cacheKey = $"houses_{page}_{limit}_{status ?? "null"}_{minPrice?.ToString() ?? "null"}_{maxPrice?.ToString() ?? "null"}_{(location ?? "null").Replace(" ", "_")}_{bedrooms?.ToString() ?? "null"}_{bathrooms?.ToString() ?? "null"}";
                 
-                // Try to get from cache first
+                // Try to get from cache first (with error handling)
                 if (_cache != null)
                 {
-                    var cachedResponse = await _cache.GetRecordAsync<PagedResponse<HouseDto>>(cacheKey);
-                    if (cachedResponse != null)
+                    try
                     {
-                        _logger.LogDebug("Houses list retrieved from cache for key: {CacheKey}", cacheKey);
-                        return Ok(new ApiResponse<PagedResponse<HouseDto>>
+                        var cachedResponse = await _cache.GetRecordAsync<PagedResponse<HouseDto>>(cacheKey);
+                        if (cachedResponse != null)
                         {
-                            Success = true,
-                            Data = cachedResponse,
-                            Message = "Houses retrieved successfully (cached)"
-                        });
+                            _logger.LogDebug("Houses list retrieved from cache for key: {CacheKey}", cacheKey);
+                            return Ok(new ApiResponse<PagedResponse<HouseDto>>
+                            {
+                                Success = true,
+                                Data = cachedResponse,
+                                Message = "Houses retrieved successfully (cached)"
+                            });
+                        }
+                    }
+                    catch (Exception cacheEx)
+                    {
+                        // Log cache error but continue with database query
+                        _logger.LogWarning(cacheEx, "Error retrieving from cache, falling back to database query");
                     }
                 }
                 
                 var query = _context.Houses
                     .Include(h => h.Images)
                     .AsQueryable();
-                // #region agent log
-                _logger.LogInformation("[DEBUG] HousesController.GetHouses:after-query-creation");
-                // #endregion
 
                 if (!string.IsNullOrEmpty(status))
                 {
@@ -210,11 +225,19 @@ namespace AmesaBackend.Lottery.Controllers
                     HasPrevious = page > 1
                 };
 
-                // Cache the response
+                // Cache the response (with error handling)
                 if (_cache != null)
                 {
-                    await _cache.SetRecordAsync(cacheKey, pagedResponse, HousesCacheExpiration);
-                    _logger.LogDebug("Houses list cached with key: {CacheKey}", cacheKey);
+                    try
+                    {
+                        await _cache.SetRecordAsync(cacheKey, pagedResponse, HousesCacheExpiration);
+                        _logger.LogDebug("Houses list cached with key: {CacheKey}", cacheKey);
+                    }
+                    catch (Exception cacheEx)
+                    {
+                        // Log cache error but don't fail the request
+                        _logger.LogWarning(cacheEx, "Error caching houses list, request still successful");
+                    }
                 }
 
                 return Ok(new ApiResponse<PagedResponse<HouseDto>>
@@ -226,9 +249,7 @@ namespace AmesaBackend.Lottery.Controllers
             }
             catch (Exception ex)
             {
-                // #region agent log
-                _logger.LogError(ex, "[DEBUG] HousesController.GetHouses:exception exceptionType={Type} message={Message} stackTrace={StackTrace}", ex.GetType().Name, ex.Message, ex.StackTrace?.Substring(0, Math.Min(500, ex.StackTrace?.Length ?? 0)));
-                // #endregion
+                _logger.LogError(ex, "Error fetching houses: {Message}", ex.Message);
                 _logger.LogError(ex, "Error retrieving houses");
                 return StatusCode(500, new ApiResponse<PagedResponse<HouseDto>>
                 {
