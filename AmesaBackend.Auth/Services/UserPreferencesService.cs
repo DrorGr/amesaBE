@@ -123,7 +123,110 @@ namespace AmesaBackend.Auth.Services
             }
             else
             {
-                existingPreferences.PreferencesJson = JsonSerializer.Serialize(preferences);
+                // #region agent log
+                _logger.LogInformation("[DEBUG] UserPreferencesService.UpdateUserPreferencesAsync:updating-existing userId={UserId} existingJsonLength={Length} incomingJsonLength={IncomingLength}", userId, existingPreferences.PreferencesJson?.Length ?? 0, preferences.GetRawText().Length);
+                // #endregion
+                
+                // CRITICAL FIX: Merge incoming preferences with existing preferences to preserve lotteryPreferences
+                // Deserialize existing preferences
+                Dictionary<string, object> existingPrefsDict;
+                try
+                {
+                    existingPrefsDict = JsonSerializer.Deserialize<Dictionary<string, object>>(existingPreferences.PreferencesJson) 
+                        ?? new Dictionary<string, object>();
+                    // #region agent log
+                    _logger.LogInformation("[DEBUG] UserPreferencesService.UpdateUserPreferencesAsync:deserialized-existing userId={UserId} existingKeys={Keys} hasLotteryPrefs={HasKey}", userId, string.Join(",", existingPrefsDict.Keys), existingPrefsDict.ContainsKey("lotteryPreferences"));
+                    // #endregion
+                }
+                catch (Exception ex)
+                {
+                    // #region agent log
+                    _logger.LogWarning(ex, "[DEBUG] UserPreferencesService.UpdateUserPreferencesAsync:failed-deserialize-existing userId={UserId} - creating empty dict", userId);
+                    // #endregion
+                    existingPrefsDict = new Dictionary<string, object>();
+                }
+
+                // Preserve existing lotteryPreferences before merging
+                object? existingLotteryPrefs = null;
+                if (existingPrefsDict.TryGetValue("lotteryPreferences", out var existingLotteryPrefsObj))
+                {
+                    existingLotteryPrefs = existingLotteryPrefsObj;
+                    // #region agent log
+                    _logger.LogInformation("[DEBUG] UserPreferencesService.UpdateUserPreferencesAsync:preserved-lottery-prefs userId={UserId} lotteryPrefsType={Type}", userId, existingLotteryPrefs?.GetType().Name ?? "null");
+                    // #endregion
+                }
+
+                // Deserialize incoming preferences
+                Dictionary<string, object> incomingPrefsDict;
+                if (preferences.ValueKind == JsonValueKind.Object)
+                {
+                    try
+                    {
+                        incomingPrefsDict = JsonSerializer.Deserialize<Dictionary<string, object>>(preferences.GetRawText()) 
+                            ?? new Dictionary<string, object>();
+                        // #region agent log
+                        _logger.LogInformation("[DEBUG] UserPreferencesService.UpdateUserPreferencesAsync:deserialized-incoming userId={UserId} incomingKeys={Keys} hasLotteryPrefs={HasKey}", userId, string.Join(",", incomingPrefsDict.Keys), incomingPrefsDict.ContainsKey("lotteryPreferences"));
+                        // #endregion
+                    }
+                    catch (Exception ex)
+                    {
+                        // #region agent log
+                        _logger.LogWarning(ex, "[DEBUG] UserPreferencesService.UpdateUserPreferencesAsync:failed-deserialize-incoming userId={UserId} - using existing", userId);
+                        // #endregion
+                        incomingPrefsDict = existingPrefsDict;
+                    }
+                }
+                else
+                {
+                    // #region agent log
+                    _logger.LogWarning("[DEBUG] UserPreferencesService.UpdateUserPreferencesAsync:incoming-not-object userId={UserId} valueKind={ValueKind} - using existing", userId, preferences.ValueKind);
+                    // #endregion
+                    incomingPrefsDict = existingPrefsDict;
+                }
+
+                // Merge: incoming preferences override existing, but preserve lotteryPreferences if not in incoming
+                foreach (var kvp in incomingPrefsDict)
+                {
+                    existingPrefsDict[kvp.Key] = kvp.Value;
+                }
+
+                // CRITICAL: Preserve or restore lotteryPreferences
+                if (!incomingPrefsDict.ContainsKey("lotteryPreferences"))
+                {
+                    if (existingLotteryPrefs != null)
+                    {
+                        // Restore preserved lotteryPreferences
+                        existingPrefsDict["lotteryPreferences"] = existingLotteryPrefs;
+                        // #region agent log
+                        _logger.LogInformation("[DEBUG] UserPreferencesService.UpdateUserPreferencesAsync:restored-lottery-prefs userId={UserId}", userId);
+                        // #endregion
+                    }
+                    else
+                    {
+                        // Create new lotteryPreferences structure if it doesn't exist
+                        existingPrefsDict["lotteryPreferences"] = new Dictionary<string, object>
+                        {
+                            ["favoriteHouseIds"] = new List<string>()
+                        };
+                        // #region agent log
+                        _logger.LogInformation("[DEBUG] UserPreferencesService.UpdateUserPreferencesAsync:created-lottery-prefs userId={UserId}", userId);
+                        // #endregion
+                    }
+                }
+                else
+                {
+                    // #region agent log
+                    _logger.LogInformation("[DEBUG] UserPreferencesService.UpdateUserPreferencesAsync:incoming-has-lottery-prefs userId={UserId} - using incoming", userId);
+                    // #endregion
+                }
+
+                // Serialize merged preferences
+                var mergedJson = JsonSerializer.Serialize(existingPrefsDict);
+                // #region agent log
+                _logger.LogInformation("[DEBUG] UserPreferencesService.UpdateUserPreferencesAsync:merged-preferences userId={UserId} mergedJsonLength={Length} finalKeys={Keys}", userId, mergedJson.Length, string.Join(",", existingPrefsDict.Keys));
+                // #endregion
+
+                existingPreferences.PreferencesJson = mergedJson;
                 if (!string.IsNullOrEmpty(version))
                 {
                     existingPreferences.Version = version;
@@ -133,6 +236,9 @@ namespace AmesaBackend.Auth.Services
 
                 await _context.SaveChangesAsync();
 
+                // #region agent log
+                _logger.LogInformation("[DEBUG] UserPreferencesService.UpdateUserPreferencesAsync:update-success userId={UserId}", userId);
+                // #endregion
                 _logger.LogInformation("Updated user preferences for user {UserId}", userId);
 
                 return new UserPreferencesDto
