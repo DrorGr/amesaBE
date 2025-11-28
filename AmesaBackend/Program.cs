@@ -726,13 +726,20 @@ using (var scope = app.Services.CreateScope())
     var context = scope.ServiceProvider.GetRequiredService<AmesaDbContext>();
     try
     {
-        // Only ensure database schema exists - NO automatic seeding
-        // Database migrations should be run manually: dotnet ef database update
-        // Database seeding should be done manually using AmesaBackend.DatabaseSeeder project
-        Log.Information("Ensuring database schema exists (no automatic seeding)...");
-        await context.Database.EnsureCreatedAsync();
-        Log.Information("Database schema check completed. No data was seeded automatically.");
-        Log.Information("⚠️  To seed data manually, use: dotnet run --project AmesaBackend.DatabaseSeeder");
+        if (builder.Environment.IsDevelopment())
+        {
+            // Only ensure database schema exists in development - NO automatic seeding
+            // Database migrations should be run manually: dotnet ef database update
+            // Database seeding should be done manually using AmesaBackend.DatabaseSeeder project
+            Log.Information("Development mode: Ensuring database schema exists (no automatic seeding)...");
+            await context.Database.EnsureCreatedAsync();
+            Log.Information("Database schema check completed. No data was seeded automatically.");
+            Log.Information("⚠️  To seed data manually, use: dotnet run --project AmesaBackend.DatabaseSeeder");
+        }
+        else
+        {
+            Log.Information("Production mode: Skipping EnsureCreated (use migrations)");
+        }
     }
     catch (Exception ex)
     {
