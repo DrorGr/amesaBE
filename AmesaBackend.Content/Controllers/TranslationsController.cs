@@ -39,18 +39,27 @@ namespace AmesaBackend.Content.Controllers
             {
                 var cacheKey = $"translations_{languageCode}";
                 
-                // Try to get from Redis cache first
+                // Try to get from Redis cache first (with error handling)
                 if (_cache != null)
                 {
-                    var cachedResponse = await _cache.GetRecordAsync<TranslationsResponseDto>(cacheKey);
-                    if (cachedResponse != null)
+                    try
                     {
-                        return Ok(new ApiResponse<TranslationsResponseDto>
+                        var cachedResponse = await _cache.GetRecordAsync<TranslationsResponseDto>(cacheKey);
+                        if (cachedResponse != null)
                         {
-                            Success = true,
-                            Data = cachedResponse,
-                            Message = "Translations retrieved successfully (cached)"
-                        });
+                            _logger.LogDebug("Translations retrieved from cache for language: {LanguageCode}", languageCode);
+                            return Ok(new ApiResponse<TranslationsResponseDto>
+                            {
+                                Success = true,
+                                Data = cachedResponse,
+                                Message = "Translations retrieved successfully (cached)"
+                            });
+                        }
+                    }
+                    catch (Exception cacheEx)
+                    {
+                        // Log cache error but continue with database query
+                        _logger.LogWarning(cacheEx, "Error retrieving translations from cache, falling back to database query");
                     }
                 }
 
@@ -70,10 +79,18 @@ namespace AmesaBackend.Content.Controllers
                     LastUpdated = translations.Any() ? translations.Max(t => t.UpdatedAt) : DateTime.UtcNow
                 };
 
-                // Cache the response in Redis
+                // Cache the response in Redis (with error handling)
                 if (_cache != null)
                 {
-                    await _cache.SetRecordAsync(cacheKey, response, CacheExpiration);
+                    try
+                    {
+                        await _cache.SetRecordAsync(cacheKey, response, CacheExpiration);
+                    }
+                    catch (Exception cacheEx)
+                    {
+                        // Log cache error but don't fail the request
+                        _logger.LogWarning(cacheEx, "Error caching translations for language: {LanguageCode}", languageCode);
+                    }
                 }
 
                 return Ok(new ApiResponse<TranslationsResponseDto>
@@ -107,19 +124,27 @@ namespace AmesaBackend.Content.Controllers
             {
                 const string cacheKey = "languages_list";
                 
-                // Try to get from cache first
+                // Try to get from cache first (with error handling)
                 if (_cache != null)
                 {
-                    var cachedResponse = await _cache.GetRecordAsync<List<LanguageDto>>(cacheKey);
-                    if (cachedResponse != null)
+                    try
                     {
-                        _logger.LogDebug("Languages list retrieved from cache");
-                        return Ok(new ApiResponse<List<LanguageDto>>
+                        var cachedResponse = await _cache.GetRecordAsync<List<LanguageDto>>(cacheKey);
+                        if (cachedResponse != null)
                         {
-                            Success = true,
-                            Data = cachedResponse,
-                            Message = "Languages retrieved successfully (cached)"
-                        });
+                            _logger.LogDebug("Languages list retrieved from cache");
+                            return Ok(new ApiResponse<List<LanguageDto>>
+                            {
+                                Success = true,
+                                Data = cachedResponse,
+                                Message = "Languages retrieved successfully (cached)"
+                            });
+                        }
+                    }
+                    catch (Exception cacheEx)
+                    {
+                        // Log cache error but continue with database query
+                        _logger.LogWarning(cacheEx, "Error retrieving languages from cache, falling back to database query");
                     }
                 }
                 
@@ -140,11 +165,19 @@ namespace AmesaBackend.Content.Controllers
                     DisplayOrder = l.DisplayOrder
                 }).ToList();
 
-                // Cache the response
+                // Cache the response (with error handling)
                 if (_cache != null)
                 {
-                    await _cache.SetRecordAsync(cacheKey, languageDtos, LanguagesCacheExpiration);
-                    _logger.LogDebug("Languages list cached");
+                    try
+                    {
+                        await _cache.SetRecordAsync(cacheKey, languageDtos, LanguagesCacheExpiration);
+                        _logger.LogDebug("Languages list cached");
+                    }
+                    catch (Exception cacheEx)
+                    {
+                        // Log cache error but don't fail the request
+                        _logger.LogWarning(cacheEx, "Error caching languages list");
+                    }
                 }
 
                 return Ok(new ApiResponse<List<LanguageDto>>

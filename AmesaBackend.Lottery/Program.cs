@@ -15,7 +15,8 @@ using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
 
-NpgsqlConnection.GlobalTypeMapper.EnableDynamicJson();
+// Note: NpgsqlConnection.GlobalTypeMapper.EnableDynamicJson() is obsolete in Npgsql 7.0+
+// JSON support is enabled by default in newer versions
 
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
@@ -194,6 +195,9 @@ builder.Services.AddHostedService<LotteryDrawService>();
 // Add SignalR for real-time updates
 builder.Services.AddSignalR();
 
+// Add Response Caching for HTTP cache headers
+builder.Services.AddResponseCaching();
+
 builder.Services.AddHealthChecks();
 
 var app = builder.Build();
@@ -209,6 +213,7 @@ if (builder.Configuration.GetValue<bool>("XRay:Enabled", false))
 
 app.UseAmesaMiddleware();
 app.UseAmesaLogging();
+app.UseResponseCaching(); // Required for [ResponseCache] attributes
 app.UseRouting();
 
 // Extract JWT token from query string for SignalR HTTP requests (negotiate endpoint)

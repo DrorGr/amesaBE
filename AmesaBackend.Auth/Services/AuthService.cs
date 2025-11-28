@@ -376,18 +376,18 @@ namespace AmesaBackend.Auth.Services
             }
         }
 
-        public async Task<bool> ValidateTokenAsync(string token)
+        public Task<bool> ValidateTokenAsync(string token)
         {
             try
             {
                 // TODO: Implement GetClaimsFromExpiredToken method in IJwtTokenManager
                 // var claims = _jwtTokenManager.GetClaimsFromExpiredToken(token);
                 // return claims != null && claims.Any();
-                return false; // Temporary fix - always return false for expired tokens
+                return Task.FromResult(false); // Temporary fix - always return false for expired tokens
             }
             catch
             {
-                return false;
+                return Task.FromResult(false);
             }
         }
 

@@ -22,7 +22,7 @@ namespace AmesaBackend.Auth.Services
             _configuration = configuration;
         }
 
-        public async Task<bool> AuthenticateAsync(string email, string password)
+        public Task<bool> AuthenticateAsync(string email, string password)
         {
             try
             {
@@ -47,14 +47,14 @@ namespace AmesaBackend.Auth.Services
                     };
                     
                     _authenticatedUsers.AddOrUpdate(email.ToLower(), authData, (key, oldValue) => authData);
-                    return true;
+                    return Task.FromResult(true);
                 }
 
-                return false;
+                return Task.FromResult(false);
             }
             catch (Exception)
             {
-                return false;
+                return Task.FromResult(false);
             }
         }
         

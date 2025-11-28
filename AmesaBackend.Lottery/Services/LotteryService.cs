@@ -224,11 +224,11 @@ namespace AmesaBackend.Lottery.Services
 
                 // Verify house exists
                 // #region agent log
-                _logger.LogInformation("[DEBUG] LotteryService.AddHouseToFavoritesAsync:before-house-query houseId={HouseId} userId={UserId} contextHousesNull={Null}", houseId, userId, _context.Houses == null);
+                _logger.LogInformation("[DEBUG] LotteryService.AddHouseToFavoritesAsync:before-house-query houseId={HouseId} userId={UserId} contextHousesNull={Null}", houseId, userId, _context?.Houses == null);
                 // #endregion
                 var house = await _context.Houses.FindAsync(houseId);
                 // #region agent log
-                _logger.LogInformation("[DEBUG] LotteryService.AddHouseToFavoritesAsync:after-house-query houseId={HouseId} userId={UserId} houseIsNull={IsNull} houseId={HouseIdValue} deletedAt={DeletedAt} status={Status}", houseId, userId, house == null, house?.Id, house?.DeletedAt, house?.Status);
+                _logger.LogInformation("[DEBUG] LotteryService.AddHouseToFavoritesAsync:after-house-query houseId={HouseId} userId={UserId} houseIsNull={IsNull} houseId={HouseIdValue} deletedAt={DeletedAt} status={Status}", houseId, userId, house == null, house?.Id ?? Guid.Empty, house?.DeletedAt ?? null, house?.Status ?? null);
                 // #endregion
                 if (house == null)
                 {

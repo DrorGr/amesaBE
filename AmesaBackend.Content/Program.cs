@@ -47,6 +47,8 @@ builder.Services.AddDbContext<ContentDbContext>(options =>
 });
 
 builder.Services.AddAmesaBackendShared(builder.Configuration);
+// Add Response Caching for HTTP cache headers
+builder.Services.AddResponseCaching();
 builder.Services.AddHealthChecks();
 
 var app = builder.Build();
@@ -62,6 +64,7 @@ if (builder.Configuration.GetValue<bool>("XRay:Enabled", false))
 
 app.UseAmesaMiddleware();
 app.UseAmesaLogging();
+app.UseResponseCaching(); // Required for [ResponseCache] attributes
 app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();

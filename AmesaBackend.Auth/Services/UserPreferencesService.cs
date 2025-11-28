@@ -35,7 +35,7 @@ namespace AmesaBackend.Auth.Services
                 var preferences = await _context.UserPreferences
                     .FirstOrDefaultAsync(up => up.UserId == userId);
                 // #region agent log
-                _logger.LogInformation("[DEBUG] UserPreferencesService.GetUserPreferencesAsync:after-db-query userId={UserId} preferencesIsNull={IsNull} preferencesId={Id} preferencesJsonLength={Length}", userId, preferences == null, preferences?.Id, preferences?.PreferencesJson?.Length ?? 0);
+                _logger.LogInformation("[DEBUG] UserPreferencesService.GetUserPreferencesAsync:after-db-query userId={UserId} preferencesIsNull={IsNull} preferencesId={Id} preferencesJsonLength={Length}", userId, preferences == null, preferences?.Id ?? Guid.Empty, preferences?.PreferencesJson?.Length ?? 0);
                 // #endregion
 
                 if (preferences == null)
@@ -132,7 +132,7 @@ namespace AmesaBackend.Auth.Services
                 Dictionary<string, object> existingPrefsDict;
                 try
                 {
-                    existingPrefsDict = JsonSerializer.Deserialize<Dictionary<string, object>>(existingPreferences.PreferencesJson) 
+                    existingPrefsDict = JsonSerializer.Deserialize<Dictionary<string, object>>(existingPreferences.PreferencesJson ?? "{}") 
                         ?? new Dictionary<string, object>();
                     // #region agent log
                     _logger.LogInformation("[DEBUG] UserPreferencesService.UpdateUserPreferencesAsync:deserialized-existing userId={UserId} existingKeys={Keys} hasLotteryPrefs={HasKey}", userId, string.Join(",", existingPrefsDict.Keys), existingPrefsDict.ContainsKey("lotteryPreferences"));
@@ -380,6 +380,10 @@ namespace AmesaBackend.Auth.Services
                 // #region agent log
                 _logger.LogInformation("[DEBUG] UserPreferencesService.GetFavoriteHouseIdsAsync:before-parse userId={UserId} jsonLength={Length}", userId, preferences.PreferencesJson?.Length ?? 0);
                 // #endregion
+                if (string.IsNullOrEmpty(preferences.PreferencesJson))
+                {
+                    return new List<Guid>();
+                }
                 var jsonDoc = JsonDocument.Parse(preferences.PreferencesJson);
                 // #region agent log
                 _logger.LogInformation("[DEBUG] UserPreferencesService.GetFavoriteHouseIdsAsync:after-parse userId={UserId} rootElementValueKind={ValueKind}", userId, jsonDoc.RootElement.ValueKind);
@@ -523,6 +527,10 @@ namespace AmesaBackend.Auth.Services
                             // #region agent log
                             _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:parsing-json attempt={Attempt} houseId={HouseId} userId={UserId} jsonLength={Length}", attempt, houseId, userId, preferences.PreferencesJson?.Length ?? 0);
                             // #endregion
+                            if (string.IsNullOrEmpty(preferences.PreferencesJson))
+                            {
+                                throw new InvalidOperationException("PreferencesJson is null or empty");
+                            }
                             jsonDoc = JsonDocument.Parse(preferences.PreferencesJson);
                             rootElement = jsonDoc.RootElement.Clone();
                             // #region agent log

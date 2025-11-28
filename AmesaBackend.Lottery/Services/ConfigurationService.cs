@@ -23,12 +23,6 @@ namespace AmesaBackend.Lottery.Services
             {
                 // Access system_configurations table in amesa_auth schema using raw SQL
                 // Using parameterized query to prevent SQL injection
-                var sql = @"
-                    SELECT id, key, value, description, is_active 
-                    FROM amesa_auth.system_configurations 
-                    WHERE key = {0} AND is_active = true 
-                    LIMIT 1";
-                
                 // Use raw SQL query to access amesa_auth schema
                 var connection = _context.Database.GetDbConnection();
                 var wasOpen = connection.State == System.Data.ConnectionState.Open;
