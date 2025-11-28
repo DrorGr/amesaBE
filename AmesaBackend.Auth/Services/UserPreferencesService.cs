@@ -421,7 +421,15 @@ namespace AmesaBackend.Auth.Services
                             // #region agent log
                             _logger.LogInformation("[DEBUG] UserPreferencesService.GetFavoriteHouseIdsAsync:parsed-ids userId={UserId} idsCount={Count} ids={Ids}", userId, ids.Count, string.Join(",", ids));
                             // #endregion
-                            return ids;
+                            // Remove duplicates (defensive - in case any exist from before race condition fix)
+                            var uniqueIds = ids.Distinct().ToList();
+                            if (uniqueIds.Count != ids.Count)
+                            {
+                                // #region agent log
+                                _logger.LogWarning("[DEBUG] UserPreferencesService.GetFavoriteHouseIdsAsync:duplicates-removed userId={UserId} originalCount={Original} uniqueCount={Unique}", userId, ids.Count, uniqueIds.Count);
+                                // #endregion
+                            }
+                            return uniqueIds;
                         }
                         else
                         {
@@ -463,207 +471,250 @@ namespace AmesaBackend.Auth.Services
             // #region agent log
             _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:entry houseId={HouseId} userId={UserId}", houseId, userId);
             // #endregion
-            try
+            
+            // Optimistic concurrency retry logic to prevent race conditions
+            const int maxRetries = 3;
+            for (int attempt = 1; attempt <= maxRetries; attempt++)
             {
                 // #region agent log
-                _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:before-get-favorites houseId={HouseId} userId={UserId}", houseId, userId);
-                // #endregion
-                var favoriteIds = await GetFavoriteHouseIdsAsync(userId);
-                // #region agent log
-                _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:after-get-favorites houseId={HouseId} userId={UserId} favoriteIdsCount={Count} isAlreadyFavorite={AlreadyFavorite}", houseId, userId, favoriteIds.Count, favoriteIds.Contains(houseId));
+                _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:attempt={Attempt} houseId={HouseId} userId={UserId}", attempt, houseId, userId);
                 // #endregion
                 
-                if (favoriteIds.Contains(houseId))
+                try
                 {
                     // #region agent log
-                    _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:already-favorite houseId={HouseId} userId={UserId} - returning true (idempotent)", houseId, userId);
+                    _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:before-get-favorites attempt={Attempt} houseId={HouseId} userId={UserId}", attempt, houseId, userId);
                     // #endregion
-                    // Idempotent operation: adding an already-favorited house should succeed
-                    return true;
-                }
-
-                favoriteIds.Add(houseId);
-
-                // Update favorites in preferences
-                // #region agent log
-                _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:before-get-preferences houseId={HouseId} userId={UserId}", houseId, userId);
-                // #endregion
-                var preferences = await GetUserPreferencesAsync(userId);
-                // #region agent log
-                _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:after-get-preferences houseId={HouseId} userId={UserId} preferencesIsNull={IsNull} preferencesJsonLength={Length}", houseId, userId, preferences == null, preferences?.PreferencesJson?.Length ?? 0);
-                // #endregion
-                JsonDocument? jsonDoc = null;
-                JsonElement rootElement;
-
-                // #region agent log
-                _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:before-json-parse houseId={HouseId} userId={UserId} preferencesIsNull={IsNull} preferencesJsonIsNull={JsonNull} preferencesJsonLength={Length}", houseId, userId, preferences == null, preferences?.PreferencesJson == null, preferences?.PreferencesJson?.Length ?? 0);
-                // #endregion
-                if (preferences != null)
-                {
-                    try
-                    {
-                        // #region agent log
-                        _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:parsing-json houseId={HouseId} userId={UserId} jsonLength={Length}", houseId, userId, preferences.PreferencesJson?.Length ?? 0);
-                        // #endregion
-                        jsonDoc = JsonDocument.Parse(preferences.PreferencesJson);
-                        rootElement = jsonDoc.RootElement.Clone();
-                        // #region agent log
-                        _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:json-parsed houseId={HouseId} userId={UserId} rootElementValueKind={ValueKind}", houseId, userId, rootElement.ValueKind);
-                        // #endregion
-                    }
-                    catch (Exception parseEx)
-                    {
-                        // #region agent log
-                        _logger.LogWarning(parseEx, "[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:json-parse-failed houseId={HouseId} userId={UserId} exceptionType={Type} message={Message}", houseId, userId, parseEx.GetType().Name, parseEx.Message);
-                        // #endregion
-                        rootElement = new JsonElement();
-                    }
-                }
-                else
-                {
+                    var favoriteIds = await GetFavoriteHouseIdsAsync(userId);
                     // #region agent log
-                    _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:preferences-null houseId={HouseId} userId={UserId} - creating empty rootElement", houseId, userId);
+                    _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:after-get-favorites attempt={Attempt} houseId={HouseId} userId={UserId} favoriteIdsCount={Count} isAlreadyFavorite={AlreadyFavorite}", attempt, houseId, userId, favoriteIds.Count, favoriteIds.Contains(houseId));
                     // #endregion
-                    rootElement = new JsonElement();
-                }
+                    
+                    // Check if already favorite (idempotent operation)
+                    if (favoriteIds.Contains(houseId))
+                    {
+                        // #region agent log
+                        _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:already-favorite attempt={Attempt} houseId={HouseId} userId={UserId} - returning true (idempotent)", attempt, houseId, userId);
+                        // #endregion
+                        return true;
+                    }
 
-                // Get or create lottery preferences
-                // Parse the entire preferences JSON into a dictionary we can modify
-                Dictionary<string, object> existingPrefs;
-                // #region agent log
-                _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:before-deserialize houseId={HouseId} userId={UserId} preferencesIsNull={IsNull} rootElementValueKind={ValueKind}", houseId, userId, preferences == null, rootElement.ValueKind);
-                // #endregion
-                if (preferences != null && rootElement.ValueKind == JsonValueKind.Object)
-                {
-                    try
-                    {
-                        // Deserialize the entire preferences JSON to a dictionary
-                        existingPrefs = JsonSerializer.Deserialize<Dictionary<string, object>>(preferences.PreferencesJson) 
-                            ?? new Dictionary<string, object>();
-                        // #region agent log
-                        _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:deserialized houseId={HouseId} userId={UserId} existingPrefsCount={Count} keys={Keys}", houseId, userId, existingPrefs.Count, string.Join(",", existingPrefs.Keys));
-                        // #endregion
-                    }
-                    catch (Exception deserEx)
-                    {
-                        // #region agent log
-                        _logger.LogWarning(deserEx, "[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:deserialize-failed houseId={HouseId} userId={UserId} exceptionType={Type} message={Message} - creating empty dict", houseId, userId, deserEx.GetType().Name, deserEx.Message);
-                        // #endregion
-                        existingPrefs = new Dictionary<string, object>();
-                    }
-                }
-                else
-                {
-                    // #region agent log
-                    _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:creating-empty-prefs houseId={HouseId} userId={UserId} reason={Reason}", houseId, userId, preferences == null ? "preferencesIsNull" : "rootElementNotObject");
-                    // #endregion
-                    existingPrefs = new Dictionary<string, object>();
-                }
+                    // Add to list
+                    favoriteIds.Add(houseId);
 
-                // Update or create lotteryPreferences
-                Dictionary<string, object> lotteryPrefsDict;
-                // #region agent log
-                _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:before-lottery-prefs houseId={HouseId} userId={UserId} existingPrefsHasLotteryPrefs={HasKey}", houseId, userId, existingPrefs.ContainsKey("lotteryPreferences"));
-                // #endregion
-                if (existingPrefs.TryGetValue("lotteryPreferences", out var existingLotteryPrefsObj))
-                {
+                    // Update favorites in preferences
                     // #region agent log
-                    _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:found-lottery-prefs houseId={HouseId} userId={UserId} existingLotteryPrefsObjType={Type}", houseId, userId, existingLotteryPrefsObj?.GetType().Name ?? "null");
+                    _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:before-get-preferences attempt={Attempt} houseId={HouseId} userId={UserId}", attempt, houseId, userId);
                     // #endregion
-                    // Parse existing lotteryPreferences
-                    if (existingLotteryPrefsObj is JsonElement existingLotteryPrefs)
+                    var preferences = await GetUserPreferencesAsync(userId);
+                    // #region agent log
+                    _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:after-get-preferences attempt={Attempt} houseId={HouseId} userId={UserId} preferencesIsNull={IsNull} preferencesJsonLength={Length}", attempt, houseId, userId, preferences == null, preferences?.PreferencesJson?.Length ?? 0);
+                    // #endregion
+                    JsonDocument? jsonDoc = null;
+                    JsonElement rootElement;
+
+                    // #region agent log
+                    _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:before-json-parse attempt={Attempt} houseId={HouseId} userId={UserId} preferencesIsNull={IsNull} preferencesJsonIsNull={JsonNull} preferencesJsonLength={Length}", attempt, houseId, userId, preferences == null, preferences?.PreferencesJson == null, preferences?.PreferencesJson?.Length ?? 0);
+                    // #endregion
+                    if (preferences != null)
                     {
-                        // #region agent log
-                        _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:parsing-json-element houseId={HouseId} userId={UserId}", houseId, userId);
-                        // #endregion
-                        lotteryPrefsDict = JsonSerializer.Deserialize<Dictionary<string, object>>(existingLotteryPrefs.GetRawText()) 
-                            ?? new Dictionary<string, object>();
-                    }
-                    else if (existingLotteryPrefsObj is Dictionary<string, object> existingDict)
-                    {
-                        // #region agent log
-                        _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:using-existing-dict houseId={HouseId} userId={UserId} dictCount={Count}", houseId, userId, existingDict.Count);
-                        // #endregion
-                        lotteryPrefsDict = existingDict;
+                        try
+                        {
+                            // #region agent log
+                            _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:parsing-json attempt={Attempt} houseId={HouseId} userId={UserId} jsonLength={Length}", attempt, houseId, userId, preferences.PreferencesJson?.Length ?? 0);
+                            // #endregion
+                            jsonDoc = JsonDocument.Parse(preferences.PreferencesJson);
+                            rootElement = jsonDoc.RootElement.Clone();
+                            // #region agent log
+                            _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:json-parsed attempt={Attempt} houseId={HouseId} userId={UserId} rootElementValueKind={ValueKind}", attempt, houseId, userId, rootElement.ValueKind);
+                            // #endregion
+                        }
+                        catch (Exception parseEx)
+                        {
+                            // #region agent log
+                            _logger.LogWarning(parseEx, "[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:json-parse-failed attempt={Attempt} houseId={HouseId} userId={UserId} exceptionType={Type} message={Message}", attempt, houseId, userId, parseEx.GetType().Name, parseEx.Message);
+                            // #endregion
+                            rootElement = new JsonElement();
+                        }
                     }
                     else
                     {
                         // #region agent log
-                        _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:serializing-unknown-type houseId={HouseId} userId={UserId} type={Type}", houseId, userId, existingLotteryPrefsObj?.GetType().Name ?? "null");
+                        _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:preferences-null attempt={Attempt} houseId={HouseId} userId={UserId} - creating empty rootElement", attempt, houseId, userId);
                         // #endregion
-                        // Try to deserialize from string representation
-                        lotteryPrefsDict = JsonSerializer.Deserialize<Dictionary<string, object>>(
-                            JsonSerializer.Serialize(existingLotteryPrefsObj)) 
-                            ?? new Dictionary<string, object>();
+                        rootElement = new JsonElement();
                     }
+
+                    // Get or create lottery preferences
+                    // Parse the entire preferences JSON into a dictionary we can modify
+                    Dictionary<string, object> existingPrefs;
+                    // #region agent log
+                    _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:before-deserialize attempt={Attempt} houseId={HouseId} userId={UserId} preferencesIsNull={IsNull} rootElementValueKind={ValueKind}", attempt, houseId, userId, preferences == null, rootElement.ValueKind);
+                    // #endregion
+                    if (preferences != null && rootElement.ValueKind == JsonValueKind.Object)
+                    {
+                        try
+                        {
+                            // Deserialize the entire preferences JSON to a dictionary
+                            existingPrefs = JsonSerializer.Deserialize<Dictionary<string, object>>(preferences.PreferencesJson) 
+                                ?? new Dictionary<string, object>();
+                            // #region agent log
+                            _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:deserialized attempt={Attempt} houseId={HouseId} userId={UserId} existingPrefsCount={Count} keys={Keys}", attempt, houseId, userId, existingPrefs.Count, string.Join(",", existingPrefs.Keys));
+                            // #endregion
+                        }
+                        catch (Exception deserEx)
+                        {
+                            // #region agent log
+                            _logger.LogWarning(deserEx, "[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:deserialize-failed attempt={Attempt} houseId={HouseId} userId={UserId} exceptionType={Type} message={Message} - creating empty dict", attempt, houseId, userId, deserEx.GetType().Name, deserEx.Message);
+                            // #endregion
+                            existingPrefs = new Dictionary<string, object>();
+                        }
+                    }
+                    else
+                    {
+                        // #region agent log
+                        _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:creating-empty-prefs attempt={Attempt} houseId={HouseId} userId={UserId} reason={Reason}", attempt, houseId, userId, preferences == null ? "preferencesIsNull" : "rootElementNotObject");
+                        // #endregion
+                        existingPrefs = new Dictionary<string, object>();
+                    }
+
+                    // Update or create lotteryPreferences
+                    Dictionary<string, object> lotteryPrefsDict;
+                    // #region agent log
+                    _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:before-lottery-prefs attempt={Attempt} houseId={HouseId} userId={UserId} existingPrefsHasLotteryPrefs={HasKey}", attempt, houseId, userId, existingPrefs.ContainsKey("lotteryPreferences"));
+                    // #endregion
+                    if (existingPrefs.TryGetValue("lotteryPreferences", out var existingLotteryPrefsObj))
+                    {
+                        // #region agent log
+                        _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:found-lottery-prefs attempt={Attempt} houseId={HouseId} userId={UserId} existingLotteryPrefsObjType={Type}", attempt, houseId, userId, existingLotteryPrefsObj?.GetType().Name ?? "null");
+                        // #endregion
+                        // Parse existing lotteryPreferences
+                        if (existingLotteryPrefsObj is JsonElement existingLotteryPrefs)
+                        {
+                            // #region agent log
+                            _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:parsing-json-element attempt={Attempt} houseId={HouseId} userId={UserId}", attempt, houseId, userId);
+                            // #endregion
+                            lotteryPrefsDict = JsonSerializer.Deserialize<Dictionary<string, object>>(existingLotteryPrefs.GetRawText()) 
+                                ?? new Dictionary<string, object>();
+                        }
+                        else if (existingLotteryPrefsObj is Dictionary<string, object> existingDict)
+                        {
+                            // #region agent log
+                            _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:using-existing-dict attempt={Attempt} houseId={HouseId} userId={UserId} dictCount={Count}", attempt, houseId, userId, existingDict.Count);
+                            // #endregion
+                            lotteryPrefsDict = existingDict;
+                        }
+                        else
+                        {
+                            // #region agent log
+                            _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:serializing-unknown-type attempt={Attempt} houseId={HouseId} userId={UserId} type={Type}", attempt, houseId, userId, existingLotteryPrefsObj?.GetType().Name ?? "null");
+                            // #endregion
+                            // Try to deserialize from string representation
+                            lotteryPrefsDict = JsonSerializer.Deserialize<Dictionary<string, object>>(
+                                JsonSerializer.Serialize(existingLotteryPrefsObj)) 
+                                ?? new Dictionary<string, object>();
+                        }
+                    }
+                    else
+                    {
+                        // #region agent log
+                        _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:creating-new-lottery-prefs attempt={Attempt} houseId={HouseId} userId={UserId}", attempt, houseId, userId);
+                        // #endregion
+                        lotteryPrefsDict = new Dictionary<string, object>();
+                    }
+
+                    // Update favoriteHouseIds - ensure no duplicates
+                    // #region agent log
+                    var favoriteIdsStringList = favoriteIds.Distinct().Select(id => id.ToString()).ToList();
+                    _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:before-update-favorite-ids attempt={Attempt} houseId={HouseId} userId={UserId} favoriteIdsCount={Count} favoriteIds={Ids} lotteryPrefsDictHasFavoriteIds={HasKey}", attempt, houseId, userId, favoriteIds.Count, string.Join(",", favoriteIdsStringList), lotteryPrefsDict.ContainsKey("favoriteHouseIds"));
+                    // #endregion
+                    lotteryPrefsDict["favoriteHouseIds"] = favoriteIdsStringList;
+                    // #region agent log
+                    _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:after-update-favorite-ids attempt={Attempt} houseId={HouseId} userId={UserId} lotteryPrefsDictKeys={Keys}", attempt, houseId, userId, string.Join(",", lotteryPrefsDict.Keys));
+                    // #endregion
+                    
+                    // Update the main preferences dictionary
+                    existingPrefs["lotteryPreferences"] = lotteryPrefsDict;
+                    // #region agent log
+                    _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:after-update-lottery-prefs attempt={Attempt} houseId={HouseId} userId={UserId} existingPrefsKeys={Keys}", attempt, houseId, userId, string.Join(",", existingPrefs.Keys));
+                    // #endregion
+
+                    // Serialize the entire preferences dictionary back to JSON
+                    // #region agent log
+                    _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:before-serialize attempt={Attempt} houseId={HouseId} userId={UserId} existingPrefsCount={Count}", attempt, houseId, userId, existingPrefs.Count);
+                    // #endregion
+                    var serializedJson = JsonSerializer.SerializeToElement(existingPrefs);
+                    // #region agent log
+                    _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:after-serialize attempt={Attempt} houseId={HouseId} userId={UserId} serializedJsonValueKind={ValueKind}", attempt, houseId, userId, serializedJson.ValueKind);
+                    // #endregion
+                    // #region agent log
+                    _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:before-update-db attempt={Attempt} houseId={HouseId} userId={UserId}", attempt, houseId, userId);
+                    // #endregion
+                    await UpdateUserPreferencesAsync(userId, serializedJson);
+                    // #region agent log
+                    _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:after-update-db attempt={Attempt} houseId={HouseId} userId={UserId} - success", attempt, houseId, userId);
+                    // #endregion
+
+                    _logger.LogInformation("Added house {HouseId} to favorites for user {UserId} (attempt {Attempt})", houseId, userId, attempt);
+                    return true;
                 }
-                else
+                catch (DbUpdateConcurrencyException ex)
                 {
                     // #region agent log
-                    _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:creating-new-lottery-prefs houseId={HouseId} userId={UserId}", houseId, userId);
+                    _logger.LogWarning(ex, "[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:concurrency-exception attempt={Attempt} houseId={HouseId} userId={UserId} message={Message}", attempt, houseId, userId, ex.Message);
                     // #endregion
-                    lotteryPrefsDict = new Dictionary<string, object>();
+                    
+                    // Concurrency conflict - another request modified preferences
+                    // Retry by re-reading and checking again
+                    if (attempt < maxRetries)
+                    {
+                        // #region agent log
+                        _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:retrying attempt={Attempt} houseId={HouseId} userId={UserId}", attempt + 1, houseId, userId);
+                        // #endregion
+                        // Small delay before retry to allow other request to complete
+                        await Task.Delay(50 * attempt); // Exponential backoff: 50ms, 100ms, 150ms
+                        continue; // Retry
+                    }
+                    else
+                    {
+                        // #region agent log
+                        _logger.LogError(ex, "[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:max-retries-exceeded houseId={HouseId} userId={UserId} attempts={Attempts}", houseId, userId, maxRetries);
+                        // #endregion
+                        _logger.LogError(ex, "Failed to add house {HouseId} to favorites for user {UserId} after {Attempts} attempts due to concurrency conflicts", houseId, userId, maxRetries);
+                        return false;
+                    }
                 }
-
-                // Update favoriteHouseIds
-                // #region agent log
-                var favoriteIdsStringList = favoriteIds.Select(id => id.ToString()).ToList();
-                _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:before-update-favorite-ids houseId={HouseId} userId={UserId} favoriteIdsCount={Count} favoriteIds={Ids} lotteryPrefsDictHasFavoriteIds={HasKey}", houseId, userId, favoriteIds.Count, string.Join(",", favoriteIdsStringList), lotteryPrefsDict.ContainsKey("favoriteHouseIds"));
-                // #endregion
-                lotteryPrefsDict["favoriteHouseIds"] = favoriteIdsStringList;
-                // #region agent log
-                _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:after-update-favorite-ids houseId={HouseId} userId={UserId} lotteryPrefsDictKeys={Keys}", houseId, userId, string.Join(",", lotteryPrefsDict.Keys));
-                // #endregion
-                
-                // Update the main preferences dictionary
-                existingPrefs["lotteryPreferences"] = lotteryPrefsDict;
-                // #region agent log
-                _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:after-update-lottery-prefs houseId={HouseId} userId={UserId} existingPrefsKeys={Keys}", houseId, userId, string.Join(",", existingPrefs.Keys));
-                // #endregion
-
-                // Serialize the entire preferences dictionary back to JSON
-                // #region agent log
-                _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:before-serialize houseId={HouseId} userId={UserId} existingPrefsCount={Count}", houseId, userId, existingPrefs.Count);
-                // #endregion
-                var serializedJson = JsonSerializer.SerializeToElement(existingPrefs);
-                // #region agent log
-                _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:after-serialize houseId={HouseId} userId={UserId} serializedJsonValueKind={ValueKind}", houseId, userId, serializedJson.ValueKind);
-                // #endregion
-                // #region agent log
-                _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:before-update-db houseId={HouseId} userId={UserId}", houseId, userId);
-                // #endregion
-                await UpdateUserPreferencesAsync(userId, serializedJson);
-                // #region agent log
-                _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:after-update-db houseId={HouseId} userId={UserId}", houseId, userId);
-                // #endregion
-
-                _logger.LogInformation("Added house {HouseId} to favorites for user {UserId}", houseId, userId);
-                return true;
+                catch (JsonException ex)
+                {
+                    // #region agent log
+                    _logger.LogError(ex, "[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:json-exception attempt={Attempt} houseId={HouseId} userId={UserId} message={Message}", attempt, houseId, userId, ex.Message);
+                    // #endregion
+                    _logger.LogError(ex, "JSON serialization error adding house {HouseId} to favorites for user {UserId}", houseId, userId);
+                    return false; // Don't retry on JSON errors
+                }
+                catch (DbUpdateException ex)
+                {
+                    // #region agent log
+                    _logger.LogError(ex, "[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:db-exception attempt={Attempt} houseId={HouseId} userId={UserId} message={Message}", attempt, houseId, userId, ex.Message);
+                    // #endregion
+                    _logger.LogError(ex, "Database error adding house {HouseId} to favorites for user {UserId}", houseId, userId);
+                    return false; // Don't retry on general DB errors (only concurrency)
+                }
+                catch (Exception ex)
+                {
+                    // #region agent log
+                    _logger.LogError(ex, "[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:exception attempt={Attempt} houseId={HouseId} userId={UserId} exceptionType={Type} message={Message}", attempt, houseId, userId, ex.GetType().Name, ex.Message);
+                    // #endregion
+                    _logger.LogError(ex, "Error adding house {HouseId} to favorites for user {UserId}", houseId, userId);
+                    return false; // Don't retry on unexpected errors
+                }
             }
-            catch (JsonException ex)
-            {
-                // #region agent log
-                _logger.LogError(ex, "[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:json-exception houseId={HouseId} userId={UserId} message={Message}", houseId, userId, ex.Message);
-                // #endregion
-                _logger.LogError(ex, "JSON serialization error adding house {HouseId} to favorites for user {UserId}", houseId, userId);
-                return false;
-            }
-            catch (DbUpdateException ex)
-            {
-                // #region agent log
-                _logger.LogError(ex, "[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:db-exception houseId={HouseId} userId={UserId} message={Message}", houseId, userId, ex.Message);
-                // #endregion
-                _logger.LogError(ex, "Database error adding house {HouseId} to favorites for user {UserId}", houseId, userId);
-                return false;
-            }
-            catch (Exception ex)
-            {
-                // #region agent log
-                _logger.LogError(ex, "[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:exception houseId={HouseId} userId={UserId} exceptionType={Type} message={Message}", houseId, userId, ex.GetType().Name, ex.Message);
-                // #endregion
-                _logger.LogError(ex, "Error adding house {HouseId} to favorites for user {UserId}", houseId, userId);
-                return false;
-            }
+            
+            // Should never reach here, but just in case
+            // #region agent log
+            _logger.LogError("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:unexpected-exit houseId={HouseId} userId={UserId}", houseId, userId);
+            // #endregion
+            return false;
         }
 
         public async Task<bool> RemoveHouseFromFavoritesAsync(Guid userId, Guid houseId)

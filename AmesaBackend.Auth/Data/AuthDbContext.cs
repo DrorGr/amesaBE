@@ -104,6 +104,8 @@ namespace AmesaBackend.Auth.Data
                 entity.HasIndex(e => e.UserId).IsUnique();
                 entity.Property(e => e.PreferencesJson).IsRequired().HasColumnType("jsonb");
                 entity.Property(e => e.Version).IsRequired().HasMaxLength(20);
+                // Configure UpdatedAt as concurrency token to prevent race conditions
+                entity.Property(e => e.UpdatedAt).IsConcurrencyToken();
                 // Ignore BaseEntity properties that don't exist in user_preferences table
                 entity.Ignore(e => e.DeletedAt);
                 entity.Ignore(e => e.DeletedBy);
