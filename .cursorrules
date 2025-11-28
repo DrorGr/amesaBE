@@ -415,12 +415,15 @@ git checkout main
 ### ✅ **TASK COMPLETION PROTOCOL - MANDATORY**
 **CRITICAL**: For every task you start and complete, you MUST:
 1. **Use `todo_write` tool** to track all tasks with clear status updates
-2. **BUILD LOCALLY BEFORE PUSHING** - **MANDATORY**:
-   - **ALWAYS run `dotnet build`** in the BE directory before committing/pushing
-   - Verify build completes successfully with no errors
+2. **BUILD VERIFICATION BEFORE PUSHING** - **MANDATORY - NEVER SKIP**:
+   - **ALWAYS run `dotnet build`** for affected projects before committing/pushing
+   - **NEVER push code without verifying the build succeeds**
+   - Verify build completes successfully with **0 errors, 0 warnings** (or acceptable warnings only)
    - Run tests if applicable: `dotnet test`
-   - Fix any build errors before pushing to repository
+   - Fix ALL build errors before pushing to repository
    - This prevents CI/CD failures and broken deployments
+   - **If build fails, DO NOT push - fix the errors first**
+   - **Exception**: Only skip if explicitly requested by user AND documented in commit message
 3. **UPDATE DOCUMENTATION WHEN CHANGES OCCUR** - **MANDATORY**:
    - **New/modified API endpoints**: Update `MetaData/Documentation/API/API_REFERENCE_MASTER.md`
    - **New/modified controllers**: Document endpoints in API reference
