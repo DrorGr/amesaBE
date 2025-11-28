@@ -209,41 +209,59 @@ namespace AmesaBackend.Lottery.Services
         public async Task<bool> AddHouseToFavoritesAsync(Guid userId, Guid houseId)
         {
             // #region agent log
-            _logger.LogInformation("[DEBUG] LotteryService.AddHouseToFavoritesAsync:entry houseId={HouseId} userId={UserId} userPreferencesServiceNull={Null}", houseId, userId, _userPreferencesService == null);
+            _logger.LogInformation("[DEBUG] LotteryService.AddHouseToFavoritesAsync:entry houseId={HouseId} userId={UserId} userPreferencesServiceNull={Null} contextNull={ContextNull}", houseId, userId, _userPreferencesService == null, _context == null);
             // #endregion
-            if (_userPreferencesService == null)
+            try
+            {
+                if (_userPreferencesService == null)
+                {
+                    // #region agent log
+                    _logger.LogWarning("[DEBUG] LotteryService.AddHouseToFavoritesAsync:null-service houseId={HouseId} userId={UserId} - returning false", houseId, userId);
+                    // #endregion
+                    _logger.LogWarning("UserPreferencesService not available");
+                    return false;
+                }
+
+                // Verify house exists
+                // #region agent log
+                _logger.LogInformation("[DEBUG] LotteryService.AddHouseToFavoritesAsync:before-house-query houseId={HouseId} userId={UserId} contextHousesNull={Null}", houseId, userId, _context.Houses == null);
+                // #endregion
+                var house = await _context.Houses.FindAsync(houseId);
+                // #region agent log
+                _logger.LogInformation("[DEBUG] LotteryService.AddHouseToFavoritesAsync:after-house-query houseId={HouseId} userId={UserId} houseIsNull={IsNull} houseId={HouseIdValue} deletedAt={DeletedAt} status={Status}", houseId, userId, house == null, house?.Id, house?.DeletedAt, house?.Status);
+                // #endregion
+                if (house == null)
+                {
+                    // #region agent log
+                    _logger.LogWarning("[DEBUG] LotteryService.AddHouseToFavoritesAsync:house-is-null houseId={HouseId} userId={UserId} - returning false", houseId, userId);
+                    // #endregion
+                    return false;
+                }
+                if (house.DeletedAt != null)
+                {
+                    // #region agent log
+                    _logger.LogWarning("[DEBUG] LotteryService.AddHouseToFavoritesAsync:house-is-deleted houseId={HouseId} userId={UserId} deletedAt={DeletedAt} - returning false", houseId, userId, house.DeletedAt);
+                    // #endregion
+                    return false;
+                }
+
+                // #region agent log
+                _logger.LogInformation("[DEBUG] LotteryService.AddHouseToFavoritesAsync:before-userprefs-call houseId={HouseId} userId={UserId} userPreferencesServiceType={Type}", houseId, userId, _userPreferencesService.GetType().Name);
+                // #endregion
+                var result = await _userPreferencesService.AddHouseToFavoritesAsync(userId, houseId);
+                // #region agent log
+                _logger.LogInformation("[DEBUG] LotteryService.AddHouseToFavoritesAsync:after-userprefs-call houseId={HouseId} userId={UserId} result={Result} resultType={Type}", houseId, userId, result, result.GetType().Name);
+                // #endregion
+                return result;
+            }
+            catch (Exception ex)
             {
                 // #region agent log
-                _logger.LogWarning("[DEBUG] LotteryService.AddHouseToFavoritesAsync:null-service houseId={HouseId} userId={UserId}", houseId, userId);
+                _logger.LogError(ex, "[DEBUG] LotteryService.AddHouseToFavoritesAsync:exception houseId={HouseId} userId={UserId} exceptionType={Type} message={Message} innerException={Inner}", houseId, userId, ex.GetType().Name, ex.Message, ex.InnerException?.Message);
                 // #endregion
-                _logger.LogWarning("UserPreferencesService not available");
+                _logger.LogError(ex, "Error in AddHouseToFavoritesAsync for house {HouseId} and user {UserId}", houseId, userId);
                 return false;
             }
-
-            // Verify house exists
-            // #region agent log
-            _logger.LogInformation("[DEBUG] LotteryService.AddHouseToFavoritesAsync:before-house-check houseId={HouseId} userId={UserId}", houseId, userId);
-            // #endregion
-            var house = await _context.Houses.FindAsync(houseId);
-            // #region agent log
-            _logger.LogInformation("[DEBUG] LotteryService.AddHouseToFavoritesAsync:after-house-check houseId={HouseId} userId={UserId} houseIsNull={IsNull} deletedAt={DeletedAt}", houseId, userId, house == null, house?.DeletedAt);
-            // #endregion
-            if (house == null || house.DeletedAt != null)
-            {
-                // #region agent log
-                _logger.LogWarning("[DEBUG] LotteryService.AddHouseToFavoritesAsync:house-not-found houseId={HouseId} userId={UserId} houseIsNull={IsNull} deletedAt={DeletedAt}", houseId, userId, house == null, house?.DeletedAt);
-                // #endregion
-                return false;
-            }
-
-            // #region agent log
-            _logger.LogInformation("[DEBUG] LotteryService.AddHouseToFavoritesAsync:before-userprefs houseId={HouseId} userId={UserId}", houseId, userId);
-            // #endregion
-            var result = await _userPreferencesService.AddHouseToFavoritesAsync(userId, houseId);
-            // #region agent log
-            _logger.LogInformation("[DEBUG] LotteryService.AddHouseToFavoritesAsync:after-userprefs houseId={HouseId} userId={UserId} result={Result}", houseId, userId, result);
-            // #endregion
-            return result;
         }
 
         public async Task<bool> RemoveHouseFromFavoritesAsync(Guid userId, Guid houseId)

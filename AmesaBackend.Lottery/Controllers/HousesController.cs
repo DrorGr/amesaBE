@@ -48,11 +48,20 @@ namespace AmesaBackend.Lottery.Controllers
             [FromQuery] int? bedrooms = null,
             [FromQuery] int? bathrooms = null)
         {
+            // #region agent log
+            _logger.LogInformation("[DEBUG] HousesController.GetHouses:entry page={Page} limit={Limit}", page, limit);
+            // #endregion
             try
             {
+                // #region agent log
+                _logger.LogInformation("[DEBUG] HousesController.GetHouses:before-query");
+                // #endregion
                 var query = _context.Houses
                     .Include(h => h.Images)
                     .AsQueryable();
+                // #region agent log
+                _logger.LogInformation("[DEBUG] HousesController.GetHouses:after-query-creation");
+                // #endregion
 
                 if (!string.IsNullOrEmpty(status))
                 {
@@ -167,6 +176,9 @@ namespace AmesaBackend.Lottery.Controllers
             }
             catch (Exception ex)
             {
+                // #region agent log
+                _logger.LogError(ex, "[DEBUG] HousesController.GetHouses:exception exceptionType={Type} message={Message} stackTrace={StackTrace}", ex.GetType().Name, ex.Message, ex.StackTrace?.Substring(0, Math.Min(500, ex.StackTrace?.Length ?? 0)));
+                // #endregion
                 _logger.LogError(ex, "Error retrieving houses");
                 return StatusCode(500, new ApiResponse<PagedResponse<HouseDto>>
                 {
@@ -625,15 +637,19 @@ namespace AmesaBackend.Lottery.Controllers
         public async Task<ActionResult<ApiResponse<FavoriteHouseResponse>>> AddToFavorites(Guid id)
         {
             // #region agent log
-            _logger.LogInformation("[DEBUG] HousesController.AddToFavorites:entry houseId={HouseId} userId={UserId}", id, GetCurrentUserId());
+            var currentUserId = GetCurrentUserId();
+            _logger.LogInformation("[DEBUG] HousesController.AddToFavorites:entry houseId={HouseId} userId={UserId} hasUserId={HasUserId} lotteryServiceNull={Null}", id, currentUserId, currentUserId != null, _lotteryService == null);
             // #endregion
             try
             {
                 var userId = GetCurrentUserId();
+                // #region agent log
+                _logger.LogInformation("[DEBUG] HousesController.AddToFavorites:after-get-user-id houseId={HouseId} userId={UserId} isNull={IsNull}", id, userId, userId == null);
+                // #endregion
                 if (userId == null)
                 {
                     // #region agent log
-                    _logger.LogWarning("[DEBUG] HousesController.AddToFavorites:unauthorized houseId={HouseId}", id);
+                    _logger.LogWarning("[DEBUG] HousesController.AddToFavorites:unauthorized houseId={HouseId} userIdIsNull=true", id);
                     // #endregion
                     return Unauthorized(new ApiResponse<FavoriteHouseResponse>
                     {
@@ -643,17 +659,17 @@ namespace AmesaBackend.Lottery.Controllers
                 }
 
                 // #region agent log
-                _logger.LogInformation("[DEBUG] HousesController.AddToFavorites:before-service houseId={HouseId} userId={UserId}", id, userId.Value);
+                _logger.LogInformation("[DEBUG] HousesController.AddToFavorites:before-service-call houseId={HouseId} userId={UserId} lotteryServiceType={Type}", id, userId.Value, _lotteryService?.GetType().Name ?? "null");
                 // #endregion
                 var success = await _lotteryService.AddHouseToFavoritesAsync(userId.Value, id);
                 // #region agent log
-                _logger.LogInformation("[DEBUG] HousesController.AddToFavorites:after-service houseId={HouseId} userId={UserId} success={Success}", id, userId.Value, success);
+                _logger.LogInformation("[DEBUG] HousesController.AddToFavorites:after-service-call houseId={HouseId} userId={UserId} success={Success} successType={Type}", id, userId.Value, success, success.GetType().Name);
                 // #endregion
 
                 if (!success)
                 {
                     // #region agent log
-                    _logger.LogWarning("[DEBUG] HousesController.AddToFavorites:failed houseId={HouseId} userId={UserId}", id, userId.Value);
+                    _logger.LogWarning("[DEBUG] HousesController.AddToFavorites:service-returned-false houseId={HouseId} userId={UserId} - returning BadRequest", id, userId.Value);
                     // #endregion
                     return BadRequest(new ApiResponse<FavoriteHouseResponse>
                     {
@@ -662,6 +678,9 @@ namespace AmesaBackend.Lottery.Controllers
                     });
                 }
 
+                // #region agent log
+                _logger.LogInformation("[DEBUG] HousesController.AddToFavorites:success houseId={HouseId} userId={UserId} - returning Ok", id, userId.Value);
+                // #endregion
                 return Ok(new ApiResponse<FavoriteHouseResponse>
                 {
                     Success = true,
@@ -675,6 +694,9 @@ namespace AmesaBackend.Lottery.Controllers
             }
             catch (Exception ex)
             {
+                // #region agent log
+                _logger.LogError(ex, "[DEBUG] HousesController.AddToFavorites:exception houseId={HouseId} exceptionType={Type} message={Message} stackTrace={StackTrace}", id, ex.GetType().Name, ex.Message, ex.StackTrace?.Substring(0, Math.Min(1000, ex.StackTrace?.Length ?? 0)));
+                // #endregion
                 _logger.LogError(ex, "Error adding house {HouseId} to favorites", id);
                 return StatusCode(500, new ApiResponse<FavoriteHouseResponse>
                 {
