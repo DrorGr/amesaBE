@@ -1,8 +1,9 @@
 using System.Text.Json;
+using System.Data;
+using System.Data.Common;
 using AmesaBackend.Lottery.Data;
 using AmesaBackend.Shared.Configuration;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Data.SqlClient;
 
 namespace AmesaBackend.Lottery.Services
 {
@@ -31,7 +32,7 @@ namespace AmesaBackend.Lottery.Services
                 
                 // Use raw SQL query to access amesa_auth schema
                 var connection = _context.Database.GetDbConnection();
-                var wasOpen = connection.State == System.Data.ConnectionState.Open;
+                var wasOpen = connection.State == ConnectionState.Open;
                 if (!wasOpen)
                 {
                     await connection.OpenAsync();

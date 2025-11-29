@@ -4,7 +4,7 @@ using AmesaBackend.Lottery.DTOs;
 using AmesaBackend.Lottery.Models;
 using AmesaBackend.Shared.Events;
 using AmesaBackend.Auth.Services;
-using AmesaBackend.Shared.Configuration;
+using SharedConfigService = AmesaBackend.Shared.Configuration.IConfigurationService;
 
 namespace AmesaBackend.Lottery.Services
 {
@@ -14,14 +14,14 @@ namespace AmesaBackend.Lottery.Services
         private readonly IEventPublisher _eventPublisher;
         private readonly ILogger<LotteryService> _logger;
         private readonly IUserPreferencesService? _userPreferencesService;
-        private readonly IConfigurationService? _configurationService;
+        private readonly SharedConfigService? _configurationService;
 
         public LotteryService(
             LotteryDbContext context, 
             IEventPublisher eventPublisher, 
             ILogger<LotteryService> logger,
             IUserPreferencesService? userPreferencesService = null,
-            IConfigurationService? configurationService = null)
+            SharedConfigService? configurationService = null)
         {
             _context = context;
             _eventPublisher = eventPublisher;
@@ -33,7 +33,7 @@ namespace AmesaBackend.Lottery.Services
         /// <summary>
         /// Check if user verification is required and if user is verified
         /// </summary>
-        private async Task CheckVerificationRequirementAsync(Guid userId)
+        public async Task CheckVerificationRequirementAsync(Guid userId)
         {
             if (_configurationService == null)
             {
@@ -325,6 +325,19 @@ namespace AmesaBackend.Lottery.Services
                 : 0;
             var canExecute = participationPercentage >= house.MinimumParticipationPercentage;
 
+            // Get unique participants count
+            var uniqueParticipants = house.Tickets?
+                .Where(t => t.Status == "Active")
+                .Select(t => t.UserId)
+                .Distinct()
+                .Count() ?? 0;
+
+            var isCapReached = house.MaxParticipants.HasValue 
+                && uniqueParticipants >= house.MaxParticipants.Value;
+            var remainingSlots = house.MaxParticipants.HasValue
+                ? Math.Max(0, house.MaxParticipants.Value - uniqueParticipants)
+                : (int?)null;
+
             return new HouseDto
             {
                 Id = house.Id,
@@ -350,6 +363,10 @@ namespace AmesaBackend.Lottery.Services
                 TicketsSold = ticketsSold,
                 ParticipationPercentage = participationPercentage,
                 CanExecute = canExecute,
+                MaxParticipants = house.MaxParticipants,
+                UniqueParticipants = uniqueParticipants,
+                IsParticipantCapReached = isCapReached,
+                RemainingParticipantSlots = remainingSlots,
                 Images = house.Images?.Select(img => new HouseImageDto
                 {
                     Id = img.Id,
@@ -400,8 +417,6 @@ namespace AmesaBackend.Lottery.Services
                 CreatedAt = draw.CreatedAt
             };
         }
-    }
-}
 
         public async Task<bool> IsParticipantCapReachedAsync(Guid houseId)
         {
@@ -524,269 +539,6 @@ namespace AmesaBackend.Lottery.Services
                 _logger.LogError(ex, "Error getting participant stats for house {HouseId}", houseId);
                 throw;
             }
-        }
-
-        private HouseDto MapToHouseDto(House house)
-        {
-            var ticketsSold = house.Tickets?.Count(t => t.Status == "Active") ?? 0;
-            var participationPercentage = house.TotalTickets > 0 
-                ? (decimal)ticketsSold / house.TotalTickets * 100 
-                : 0;
-            var canExecute = participationPercentage >= house.MinimumParticipationPercentage;
-
-            // Get unique participants count
-            var uniqueParticipants = house.Tickets?
-                .Where(t => t.Status == "Active")
-                .Select(t => t.UserId)
-                .Distinct()
-                .Count() ?? 0;
-
-            var isCapReached = house.MaxParticipants.HasValue 
-                && uniqueParticipants >= house.MaxParticipants.Value;
-            var remainingSlots = house.MaxParticipants.HasValue
-                ? Math.Max(0, house.MaxParticipants.Value - uniqueParticipants)
-                : (int?)null;
-
-            return new HouseDto
-            {
-                Id = house.Id,
-                Title = house.Title,
-                Description = house.Description,
-                Price = house.Price,
-                Location = house.Location,
-                Address = house.Address,
-                Bedrooms = house.Bedrooms,
-                Bathrooms = house.Bathrooms,
-                SquareFeet = house.SquareFeet,
-                PropertyType = house.PropertyType,
-                YearBuilt = house.YearBuilt,
-                LotSize = house.LotSize,
-                Features = house.Features,
-                Status = house.Status,
-                TotalTickets = house.TotalTickets,
-                TicketPrice = house.TicketPrice,
-                LotteryStartDate = house.LotteryStartDate,
-                LotteryEndDate = house.LotteryEndDate,
-                DrawDate = house.DrawDate,
-                MinimumParticipationPercentage = house.MinimumParticipationPercentage,
-                TicketsSold = ticketsSold,
-                ParticipationPercentage = participationPercentage,
-                CanExecute = canExecute,
-                MaxParticipants = house.MaxParticipants,
-                UniqueParticipants = uniqueParticipants,
-                IsParticipantCapReached = isCapReached,
-                RemainingParticipantSlots = remainingSlots,
-                Images = house.Images?.Select(img => new HouseImageDto
-                {
-                    Id = img.Id,
-                    ImageUrl = img.ImageUrl,
-                    AltText = img.AltText,
-                    DisplayOrder = img.DisplayOrder,
-                    IsPrimary = img.IsPrimary,
-                    MediaType = img.MediaType,
-                    FileSize = img.FileSize,
-                    Width = img.Width,
-                    Height = img.Height
-                }).ToList() ?? new List<HouseImageDto>(),
-                CreatedAt = house.CreatedAt
-            };
-        }
-
-        private LotteryTicketDto MapToTicketDto(LotteryTicket ticket)
-        {
-            return new LotteryTicketDto
-            {
-                Id = ticket.Id,
-                TicketNumber = ticket.TicketNumber,
-                HouseId = ticket.HouseId,
-                HouseTitle = ticket.House?.Title ?? "",
-                PurchasePrice = ticket.PurchasePrice,
-                Status = ticket.Status,
-                PurchaseDate = ticket.PurchaseDate,
-                IsWinner = ticket.IsWinner,
-                CreatedAt = ticket.CreatedAt
-            };
-        }
-
-        private LotteryDrawDto MapToDrawDto(LotteryDraw draw)
-        {
-            return new LotteryDrawDto
-            {
-                Id = draw.Id,
-                HouseId = draw.HouseId,
-                HouseTitle = draw.House?.Title ?? "",
-                DrawDate = draw.DrawDate,
-                TotalTicketsSold = draw.TotalTicketsSold,
-                TotalParticipationPercentage = draw.TotalParticipationPercentage,
-                WinningTicketNumber = draw.WinningTicketNumber,
-                WinnerUserId = draw.WinnerUserId,
-                DrawStatus = draw.DrawStatus,
-                DrawMethod = draw.DrawMethod,
-                ConductedAt = draw.ConductedAt,
-                CreatedAt = draw.CreatedAt
-            };
-        }
-    }
-}
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error checking if user {UserId} can enter lottery for house {HouseId}", userId, houseId);
-                throw;
-            }
-        }
-
-        public async Task<LotteryParticipantStatsDto> GetParticipantStatsAsync(Guid houseId)
-        {
-            try
-            {
-                var house = await _context.Houses
-                    .Include(h => h.Tickets)
-                    .FirstOrDefaultAsync(h => h.Id == houseId);
-
-                if (house == null)
-                {
-                    throw new KeyNotFoundException("House not found");
-                }
-
-                var activeTickets = house.Tickets?.Where(t => t.Status == "Active").ToList() ?? new List<LotteryTicket>();
-                var uniqueParticipants = activeTickets
-                    .Select(t => t.UserId)
-                    .Distinct()
-                    .Count();
-                var totalTickets = activeTickets.Count;
-                var lastEntryDate = activeTickets
-                    .OrderByDescending(t => t.PurchaseDate)
-                    .FirstOrDefault()?.PurchaseDate;
-
-                var isCapReached = house.MaxParticipants.HasValue 
-                    && uniqueParticipants >= house.MaxParticipants.Value;
-                var remainingSlots = house.MaxParticipants.HasValue
-                    ? Math.Max(0, house.MaxParticipants.Value - uniqueParticipants)
-                    : (int?)null;
-
-                return new LotteryParticipantStatsDto
-                {
-                    HouseId = house.Id,
-                    HouseTitle = house.Title,
-                    UniqueParticipants = uniqueParticipants,
-                    TotalTickets = totalTickets,
-                    MaxParticipants = house.MaxParticipants,
-                    IsCapReached = isCapReached,
-                    RemainingSlots = remainingSlots,
-                    LastEntryDate = lastEntryDate
-                };
-            }
-            catch (KeyNotFoundException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error getting participant stats for house {HouseId}", houseId);
-                throw;
-            }
-        }
-
-        private HouseDto MapToHouseDto(House house)
-        {
-            var ticketsSold = house.Tickets?.Count(t => t.Status == "Active") ?? 0;
-            var participationPercentage = house.TotalTickets > 0 
-                ? (decimal)ticketsSold / house.TotalTickets * 100 
-                : 0;
-            var canExecute = participationPercentage >= house.MinimumParticipationPercentage;
-
-            // Get unique participants count
-            var uniqueParticipants = house.Tickets?
-                .Where(t => t.Status == "Active")
-                .Select(t => t.UserId)
-                .Distinct()
-                .Count() ?? 0;
-
-            var isCapReached = house.MaxParticipants.HasValue 
-                && uniqueParticipants >= house.MaxParticipants.Value;
-            var remainingSlots = house.MaxParticipants.HasValue
-                ? Math.Max(0, house.MaxParticipants.Value - uniqueParticipants)
-                : (int?)null;
-
-            return new HouseDto
-            {
-                Id = house.Id,
-                Title = house.Title,
-                Description = house.Description,
-                Price = house.Price,
-                Location = house.Location,
-                Address = house.Address,
-                Bedrooms = house.Bedrooms,
-                Bathrooms = house.Bathrooms,
-                SquareFeet = house.SquareFeet,
-                PropertyType = house.PropertyType,
-                YearBuilt = house.YearBuilt,
-                LotSize = house.LotSize,
-                Features = house.Features,
-                Status = house.Status,
-                TotalTickets = house.TotalTickets,
-                TicketPrice = house.TicketPrice,
-                LotteryStartDate = house.LotteryStartDate,
-                LotteryEndDate = house.LotteryEndDate,
-                DrawDate = house.DrawDate,
-                MinimumParticipationPercentage = house.MinimumParticipationPercentage,
-                TicketsSold = ticketsSold,
-                ParticipationPercentage = participationPercentage,
-                CanExecute = canExecute,
-                MaxParticipants = house.MaxParticipants,
-                UniqueParticipants = uniqueParticipants,
-                IsParticipantCapReached = isCapReached,
-                RemainingParticipantSlots = remainingSlots,
-                Images = house.Images?.Select(img => new HouseImageDto
-                {
-                    Id = img.Id,
-                    ImageUrl = img.ImageUrl,
-                    AltText = img.AltText,
-                    DisplayOrder = img.DisplayOrder,
-                    IsPrimary = img.IsPrimary,
-                    MediaType = img.MediaType,
-                    FileSize = img.FileSize,
-                    Width = img.Width,
-                    Height = img.Height
-                }).ToList() ?? new List<HouseImageDto>(),
-                CreatedAt = house.CreatedAt
-            };
-        }
-
-        private LotteryTicketDto MapToTicketDto(LotteryTicket ticket)
-        {
-            return new LotteryTicketDto
-            {
-                Id = ticket.Id,
-                TicketNumber = ticket.TicketNumber,
-                HouseId = ticket.HouseId,
-                HouseTitle = ticket.House?.Title ?? "",
-                PurchasePrice = ticket.PurchasePrice,
-                Status = ticket.Status,
-                PurchaseDate = ticket.PurchaseDate,
-                IsWinner = ticket.IsWinner,
-                CreatedAt = ticket.CreatedAt
-            };
-        }
-
-        private LotteryDrawDto MapToDrawDto(LotteryDraw draw)
-        {
-            return new LotteryDrawDto
-            {
-                Id = draw.Id,
-                HouseId = draw.HouseId,
-                HouseTitle = draw.House?.Title ?? "",
-                DrawDate = draw.DrawDate,
-                TotalTicketsSold = draw.TotalTicketsSold,
-                TotalParticipationPercentage = draw.TotalParticipationPercentage,
-                WinningTicketNumber = draw.WinningTicketNumber,
-                WinnerUserId = draw.WinnerUserId,
-                DrawStatus = draw.DrawStatus,
-                DrawMethod = draw.DrawMethod,
-                ConductedAt = draw.ConductedAt,
-                CreatedAt = draw.CreatedAt
-            };
         }
     }
 }
