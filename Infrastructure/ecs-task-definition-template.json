@@ -13,7 +13,7 @@
       "essential": true,
       "portMappings": [
         {
-          "containerPort": 80,
+          "containerPort": 8080,
           "protocol": "tcp"
         }
       ],
@@ -24,13 +24,21 @@
         },
         {
           "name": "ASPNETCORE_URLS",
-          "value": "http://+:80"
+          "value": "http://+:8080"
+        },
+        {
+          "name": "GOOGLE_APPLICATION_CREDENTIALS",
+          "value": "/tmp/google-service-account.json"
         }
       ],
       "secrets": [
         {
           "name": "ConnectionStrings__DefaultConnection",
           "valueFrom": "arn:aws:secretsmanager:eu-north-1:129394705401:secret:amesa/auth/db-connection"
+        },
+        {
+          "name": "GOOGLE_SERVICE_ACCOUNT_JSON",
+          "valueFrom": "arn:aws:secretsmanager:eu-north-1:129394705401:secret:amesa-google-recaptcha-service-account-4Xho7p"
         }
       ],
       "logConfiguration": {
@@ -44,7 +52,7 @@
       "healthCheck": {
         "command": [
           "CMD-SHELL",
-          "curl -f http://localhost:80/health || exit 1"
+          "curl -f http://localhost:8080/health || exit 1"
         ],
         "interval": 30,
         "timeout": 5,

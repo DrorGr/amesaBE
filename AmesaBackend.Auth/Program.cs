@@ -8,6 +8,8 @@ using System.Text;
 using AmesaBackend.Auth.Data;
 using AmesaBackend.Auth.Services;
 using AmesaBackend.Auth.Models;
+using AmesaBackend.Auth.Middleware;
+using AmesaBackend.Auth.BackgroundServices;
 using AmesaBackend.Shared.Extensions;
 using AmesaBackend.Shared.Middleware.Extensions;
 using AmesaBackend.Shared.Logging;
@@ -25,6 +27,64 @@ using System.Text.Json;
 using Microsoft.AspNetCore.HttpOverrides;
 
 var builder = WebApplication.CreateBuilder(args);
+var isProduction = builder.Environment.IsProduction();
+
+// Write Google service account JSON from environment variable to file (for ECS deployment)
+var googleCredentialsPath = Environment.GetEnvironmentVariable("GOOGLE_APPLICATION_CREDENTIALS");
+var googleServiceAccountJson = Environment.GetEnvironmentVariable("GOOGLE_SERVICE_ACCOUNT_JSON");
+if (!string.IsNullOrEmpty(googleCredentialsPath) && !string.IsNullOrEmpty(googleServiceAccountJson) && !File.Exists(googleCredentialsPath))
+{
+    try
+    {
+        // Validate JSON before writing
+        using (JsonDocument.Parse(googleServiceAccountJson))
+        {
+            // JSON is valid, continue
+        }
+
+        var directory = Path.GetDirectoryName(googleCredentialsPath);
+        if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+        
+        File.WriteAllText(googleCredentialsPath, googleServiceAccountJson);
+        
+        // Set restrictive file permissions on Linux/Unix
+        if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
+        {
+            try
+            {
+                File.SetUnixFileMode(googleCredentialsPath, 
+                    System.IO.UnixFileMode.UserRead | System.IO.UnixFileMode.UserWrite);
+            }
+            catch (PlatformNotSupportedException)
+            {
+                // Not on Unix, ignore
+            }
+        }
+        
+        Console.WriteLine($"Google service account credentials written to: {googleCredentialsPath}");
+    }
+    catch (JsonException ex)
+    {
+        var errorMsg = $"Invalid Google service account JSON: {ex.Message}";
+        Console.WriteLine($"ERROR: {errorMsg}");
+        if (isProduction)
+        {
+            throw new InvalidOperationException(errorMsg, ex);
+        }
+    }
+    catch (Exception ex)
+    {
+        var errorMsg = $"Failed to write Google service account credentials file: {ex.Message}";
+        Console.WriteLine($"ERROR: {errorMsg}");
+        if (isProduction)
+        {
+            throw new InvalidOperationException(errorMsg, ex);
+        }
+    }
+}
 
 // Configure Serilog
 Log.Logger = new LoggerConfiguration()
@@ -187,6 +247,39 @@ if (builder.Environment.IsProduction())
                 {
                     configValues["Authentication:Google:ClientSecret"] = clientSecret;
                     Log.Information("Loaded Google ClientSecret from AWS Secrets Manager secret {SecretId}", googleSecretId);
+                }
+            }
+
+            // Load reCAPTCHA Enterprise Site Key if present
+            if (secretJson.RootElement.TryGetProperty("RecaptchaSiteKey", out var recaptchaSiteKeyValue))
+            {
+                var recaptchaSiteKey = recaptchaSiteKeyValue.GetString();
+                if (!string.IsNullOrWhiteSpace(recaptchaSiteKey))
+                {
+                    configValues["Authentication:Google:RecaptchaSiteKey"] = recaptchaSiteKey;
+                    Log.Information("Loaded Google reCAPTCHA Enterprise Site Key from AWS Secrets Manager secret {SecretId}", googleSecretId);
+                }
+            }
+
+            // Load reCAPTCHA Enterprise Project ID if present
+            if (secretJson.RootElement.TryGetProperty("RecaptchaProjectId", out var recaptchaProjectIdValue))
+            {
+                var recaptchaProjectId = recaptchaProjectIdValue.GetString();
+                if (!string.IsNullOrWhiteSpace(recaptchaProjectId))
+                {
+                    configValues["Authentication:Google:RecaptchaProjectId"] = recaptchaProjectId;
+                    Log.Information("Loaded Google reCAPTCHA Enterprise Project ID from AWS Secrets Manager secret {SecretId}", googleSecretId);
+                }
+            }
+
+            // Load reCAPTCHA min score if present
+            if (secretJson.RootElement.TryGetProperty("RecaptchaMinScore", out var recaptchaScoreValue))
+            {
+                var recaptchaScore = recaptchaScoreValue.GetString();
+                if (!string.IsNullOrWhiteSpace(recaptchaScore))
+                {
+                    configValues["Authentication:Google:RecaptchaMinScore"] = recaptchaScore;
+                    Log.Information("Loaded Google reCAPTCHA Min Score from AWS Secrets Manager secret {SecretId}", googleSecretId);
                 }
             }
 
@@ -613,20 +706,36 @@ builder.Services.AddSingleton<IAmazonRekognition>(sp =>
 });
 
 // Add Application Services
+// Security services
+builder.Services.AddScoped<IRateLimitService, RateLimitService>();
+builder.Services.AddScoped<IAccountLockoutService, AccountLockoutService>();
+builder.Services.AddScoped<IPasswordValidatorService, PasswordValidatorService>();
+builder.Services.AddScoped<ICaptchaService, CaptchaService>();
+builder.Services.AddScoped<IAuditLogService, AuditLogService>();
+
+// Auth services
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IAdminAuthService, AdminAuthService>();
-builder.Services.AddScoped<IUserPreferencesService, UserPreferencesService>();
+// TODO: UserPreferencesService implementation missing
+// builder.Services.AddScoped<IUserPreferencesService, UserPreferencesService>();
 builder.Services.AddScoped<IConfigurationService, ConfigurationService>();
 builder.Services.AddScoped<IAwsRekognitionService, AwsRekognitionService>();
 builder.Services.AddScoped<IIdentityVerificationService, IdentityVerificationService>();
 builder.Services.AddHttpContextAccessor();
+
+// Note: reCAPTCHA Enterprise uses Google Cloud API client, not HttpClient
+// Google Cloud credentials should be configured via GOOGLE_APPLICATION_CREDENTIALS environment variable
+// or Application Default Credentials (ADC) in AWS
 
 // Add Memory Cache
 builder.Services.AddMemoryCache();
 
 // Add Health Checks
 builder.Services.AddHealthChecks();
+
+// Add Background Services
+builder.Services.AddHostedService<SessionCleanupService>();
 
 // Add Response Compression
 builder.Services.AddResponseCompression(options =>
@@ -707,6 +816,11 @@ if (builder.Configuration.GetValue<bool>("XRay:Enabled", false))
 app.UseAmesaMiddleware();
 app.UseAmesaLogging();
 
+// Add custom security middleware (early in pipeline)
+app.UseMiddleware<IpTrackingMiddleware>();
+app.UseMiddleware<EmailVerificationMiddleware>();
+app.UseMiddleware<SecurityAuditMiddleware>();
+
 // Add response compression
 app.UseResponseCompression();
 
@@ -719,6 +833,21 @@ app.UseAuthorization();
 
 // Add health checks endpoint
 app.MapHealthChecks("/health");
+
+// Add CAPTCHA metrics endpoint (for monitoring)
+app.MapGet("/health/captcha", () =>
+{
+    var metrics = AmesaBackend.Auth.Services.CaptchaService.GetMetrics();
+    return Results.Json(new
+    {
+        totalAttempts = metrics.Total,
+        successCount = metrics.Success,
+        failureCount = metrics.Failures,
+        successRate = metrics.SuccessRate,
+        failureRate = metrics.Total > 0 ? 100 - metrics.SuccessRate : 0,
+        status = metrics.SuccessRate >= 80 || metrics.Total < 10 ? "healthy" : "degraded"
+    });
+});
 
 // Map controllers
 app.MapControllers();
