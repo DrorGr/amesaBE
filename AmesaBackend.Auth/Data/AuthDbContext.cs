@@ -16,6 +16,8 @@ namespace AmesaBackend.Auth.Data
         public DbSet<UserIdentityDocument> UserIdentityDocuments { get; set; }
         public DbSet<UserSession> UserSessions { get; set; }
         public DbSet<UserActivityLog> UserActivityLogs { get; set; }
+        public DbSet<UserPasswordHistory> UserPasswordHistory { get; set; }
+        public DbSet<UserAuditLog> UserAuditLogs { get; set; }
         
         // User preferences tables
         public DbSet<UserPreferences> UserPreferences { get; set; }
@@ -94,6 +96,24 @@ namespace AmesaBackend.Auth.Data
                 entity.Property(e => e.Action).IsRequired().HasMaxLength(100);
                 entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId);
                 entity.HasOne(e => e.Session).WithMany().HasForeignKey(e => e.SessionId);
+            });
+
+            // Configure UserPasswordHistory entity
+            modelBuilder.Entity<UserPasswordHistory>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.PasswordHash).IsRequired().HasMaxLength(255);
+                entity.HasIndex(e => new { e.UserId, e.CreatedAt });
+            });
+
+            // Configure UserAuditLog entity
+            modelBuilder.Entity<UserAuditLog>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.EventType).IsRequired().HasMaxLength(50);
+                entity.HasIndex(e => new { e.UserId, e.CreatedAt });
+                entity.HasIndex(e => new { e.EventType, e.CreatedAt });
+                entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId);
             });
 
             // Configure UserPreferences entity

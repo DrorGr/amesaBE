@@ -73,6 +73,12 @@ namespace AmesaBackend.Auth.Models
 
         public DateTime? PasswordResetExpiresAt { get; set; }
 
+        public DateTime? LockedUntil { get; set; }
+
+        public int FailedLoginAttempts { get; set; } = 0;
+
+        public DateTime? LastFailedLoginAttempt { get; set; }
+
         public bool TwoFactorEnabled { get; set; } = false;
 
         [MaxLength(255)]

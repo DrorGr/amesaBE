@@ -12,6 +12,7 @@ namespace AmesaBackend.Auth.Services
         Task ForgotPasswordAsync(ForgotPasswordRequest request);
         Task ResetPasswordAsync(ResetPasswordRequest request);
         Task VerifyEmailAsync(VerifyEmailRequest request);
+        Task ResendVerificationEmailAsync(ResendVerificationRequest request);
         Task VerifyPhoneAsync(VerifyPhoneRequest request);
         Task<bool> ValidateTokenAsync(string token);
         Task<UserDto> GetCurrentUserAsync(Guid userId);
@@ -24,6 +25,9 @@ namespace AmesaBackend.Auth.Services
             DateTime? dateOfBirth = null,
             string? gender = null,
             string? profileImageUrl = null);
+        Task<List<UserSessionDto>> GetActiveSessionsAsync(Guid userId);
+        Task LogoutFromDeviceAsync(Guid userId, string sessionToken);
+        Task LogoutAllDevicesAsync(Guid userId);
     }
 }
 

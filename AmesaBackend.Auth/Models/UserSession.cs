@@ -43,6 +43,17 @@ namespace AmesaBackend.Auth.Models
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+        [MaxLength(255)]
+        public string? PreviousSessionToken { get; set; }
+
+        public bool IsRotated { get; set; } = false;
+
+        [MaxLength(255)]
+        public string? DeviceId { get; set; }
+
+        [MaxLength(255)]
+        public string? DeviceName { get; set; }
+
         // Navigation properties
         public virtual User? User { get; set; }
         public virtual ICollection<UserActivityLog> ActivityLogs { get; set; } = new List<UserActivityLog>();

@@ -7,7 +7,6 @@ using AmesaBackend.Shared.Events;
 using BCrypt.Net;
 using System.Security.Claims;
 using System.Security.Cryptography;
-using Amazon.EventBridge;
 
 namespace AmesaBackend.Auth.Services
 {
@@ -17,23 +16,29 @@ namespace AmesaBackend.Auth.Services
         private readonly IConfiguration _configuration;
         private readonly IEventPublisher _eventPublisher;
         private readonly IJwtTokenManager _jwtTokenManager;
+        private readonly IAccountLockoutService _accountLockoutService;
+        private readonly IPasswordValidatorService _passwordValidator;
+        private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly ILogger<AuthService> _logger;
-        private readonly IUserPreferencesService? _userPreferencesService;
 
         public AuthService(
             AuthDbContext context,
             IConfiguration configuration,
             IEventPublisher eventPublisher,
             IJwtTokenManager jwtTokenManager,
-            ILogger<AuthService> logger,
-            IUserPreferencesService? userPreferencesService = null)
+            IAccountLockoutService accountLockoutService,
+            IPasswordValidatorService passwordValidator,
+            IHttpContextAccessor httpContextAccessor,
+            ILogger<AuthService> logger)
         {
             _context = context;
             _configuration = configuration;
             _eventPublisher = eventPublisher;
             _jwtTokenManager = jwtTokenManager;
+            _accountLockoutService = accountLockoutService;
+            _passwordValidator = passwordValidator;
+            _httpContextAccessor = httpContextAccessor;
             _logger = logger;
-            _userPreferencesService = userPreferencesService;
         }
 
         public async Task<AuthResponse> RegisterAsync(RegisterRequest request)
@@ -49,6 +54,13 @@ namespace AmesaBackend.Auth.Services
                 if (await _context.Users.AnyAsync(u => u.Username == request.Username))
                 {
                     throw new InvalidOperationException("Username is already taken");
+                }
+
+                // Validate password
+                var passwordValidation = await _passwordValidator.ValidatePasswordAsync(request.Password);
+                if (!passwordValidation.IsValid)
+                {
+                    throw new InvalidOperationException($"Password validation failed: {string.Join(", ", passwordValidation.Errors)}");
                 }
 
                 // Create new user
@@ -70,8 +82,31 @@ namespace AmesaBackend.Auth.Services
                     UpdatedAt = DateTime.UtcNow
                 };
 
-                _context.Users.Add(user);
-                await _context.SaveChangesAsync();
+                // Use transaction to ensure atomicity
+                using var transaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    _context.Users.Add(user);
+                    await _context.SaveChangesAsync();
+
+                    // Save password to history
+                    var passwordHistory = new UserPasswordHistory
+                    {
+                        Id = Guid.NewGuid(),
+                        UserId = user.Id,
+                        PasswordHash = user.PasswordHash,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    _context.Set<UserPasswordHistory>().Add(passwordHistory);
+                    await _context.SaveChangesAsync();
+
+                    await transaction.CommitAsync();
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
 
                 // Publish events
                 await _eventPublisher.PublishAsync(new UserCreatedEvent
@@ -90,7 +125,19 @@ namespace AmesaBackend.Auth.Services
                     VerificationToken = user.EmailVerificationToken
                 });
 
-                // Generate tokens
+                // Only generate tokens if email is verified (OAuth users)
+                // Regular email users must verify before getting tokens
+                if (!user.EmailVerified)
+                {
+                    _logger.LogInformation("User registered successfully, email verification required: {Email}", user.Email);
+                    return new AuthResponse
+                    {
+                        RequiresEmailVerification = true,
+                        User = MapToUserDto(user)
+                    };
+                }
+
+                // Generate tokens for verified users (OAuth)
                 var tokens = await GenerateTokensAsync(user);
 
                 _logger.LogInformation("User registered successfully: {Email}", user.Email);
@@ -122,11 +169,28 @@ namespace AmesaBackend.Auth.Services
                     throw new UnauthorizedAccessException("USER_NOT_FOUND: User does not exist. Please sign up first.");
                 }
 
+                // Check lockout BEFORE password verification
+                if (await _accountLockoutService.IsLockedAsync(request.Email))
+                {
+                    var lockedUntil = await _accountLockoutService.GetLockedUntilAsync(request.Email);
+                    throw new UnauthorizedAccessException($"Account is locked until {lockedUntil:yyyy-MM-dd HH:mm:ss} UTC");
+                }
+
+                // Check email verification
+                if (!user.EmailVerified)
+                {
+                    throw new UnauthorizedAccessException("Please verify your email before logging in. Check your inbox for the verification link.");
+                }
+
                 // Verify password
                 if (!BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
                 {
+                    await _accountLockoutService.RecordFailedAttemptAsync(request.Email);
                     throw new UnauthorizedAccessException("Invalid email or password");
                 }
+
+                // On success: clear failed attempts
+                await _accountLockoutService.ClearFailedAttemptsAsync(request.Email);
 
                 if (user.Status == UserStatus.Suspended || user.Status == UserStatus.Banned)
                 {
@@ -150,15 +214,12 @@ namespace AmesaBackend.Auth.Services
 
                 _logger.LogInformation("User logged in successfully: {Email}", user.Email);
 
-                var userDto = MapToUserDto(user);
-                userDto.LotteryData = await GetUserLotteryDataAsync(user.Id);
-
                 return new AuthResponse
                 {
                     AccessToken = tokens.AccessToken,
                     RefreshToken = tokens.RefreshToken,
                     ExpiresAt = tokens.ExpiresAt,
-                    User = userDto
+                    User = MapToUserDto(user)
                 };
             }
             catch (Exception ex)
@@ -186,8 +247,57 @@ namespace AmesaBackend.Auth.Services
                     throw new UnauthorizedAccessException("Account is suspended or banned");
                 }
 
+                // Check if token was already rotated (potential theft)
+                // If IsRotated is true, this token was already used to create a new token
+                // Using it again indicates token theft or replay attack
+                if (session.IsRotated)
+                {
+                    _logger.LogWarning("Potential token reuse detected for user {UserId} - token was already rotated", session.UserId);
+                    // Invalidate all sessions for security
+                    await InvalidateAllSessionsAsync(session.UserId!.Value);
+                    throw new UnauthorizedAccessException("Security violation detected. Please log in again.");
+                }
+
+                // Invalidate old token (token rotation)
+                session.IsActive = false;
+                session.IsRotated = true;
+
                 // Generate new tokens
                 var tokens = await GenerateTokensAsync(session.User);
+
+                // Create new session with rotated token - capture fresh IP/device from current request
+                var httpContext = _httpContextAccessor.HttpContext;
+                var ipAddress = httpContext?.Items["ClientIp"]?.ToString() 
+                    ?? httpContext?.Connection.RemoteIpAddress?.ToString() 
+                    ?? httpContext?.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0].Trim()
+                    ?? session.IpAddress ?? "unknown";
+                var userAgent = httpContext?.Request.Headers["User-Agent"].ToString() ?? session.UserAgent ?? "unknown";
+                var deviceId = httpContext?.Items["DeviceId"]?.ToString() ?? GenerateDeviceId(userAgent, ipAddress);
+                var deviceName = ExtractDeviceName(userAgent);
+
+                var refreshExpiresAt = DateTime.UtcNow.AddDays(int.Parse(_configuration["JwtSettings:RefreshTokenExpiryInDays"] ?? "7"));
+                var newSession = new UserSession
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = session.UserId,
+                    SessionToken = tokens.RefreshToken,
+                    PreviousSessionToken = session.SessionToken, // Track rotation chain
+                    ExpiresAt = refreshExpiresAt,
+                    IsActive = true,
+                    IpAddress = ipAddress,
+                    UserAgent = userAgent,
+                    DeviceId = deviceId,
+                    DeviceName = deviceName,
+                    CreatedAt = DateTime.UtcNow,
+                    LastActivity = DateTime.UtcNow
+                };
+
+                _context.UserSessions.Add(newSession);
+
+                // Limit to 5 active sessions - remove oldest if exceeded
+                await EnforceSessionLimitAsync(session.UserId!.Value);
+
+                await _context.SaveChangesAsync();
 
                 _logger.LogInformation("Token refreshed successfully for user: {Email}", session.User.Email);
 
@@ -271,10 +381,47 @@ namespace AmesaBackend.Auth.Services
                     throw new InvalidOperationException("Invalid or expired reset token");
                 }
 
-                user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
-                user.PasswordResetToken = null;
-                user.PasswordResetExpiresAt = null;
-                await _context.SaveChangesAsync();
+                // Validate new password
+                var passwordValidation = await _passwordValidator.ValidatePasswordAsync(request.NewPassword, user.Id);
+                if (!passwordValidation.IsValid)
+                {
+                    throw new InvalidOperationException($"Password validation failed: {string.Join(", ", passwordValidation.Errors)}");
+                }
+
+                // Check password history
+                if (await _passwordValidator.IsPasswordInHistoryAsync(request.NewPassword, user.Id))
+                {
+                    throw new InvalidOperationException("Password was recently used. Please choose a different password");
+                }
+
+                // Use transaction to ensure atomicity
+                using var transaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    var oldPasswordHash = user.PasswordHash;
+                    user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+                    user.PasswordResetToken = null;
+                    user.PasswordResetExpiresAt = null;
+                    await _context.SaveChangesAsync();
+
+                    // Save to password history
+                    var passwordHistory = new UserPasswordHistory
+                    {
+                        Id = Guid.NewGuid(),
+                        UserId = user.Id,
+                        PasswordHash = user.PasswordHash,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    _context.Set<UserPasswordHistory>().Add(passwordHistory);
+                    await _context.SaveChangesAsync();
+
+                    await transaction.CommitAsync();
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
 
                 _logger.LogInformation("Password reset successfully for user: {Email}", user.Email);
             }
@@ -303,6 +450,22 @@ namespace AmesaBackend.Auth.Services
                 user.Status = UserStatus.Active;
                 await _context.SaveChangesAsync();
 
+                // Invalidate email verification cache
+                try
+                {
+                    var distributedCache = _httpContextAccessor.HttpContext?.RequestServices.GetService<Microsoft.Extensions.Caching.Distributed.IDistributedCache>();
+                    if (distributedCache != null)
+                    {
+                        var cacheKey = $"email_verified:{user.Id}";
+                        await distributedCache.RemoveAsync(cacheKey);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to invalidate email verification cache for user {UserId}", user.Id);
+                    // Don't fail the request if cache invalidation fails
+                }
+
                 await _eventPublisher.PublishAsync(new UserEmailVerifiedEvent
                 {
                     UserId = user.Id,
@@ -323,6 +486,54 @@ namespace AmesaBackend.Auth.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error during email verification");
+                throw;
+            }
+        }
+
+        public async Task ResendVerificationEmailAsync(ResendVerificationRequest request)
+        {
+            try
+            {
+                var user = await _context.Users
+                    .FirstOrDefaultAsync(u => u.Email == request.Email);
+
+                if (user == null)
+                {
+                    // Don't reveal if user exists - security best practice
+                    _logger.LogWarning("Resend verification requested for non-existent email: {Email}", request.Email);
+                    return;
+                }
+
+                if (user.EmailVerified)
+                {
+                    _logger.LogInformation("Resend verification requested for already verified email: {Email}", request.Email);
+                    return;
+                }
+
+                // Regenerate token if expired (>24 hours) or missing
+                var shouldRegenerate = string.IsNullOrEmpty(user.EmailVerificationToken) ||
+                    (user.CreatedAt < DateTime.UtcNow.AddHours(-24));
+
+                if (shouldRegenerate)
+                {
+                    user.EmailVerificationToken = GenerateSecureToken();
+                    user.UpdatedAt = DateTime.UtcNow;
+                    await _context.SaveChangesAsync();
+                }
+
+                // Publish verification email event
+                await _eventPublisher.PublishAsync(new EmailVerificationRequestedEvent
+                {
+                    UserId = user.Id,
+                    Email = user.Email,
+                    VerificationToken = user.EmailVerificationToken
+                });
+
+                _logger.LogInformation("Verification email resent for user: {Email}", user.Email);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error resending verification email");
                 throw;
             }
         }
@@ -376,18 +587,18 @@ namespace AmesaBackend.Auth.Services
             }
         }
 
-        public Task<bool> ValidateTokenAsync(string token)
+        public async Task<bool> ValidateTokenAsync(string token)
         {
             try
             {
                 // TODO: Implement GetClaimsFromExpiredToken method in IJwtTokenManager
                 // var claims = _jwtTokenManager.GetClaimsFromExpiredToken(token);
                 // return claims != null && claims.Any();
-                return Task.FromResult(false); // Temporary fix - always return false for expired tokens
+                return false; // Temporary fix - always return false for expired tokens
             }
             catch
             {
-                return Task.FromResult(false);
+                return false;
             }
         }
 
@@ -399,111 +610,11 @@ namespace AmesaBackend.Auth.Services
                 throw new InvalidOperationException("User not found");
             }
 
-            var userDto = MapToUserDto(user);
-            userDto.LotteryData = await GetUserLotteryDataAsync(userId);
-            return userDto;
+            return MapToUserDto(user);
         }
 
-        private async Task<UserLotteryDataDto?> GetUserLotteryDataAsync(Guid userId)
+        public async Task<(AuthResponse Response, bool IsNewUser)> CreateOrUpdateOAuthUserAsync(string email, string providerId, AuthProvider provider, string? firstName = null, string? lastName = null, DateTime? dateOfBirth = null, string? gender = null, string? profileImageUrl = null)
         {
-            try
-            {
-                // Query the user_lottery_dashboard view
-                // Use column aliases to match PascalCase property names in UserLotteryDashboardResult
-                var sql = @"
-                    SELECT 
-                        favorite_houses_count AS ""FavoriteHousesCount"",
-                        active_entries_count AS ""ActiveEntriesCount"",
-                        total_entries_count AS ""TotalEntriesCount"",
-                        total_wins AS ""TotalWins"",
-                        total_spending AS ""TotalSpending"",
-                        total_winnings AS ""TotalWinnings"",
-                        win_rate_percentage AS ""WinRatePercentage"",
-                        average_spending_per_entry AS ""AverageSpendingPerEntry"",
-                        favorite_house_id AS ""FavoriteHouseId"",
-                        most_active_month AS ""MostActiveMonth"",
-                        last_entry_date AS ""LastEntryDate""
-                    FROM amesa_auth.user_lottery_dashboard
-                    WHERE user_id = {0}";
-
-                var result = await _context.Database
-                    .SqlQueryRaw<UserLotteryDashboardResult>(sql, userId)
-                    .FirstOrDefaultAsync();
-
-                // Get favorite house IDs array
-                var favoriteHouseIds = new List<Guid>();
-                if (_userPreferencesService != null)
-                {
-                    try
-                    {
-                        favoriteHouseIds = await _userPreferencesService.GetFavoriteHouseIdsAsync(userId);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Error retrieving favorite house IDs for user {UserId}", userId);
-                    }
-                }
-
-                if (result == null)
-                {
-                    // Return defaults with empty arrays
-                    return new UserLotteryDataDto
-                    {
-                        FavoriteHouseIds = favoriteHouseIds,
-                        ActiveEntries = new List<object>()
-                    };
-                }
-
-                return new UserLotteryDataDto
-                {
-                    FavoriteHouseIds = favoriteHouseIds,
-                    ActiveEntries = new List<object>(), // TODO: Populate with actual LotteryTicketDto objects from lottery service
-                    TotalEntriesCount = result.TotalEntriesCount,
-                    TotalWins = result.TotalWins,
-                    TotalSpending = result.TotalSpending,
-                    TotalWinnings = result.TotalWinnings,
-                    WinRatePercentage = result.WinRatePercentage,
-                    AverageSpendingPerEntry = result.AverageSpendingPerEntry,
-                    FavoriteHouseId = result.FavoriteHouseId,
-                    MostActiveMonth = result.MostActiveMonth,
-                    LastEntryDate = result.LastEntryDate
-                };
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Error retrieving lottery data for user {UserId}", userId);
-                return null; // Return null if view doesn't exist or query fails
-            }
-        }
-
-        private class UserLotteryDashboardResult
-        {
-            public int FavoriteHousesCount { get; set; }
-            public int ActiveEntriesCount { get; set; }
-            public int TotalEntriesCount { get; set; }
-            public int TotalWins { get; set; }
-            public decimal TotalSpending { get; set; }
-            public decimal TotalWinnings { get; set; }
-            public decimal WinRatePercentage { get; set; }
-            public decimal AverageSpendingPerEntry { get; set; }
-            public Guid? FavoriteHouseId { get; set; }
-            public string? MostActiveMonth { get; set; }
-            public DateTime? LastEntryDate { get; set; }
-        }
-
-        public async Task<(AuthResponse Response, bool IsNewUser)> CreateOrUpdateOAuthUserAsync(
-            string email, 
-            string providerId, 
-            AuthProvider provider, 
-            string? firstName = null, 
-            string? lastName = null,
-            DateTime? dateOfBirth = null,
-            string? gender = null,
-            string? profileImageUrl = null)
-        {
-            // #region agent log
-            _logger.LogInformation("[DEBUG] CreateOrUpdateOAuthUserAsync:entry hypothesisId=E email={Email} provider={Provider}", email, provider);
-            // #endregion
             try
             {
                 var existingUser = await _context.Users
@@ -532,7 +643,6 @@ namespace AmesaBackend.Auth.Services
                         _logger.LogInformation("OAuth login for existing {Provider} user {Email}", provider, email);
                     }
 
-                    // Only update empty/null fields, don't overwrite existing data
                     if (!string.IsNullOrWhiteSpace(firstName) && string.IsNullOrWhiteSpace(user.FirstName))
                     {
                         user.FirstName = firstName;
@@ -543,11 +653,11 @@ namespace AmesaBackend.Auth.Services
                     }
                     if (dateOfBirth.HasValue && !user.DateOfBirth.HasValue)
                     {
-                        user.DateOfBirth = dateOfBirth.Value;
+                        user.DateOfBirth = dateOfBirth;
                     }
                     if (!string.IsNullOrWhiteSpace(gender) && !user.Gender.HasValue)
                     {
-                        if (Enum.TryParse<GenderType>(gender, true, out var genderEnum))
+                        if (Enum.TryParse<GenderType>(gender, out var genderEnum))
                         {
                             user.Gender = genderEnum;
                         }
@@ -560,38 +670,17 @@ namespace AmesaBackend.Auth.Services
                     user.LastLoginAt = DateTime.UtcNow;
                     user.UpdatedAt = DateTime.UtcNow;
 
-                    // Publish update event (non-fatal - don't fail OAuth if EventBridge fails)
-                    try
+                    // Publish update event
+                    await _eventPublisher.PublishAsync(new UserUpdatedEvent
                     {
-                        await _eventPublisher.PublishAsync(new UserUpdatedEvent
-                        {
-                            UserId = user.Id,
-                            Email = user.Email,
-                            FirstName = user.FirstName,
-                            LastName = user.LastName
-                        });
-                    }
-                    catch (Exception ex)
-                    {
-                        // #region agent log
-                        var exType = ex.GetType().FullName;
-                        var isEventBridge = ex is Amazon.EventBridge.AmazonEventBridgeException;
-                        var innerIsEventBridge = ex.InnerException is Amazon.EventBridge.AmazonEventBridgeException;
-                        _logger.LogError(ex, "[DEBUG] EventBridge catch:entry exType={ExType} isEventBridge={IsEventBridge} innerIsEventBridge={InnerIsEventBridge} hypothesisId=D", exType, isEventBridge, innerIsEventBridge);
-                        // #endregion
-                        _logger.LogError(ex, "Failed to publish UserUpdatedEvent to EventBridge (non-fatal, continuing OAuth flow)");
-                        // Don't re-throw - EventBridge errors should not break OAuth authentication
-                    }
+                        UserId = user.Id,
+                        Email = user.Email,
+                        FirstName = user.FirstName,
+                        LastName = user.LastName
+                    });
                 }
                 else
                 {
-                    // Parse gender if provided
-                    GenderType? genderEnum = null;
-                    if (!string.IsNullOrWhiteSpace(gender) && Enum.TryParse<GenderType>(gender, true, out var parsedGender))
-                    {
-                        genderEnum = parsedGender;
-                    }
-
                     user = new User
                     {
                         Username = email.Split('@')[0] + "_" + provider.ToString().ToLower(),
@@ -600,7 +689,7 @@ namespace AmesaBackend.Auth.Services
                         FirstName = firstName ?? string.Empty,
                         LastName = lastName ?? string.Empty,
                         DateOfBirth = dateOfBirth,
-                        Gender = genderEnum,
+                        Gender = !string.IsNullOrWhiteSpace(gender) && Enum.TryParse<GenderType>(gender, out var genderEnum) ? genderEnum : null,
                         ProfileImageUrl = profileImageUrl,
                         AuthProvider = provider,
                         ProviderId = providerId,
@@ -627,105 +716,34 @@ namespace AmesaBackend.Auth.Services
 
                 await _context.SaveChangesAsync();
 
-                // Publish user created event if new user (non-fatal - don't fail OAuth if EventBridge fails)
+                // Publish user created event if new user
                 if (isNewUser)
                 {
-                    try
+                    await _eventPublisher.PublishAsync(new UserCreatedEvent
                     {
-                        await _eventPublisher.PublishAsync(new UserCreatedEvent
-                        {
-                            UserId = user.Id,
-                            Email = user.Email,
-                            Username = user.Username,
-                            FirstName = user.FirstName,
-                            LastName = user.LastName
-                        });
-                    }
-                    catch (Exception ex)
-                    {
-                        // #region agent log
-                        var exType = ex.GetType().FullName;
-                        var isEventBridge = ex is Amazon.EventBridge.AmazonEventBridgeException;
-                        var innerIsEventBridge = ex.InnerException is Amazon.EventBridge.AmazonEventBridgeException;
-                        _logger.LogError(ex, "[DEBUG] EventBridge catch:entry exType={ExType} isEventBridge={IsEventBridge} innerIsEventBridge={InnerIsEventBridge} hypothesisId=D", exType, isEventBridge, innerIsEventBridge);
-                        // #endregion
-                        _logger.LogError(ex, "Failed to publish UserCreatedEvent to EventBridge (non-fatal, continuing OAuth flow)");
-                        // Don't re-throw - EventBridge errors should not break OAuth authentication
-                    }
+                        UserId = user.Id,
+                        Email = user.Email,
+                        Username = user.Username,
+                        FirstName = user.FirstName,
+                        LastName = user.LastName
+                    });
                 }
-
-                // #region agent log
-                _logger.LogInformation("[DEBUG] CreateOrUpdateOAuthUserAsync:before-GenerateTokensAsync hypothesisId=E");
-                // #endregion
 
                 // Generate tokens
                 var tokens = await GenerateTokensAsync(user);
 
-                // #region agent log
-                _logger.LogInformation("[DEBUG] CreateOrUpdateOAuthUserAsync:after-GenerateTokensAsync hypothesisId=E hasTokens={HasTokens}", tokens.AccessToken != null);
-                // #endregion
-
                 var response = new AuthResponse
                 {
-                    AccessToken = tokens.AccessToken!,
-                    RefreshToken = tokens.RefreshToken!,
+                    AccessToken = tokens.AccessToken,
+                    RefreshToken = tokens.RefreshToken,
                     ExpiresAt = tokens.ExpiresAt,
                     User = MapToUserDto(user)
                 };
-                
-                // #region agent log
-                _logger.LogInformation("[DEBUG] CreateOrUpdateOAuthUserAsync:success hypothesisId=E returning response");
-                // #endregion
                 
                 return (response, isNewUser);
             }
             catch (Exception ex)
             {
-                // #region agent log
-                var exType = ex.GetType().FullName;
-                var exMessage = ex.Message;
-                var isEventBridge = ex is Amazon.EventBridge.AmazonEventBridgeException;
-                var innerIsEventBridge = ex.InnerException is Amazon.EventBridge.AmazonEventBridgeException;
-                _logger.LogError(ex, "[DEBUG] CreateOrUpdateOAuthUserAsync:catch exType={ExType} exMessage={ExMessage} isEventBridge={IsEventBridge} innerIsEventBridge={InnerIsEventBridge} hypothesisId=E", exType, exMessage, isEventBridge, innerIsEventBridge);
-                // #endregion
-
-                // Check if this is an EventBridge exception (or has EventBridge as inner exception)
-                // EventBridge errors should not fail OAuth authentication
-                var isEventBridgeException = ex is Amazon.EventBridge.AmazonEventBridgeException ||
-                                           ex.InnerException is Amazon.EventBridge.AmazonEventBridgeException;
-                
-                if (isEventBridgeException)
-                {
-                    _logger.LogWarning(ex, "[DEBUG] CreateOrUpdateOAuthUserAsync:EventBridge-detected attempting recovery hypothesisId=E");
-                    _logger.LogWarning(ex, "EventBridge error in CreateOrUpdateOAuthUserAsync for {Provider}: {Email} (non-fatal, attempting recovery)", provider, email);
-                    // Don't rethrow EventBridge exceptions - they're non-fatal
-                    // Try to recover by getting the user and generating tokens
-                    // This should not happen if inner try-catch is working, but adding as safety net
-                    try
-                    {
-                        var existingUser = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
-                        if (existingUser != null)
-                        {
-                            var tokens = await GenerateTokensAsync(existingUser);
-                            var response = new AuthResponse
-                            {
-                                AccessToken = tokens.AccessToken,
-                                RefreshToken = tokens.RefreshToken,
-                                ExpiresAt = tokens.ExpiresAt,
-                                User = MapToUserDto(existingUser)
-                            };
-                            _logger.LogInformation("Successfully recovered from EventBridge error for {Provider}: {Email}", provider, email);
-                            return (response, false);
-                        }
-                    }
-                    catch (Exception recoveryEx)
-                    {
-                        _logger.LogError(recoveryEx, "Failed to recover from EventBridge error for {Provider}: {Email}", provider, email);
-                    }
-                    // If recovery fails, rethrow the original exception
-                    throw;
-                }
-                
                 _logger.LogError(ex, "Error creating/updating OAuth user for {Provider}: {Email}", provider, email);
                 throw;
             }
@@ -749,6 +767,16 @@ namespace AmesaBackend.Auth.Services
             var refreshToken = GenerateSecureToken();
             var refreshExpiresAt = DateTime.UtcNow.AddDays(int.Parse(_configuration["JwtSettings:RefreshTokenExpiryInDays"] ?? "7"));
 
+            // Extract IP and device info - use middleware values if available
+            var httpContext = _httpContextAccessor.HttpContext;
+            var ipAddress = httpContext?.Items["ClientIp"]?.ToString() 
+                ?? httpContext?.Connection.RemoteIpAddress?.ToString() 
+                ?? httpContext?.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0].Trim()
+                ?? "unknown";
+            var userAgent = httpContext?.Request.Headers["User-Agent"].ToString() ?? "unknown";
+            var deviceId = httpContext?.Items["DeviceId"]?.ToString() ?? GenerateDeviceId(userAgent, ipAddress);
+            var deviceName = ExtractDeviceName(userAgent);
+
             // Save session
             var session = new UserSession
             {
@@ -756,13 +784,130 @@ namespace AmesaBackend.Auth.Services
                 SessionToken = refreshToken,
                 ExpiresAt = refreshExpiresAt,
                 IsActive = true,
-                CreatedAt = DateTime.UtcNow
+                IpAddress = ipAddress,
+                UserAgent = userAgent,
+                DeviceId = deviceId,
+                DeviceName = deviceName,
+                CreatedAt = DateTime.UtcNow,
+                LastActivity = DateTime.UtcNow
             };
 
             _context.UserSessions.Add(session);
+
+            // Limit to 5 active sessions
+            await EnforceSessionLimitAsync(user.Id);
+
             await _context.SaveChangesAsync();
 
             return (accessToken, refreshToken, expiresAt);
+        }
+
+        private async Task EnforceSessionLimitAsync(Guid userId)
+        {
+            // Use transaction to prevent race conditions when multiple requests create sessions simultaneously
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var activeSessions = await _context.UserSessions
+                    .Where(s => s.UserId == userId && s.IsActive && s.ExpiresAt > DateTime.UtcNow)
+                    .OrderBy(s => s.CreatedAt)
+                    .ToListAsync();
+
+                if (activeSessions.Count >= 5)
+                {
+                    // Remove oldest sessions (keep 4 most recent)
+                    var sessionsToRemove = activeSessions.Take(activeSessions.Count - 4).ToList();
+                    foreach (var session in sessionsToRemove)
+                    {
+                        session.IsActive = false;
+                    }
+                    await _context.SaveChangesAsync();
+                }
+                await transaction.CommitAsync();
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        }
+
+        private async Task InvalidateAllSessionsAsync(Guid userId)
+        {
+            var sessions = await _context.UserSessions
+                .Where(s => s.UserId == userId && s.IsActive)
+                .ToListAsync();
+
+            foreach (var session in sessions)
+            {
+                session.IsActive = false;
+            }
+
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task<List<UserSessionDto>> GetActiveSessionsAsync(Guid userId)
+        {
+            var sessions = await _context.UserSessions
+                .Where(s => s.UserId == userId && s.IsActive && s.ExpiresAt > DateTime.UtcNow)
+                .OrderByDescending(s => s.LastActivity)
+                .ToListAsync();
+
+            return sessions.Select(s => new UserSessionDto
+            {
+                Id = s.Id,
+                DeviceName = s.DeviceName ?? "Unknown Device",
+                IpAddress = s.IpAddress ?? "Unknown",
+                LastActivity = s.LastActivity,
+                CreatedAt = s.CreatedAt,
+                ExpiresAt = s.ExpiresAt
+            }).ToList();
+        }
+
+        public async Task LogoutFromDeviceAsync(Guid userId, string sessionToken)
+        {
+            var session = await _context.UserSessions
+                .FirstOrDefaultAsync(s => s.UserId == userId && s.SessionToken == sessionToken);
+
+            if (session != null)
+            {
+                session.IsActive = false;
+                await _context.SaveChangesAsync();
+            }
+        }
+
+        public async Task LogoutAllDevicesAsync(Guid userId)
+        {
+            await InvalidateAllSessionsAsync(userId);
+        }
+
+        private string GenerateDeviceId(string userAgent, string ipAddress)
+        {
+            // Hash user agent + IP prefix for device fingerprinting
+            var ipPrefix = ipAddress.Split('.').Take(3).Aggregate((a, b) => $"{a}.{b}");
+            var input = $"{userAgent}|{ipPrefix}";
+            using var sha256 = System.Security.Cryptography.SHA256.Create();
+            var hash = sha256.ComputeHash(System.Text.Encoding.UTF8.GetBytes(input));
+            return Convert.ToBase64String(hash).Substring(0, 16);
+        }
+
+        private string ExtractDeviceName(string userAgent)
+        {
+            if (string.IsNullOrEmpty(userAgent)) return "Unknown Device";
+
+            // Simple device name extraction
+            if (userAgent.Contains("Windows", StringComparison.OrdinalIgnoreCase))
+                return "Windows Device";
+            if (userAgent.Contains("Mac", StringComparison.OrdinalIgnoreCase))
+                return "Mac Device";
+            if (userAgent.Contains("Linux", StringComparison.OrdinalIgnoreCase))
+                return "Linux Device";
+            if (userAgent.Contains("Android", StringComparison.OrdinalIgnoreCase))
+                return "Android Device";
+            if (userAgent.Contains("iPhone", StringComparison.OrdinalIgnoreCase) || userAgent.Contains("iPad", StringComparison.OrdinalIgnoreCase))
+                return "iOS Device";
+
+            return "Unknown Device";
         }
 
         private string GenerateSecureToken()

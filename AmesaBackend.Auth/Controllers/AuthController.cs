@@ -12,11 +12,19 @@ namespace AmesaBackend.Auth.Controllers
     public class AuthController : ControllerBase
     {
         private readonly IAuthService _authService;
+        private readonly ICaptchaService _captchaService;
+        private readonly IRateLimitService _rateLimitService;
         private readonly ILogger<AuthController> _logger;
 
-        public AuthController(IAuthService authService, ILogger<AuthController> logger)
+        public AuthController(
+            IAuthService authService,
+            ICaptchaService captchaService,
+            IRateLimitService rateLimitService,
+            ILogger<AuthController> logger)
         {
             _authService = authService;
+            _captchaService = captchaService;
+            _rateLimitService = rateLimitService;
             _logger = logger;
         }
 
@@ -25,6 +33,44 @@ namespace AmesaBackend.Auth.Controllers
         {
             try
             {
+                // Rate limiting - use IP from middleware if available
+                var clientIp = HttpContext.Items["ClientIp"]?.ToString() 
+                    ?? HttpContext.Connection.RemoteIpAddress?.ToString() 
+                    ?? "unknown";
+                var rateLimitKey = $"registration:{clientIp}";
+                
+                // Increment atomically first, then check to prevent race conditions
+                await _rateLimitService.IncrementRateLimitAsync(rateLimitKey, TimeSpan.FromHours(1));
+                var currentCount = await _rateLimitService.GetCurrentCountAsync(rateLimitKey);
+                
+                if (currentCount > 5)
+                {
+                    return BadRequest(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Error = new ErrorResponse
+                        {
+                            Code = "RATE_LIMIT_EXCEEDED",
+                            Message = "Too many registration attempts. Please try again later."
+                        }
+                    });
+                }
+
+                // CAPTCHA verification
+                if (string.IsNullOrWhiteSpace(request.CaptchaToken) || 
+                    !await _captchaService.VerifyCaptchaAsync(request.CaptchaToken, "register"))
+                {
+                    return BadRequest(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Error = new ErrorResponse
+                        {
+                            Code = "CAPTCHA_FAILED",
+                            Message = "CAPTCHA verification failed"
+                        }
+                    });
+                }
+
                 var result = await _authService.RegisterAsync(request);
                 return Ok(new ApiResponse<AuthResponse>
                 {
@@ -65,6 +111,24 @@ namespace AmesaBackend.Auth.Controllers
         {
             try
             {
+                // Rate limiting by email - increment first (atomic), then check
+                var rateLimitKey = $"login:{request.Email}";
+                await _rateLimitService.IncrementRateLimitAsync(rateLimitKey, TimeSpan.FromMinutes(15));
+                var currentCount = await _rateLimitService.GetCurrentCountAsync(rateLimitKey);
+                
+                if (currentCount > 5)
+                {
+                    return Unauthorized(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Error = new ErrorResponse
+                        {
+                            Code = "RATE_LIMIT_EXCEEDED",
+                            Message = "Too many login attempts. Please try again later."
+                        }
+                    });
+                }
+
                 var result = await _authService.LoginAsync(request);
                 return Ok(new ApiResponse<AuthResponse>
                 {
@@ -275,6 +339,49 @@ namespace AmesaBackend.Auth.Controllers
             }
         }
 
+        [HttpPost("resend-verification")]
+        public async Task<ActionResult<ApiResponse<object>>> ResendVerificationEmail([FromBody] ResendVerificationRequest request)
+        {
+            try
+            {
+                // Rate limiting for resend verification - increment first (atomic), then check
+                var rateLimitKey = $"resend-verification:{request.Email}";
+                await _rateLimitService.IncrementRateLimitAsync(rateLimitKey, TimeSpan.FromHours(1));
+                var currentCount = await _rateLimitService.GetCurrentCountAsync(rateLimitKey);
+                
+                if (currentCount > 3)
+                {
+                    return BadRequest(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Error = new ErrorResponse
+                        {
+                            Code = "RATE_LIMIT_EXCEEDED",
+                            Message = "Too many verification email requests. Please try again later."
+                        }
+                    });
+                }
+                await _authService.ResendVerificationEmailAsync(request);
+                
+                // Always return success to prevent email enumeration
+                return Ok(new ApiResponse<object>
+                {
+                    Success = true,
+                    Message = "If the email exists and is not verified, a verification email has been sent."
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error resending verification email");
+                // Return success even on error to prevent email enumeration
+                return Ok(new ApiResponse<object>
+                {
+                    Success = true,
+                    Message = "If the email exists and is not verified, a verification email has been sent."
+                });
+            }
+        }
+
         [HttpPost("verify-phone")]
         [Authorize]
         public async Task<ActionResult<ApiResponse<object>>> VerifyPhone([FromBody] VerifyPhoneRequest request)
@@ -407,6 +514,94 @@ namespace AmesaBackend.Auth.Controllers
                     {
                         Code = "INTERNAL_ERROR",
                         Message = "An error occurred while updating profile"
+                    }
+                });
+            }
+        }
+
+        [HttpGet("sessions")]
+        [Authorize]
+        public async Task<ActionResult<ApiResponse<List<UserSessionDto>>>> GetActiveSessions()
+        {
+            try
+            {
+                var userId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "");
+                var sessions = await _authService.GetActiveSessionsAsync(userId);
+                return Ok(new ApiResponse<List<UserSessionDto>>
+                {
+                    Success = true,
+                    Data = sessions,
+                    Message = "Active sessions retrieved successfully"
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving active sessions");
+                return StatusCode(500, new ApiResponse<object>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "INTERNAL_ERROR",
+                        Message = "An error occurred while retrieving sessions"
+                    }
+                });
+            }
+        }
+
+        [HttpPost("sessions/{sessionToken}/logout")]
+        [Authorize]
+        public async Task<ActionResult<ApiResponse<object>>> LogoutFromDevice(string sessionToken)
+        {
+            try
+            {
+                var userId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "");
+                await _authService.LogoutFromDeviceAsync(userId, sessionToken);
+                return Ok(new ApiResponse<object>
+                {
+                    Success = true,
+                    Message = "Logged out from device successfully"
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error logging out from device");
+                return StatusCode(500, new ApiResponse<object>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "INTERNAL_ERROR",
+                        Message = "An error occurred while logging out"
+                    }
+                });
+            }
+        }
+
+        [HttpPost("sessions/logout-all")]
+        [Authorize]
+        public async Task<ActionResult<ApiResponse<object>>> LogoutAllDevices()
+        {
+            try
+            {
+                var userId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "");
+                await _authService.LogoutAllDevicesAsync(userId);
+                return Ok(new ApiResponse<object>
+                {
+                    Success = true,
+                    Message = "Logged out from all devices successfully"
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error logging out from all devices");
+                return StatusCode(500, new ApiResponse<object>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "INTERNAL_ERROR",
+                        Message = "An error occurred while logging out"
                     }
                 });
             }

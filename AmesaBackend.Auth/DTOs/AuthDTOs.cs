@@ -33,6 +33,8 @@ namespace AmesaBackend.Auth.DTOs
         public string? Phone { get; set; }
 
         public string AuthProvider { get; set; } = "email";
+
+        public string? CaptchaToken { get; set; }
     }
 
     public class LoginRequest
@@ -48,6 +50,7 @@ namespace AmesaBackend.Auth.DTOs
     public class AuthResponse
     {
         public string AccessToken { get; set; } = string.Empty;
+        public bool RequiresEmailVerification { get; set; } = false;
         public string RefreshToken { get; set; } = string.Empty;
         public DateTime ExpiresAt { get; set; }
         public UserDto User { get; set; } = null!;
@@ -80,6 +83,13 @@ namespace AmesaBackend.Auth.DTOs
     {
         [Required]
         public string Token { get; set; } = string.Empty;
+    }
+
+    public class ResendVerificationRequest
+    {
+        [Required]
+        [EmailAddress]
+        public string Email { get; set; } = string.Empty;
     }
 
     public class VerifyPhoneRequest
