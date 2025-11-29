@@ -52,11 +52,11 @@ jobs:
 
       - name: Restore dependencies
         run: dotnet restore
-        working-directory: AmesaBackend.Tests
+        working-directory: .
 
       - name: Build
-        run: dotnet build --no-restore
-        working-directory: AmesaBackend.Tests
+        run: dotnet build --no-restore AmesaBackend.Tests/AmesaBackend.Tests.csproj
+        working-directory: .
 
       - name: Run unit tests with coverage
         run: |
