@@ -31,7 +31,9 @@ jobs:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
       - name: Restore dependencies
-        run: dotnet restore AmesaBackend.Tests/AmesaBackend.Tests.csproj
+        run: |
+          dotnet restore AmesaBackend.Auth/AmesaBackend.Auth.csproj
+          dotnet restore AmesaBackend.Tests/AmesaBackend.Tests.csproj
         working-directory: .
 
       - name: Build
@@ -68,7 +70,9 @@ jobs:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
       - name: Restore dependencies
-        run: dotnet restore AmesaBackend.Tests/AmesaBackend.Tests.csproj
+        run: |
+          dotnet restore AmesaBackend.Auth/AmesaBackend.Auth.csproj
+          dotnet restore AmesaBackend.Tests/AmesaBackend.Tests.csproj
         working-directory: .
 
       - name: Build
