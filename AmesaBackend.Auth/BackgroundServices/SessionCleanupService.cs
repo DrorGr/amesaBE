@@ -6,6 +6,9 @@ using AmesaBackend.Auth.Data;
 
 namespace AmesaBackend.Auth.BackgroundServices
 {
+    /// <summary>
+    /// Background service that periodically cleans up expired user sessions and archives old sessions.
+    /// </summary>
     public class SessionCleanupService : BackgroundService
     {
         private readonly IServiceProvider _serviceProvider;
@@ -13,6 +16,11 @@ namespace AmesaBackend.Auth.BackgroundServices
         private readonly TimeSpan _cleanupInterval = TimeSpan.FromHours(1);
         private readonly TimeSpan _archiveThreshold = TimeSpan.FromDays(30);
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="SessionCleanupService"/> class.
+        /// </summary>
+        /// <param name="serviceProvider">The service provider for creating scoped services.</param>
+        /// <param name="logger">The logger instance.</param>
         public SessionCleanupService(
             IServiceProvider serviceProvider,
             ILogger<SessionCleanupService> logger)
@@ -21,6 +29,10 @@ namespace AmesaBackend.Auth.BackgroundServices
             _logger = logger;
         }
 
+        /// <summary>
+        /// Executes the background service, periodically cleaning up expired sessions.
+        /// </summary>
+        /// <param name="stoppingToken">The cancellation token to stop the service.</param>
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             while (!stoppingToken.IsCancellationRequested)

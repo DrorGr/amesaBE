@@ -7,6 +7,9 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace AmesaBackend.Auth.Controllers
 {
+    /// <summary>
+    /// Controller for handling authentication operations including registration, login, and token management.
+    /// </summary>
     [ApiController]
     [Route("api/v1/[controller]")]
     public class AuthController : ControllerBase
@@ -16,6 +19,13 @@ namespace AmesaBackend.Auth.Controllers
         private readonly IRateLimitService _rateLimitService;
         private readonly ILogger<AuthController> _logger;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="AuthController"/> class.
+        /// </summary>
+        /// <param name="authService">The authentication service.</param>
+        /// <param name="captchaService">The CAPTCHA verification service.</param>
+        /// <param name="rateLimitService">The rate limiting service.</param>
+        /// <param name="logger">The logger instance.</param>
         public AuthController(
             IAuthService authService,
             ICaptchaService captchaService,
@@ -28,6 +38,11 @@ namespace AmesaBackend.Auth.Controllers
             _logger = logger;
         }
 
+        /// <summary>
+        /// Registers a new user account with email verification and CAPTCHA protection.
+        /// </summary>
+        /// <param name="request">The registration request containing user details and CAPTCHA token.</param>
+        /// <returns>An authentication response with user details if successful, or an error response.</returns>
         [HttpPost("register")]
         public async Task<ActionResult<ApiResponse<AuthResponse>>> Register([FromBody] RegisterRequest request)
         {
@@ -106,6 +121,11 @@ namespace AmesaBackend.Auth.Controllers
             }
         }
 
+        /// <summary>
+        /// Authenticates a user and returns access and refresh tokens.
+        /// </summary>
+        /// <param name="request">The login request containing email and password.</param>
+        /// <returns>An authentication response with tokens if successful, or an error response.</returns>
         [HttpPost("login")]
         public async Task<ActionResult<ApiResponse<AuthResponse>>> Login([FromBody] LoginRequest request)
         {
@@ -166,6 +186,11 @@ namespace AmesaBackend.Auth.Controllers
             }
         }
 
+        /// <summary>
+        /// Refreshes an access token using a valid refresh token.
+        /// </summary>
+        /// <param name="request">The refresh token request containing the refresh token.</param>
+        /// <returns>An authentication response with new tokens if successful, or an error response.</returns>
         [HttpPost("refresh")]
         public async Task<ActionResult<ApiResponse<AuthResponse>>> RefreshToken([FromBody] RefreshTokenRequest request)
         {

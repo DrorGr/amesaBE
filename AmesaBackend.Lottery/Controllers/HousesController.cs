@@ -8,7 +8,6 @@ using AmesaBackend.Lottery.Services;
 using AmesaBackend.Shared.Events;
 using AmesaBackend.Shared.Caching;
 using System.Security.Claims;
-using System.Text.RegularExpressions;
 
 namespace AmesaBackend.Lottery.Controllers
 {
@@ -22,7 +21,6 @@ namespace AmesaBackend.Lottery.Controllers
         private readonly ILotteryService _lotteryService;
         private readonly ICache? _cache;
         private static readonly TimeSpan HousesCacheExpiration = TimeSpan.FromMinutes(30);
-        private static readonly TimeSpan HouseCacheExpiration = TimeSpan.FromMinutes(15);
 
         public HousesController(
             LotteryDbContext context, 
@@ -47,25 +45,23 @@ namespace AmesaBackend.Lottery.Controllers
         /// <summary>
         /// Invalidates all house list caches when a house is created, updated, or deleted
         /// </summary>
-        private async Task InvalidateHouseCachesAsync(Guid? houseId = null)
+        private async Task InvalidateHouseCachesAsync()
         {
             if (_cache != null)
             {
                 try
                 {
-                    // Delete all cache keys matching the pattern "houses_*" (house lists)
-                    var listResult = await _cache.DeleteByRegex("houses_*");
-                    if (listResult)
+                    // Delete all cache keys matching the pattern "houses_*"
+                    // Note: Redis pattern matching - the actual key format includes instance prefix
+                    // but DeleteByRegex should handle the pattern correctly
+                    var result = await _cache.DeleteByRegex("houses_*");
+                    if (result)
                     {
                         _logger.LogDebug("Invalidated all house list caches");
                     }
-                    
-                    // If specific house ID provided, also invalidate individual house cache
-                    if (houseId.HasValue)
+                    else
                     {
-                        var houseKey = $"house_{houseId.Value}";
-                        await _cache.RemoveRecordAsync(houseKey);
-                        _logger.LogDebug("Invalidated individual house cache for id: {HouseId}", houseId.Value);
+                        _logger.LogDebug("No house list caches found to invalidate");
                     }
                 }
                 catch (Exception ex)
@@ -90,13 +86,8 @@ namespace AmesaBackend.Lottery.Controllers
         {
             try
             {
-                // Generate cache key from query parameters (sanitize special characters)
-                // Sanitize location to prevent cache key issues with special characters
-                var sanitizedLocation = string.IsNullOrEmpty(location) 
-                    ? "null" 
-                    : System.Text.RegularExpressions.Regex.Replace(location, @"[^a-zA-Z0-9_-]", "_");
-                
-                var cacheKey = $"houses_{page}_{limit}_{status ?? "null"}_{minPrice?.ToString() ?? "null"}_{maxPrice?.ToString() ?? "null"}_{sanitizedLocation}_{bedrooms?.ToString() ?? "null"}_{bathrooms?.ToString() ?? "null"}";
+                // Generate cache key from query parameters (sanitize null values)
+                var cacheKey = $"houses_{page}_{limit}_{status ?? "null"}_{minPrice?.ToString() ?? "null"}_{maxPrice?.ToString() ?? "null"}_{(location ?? "null").Replace(" ", "_")}_{bedrooms?.ToString() ?? "null"}_{bathrooms?.ToString() ?? "null"}";
                 
                 // Try to get from cache first (with error handling)
                 if (_cache != null)
@@ -278,32 +269,6 @@ namespace AmesaBackend.Lottery.Controllers
         {
             try
             {
-                var cacheKey = $"house_{id}";
-                
-                // Try to get from cache first (with error handling)
-                if (_cache != null)
-                {
-                    try
-                    {
-                        var cachedResponse = await _cache.GetRecordAsync<HouseDto>(cacheKey);
-                        if (cachedResponse != null)
-                        {
-                            _logger.LogDebug("House retrieved from cache for id: {HouseId}", id);
-                            return Ok(new ApiResponse<HouseDto>
-                            {
-                                Success = true,
-                                Data = cachedResponse,
-                                Message = "House retrieved successfully (cached)"
-                            });
-                        }
-                    }
-                    catch (Exception cacheEx)
-                    {
-                        // Log cache error but continue with database query
-                        _logger.LogWarning(cacheEx, "Error retrieving house from cache, falling back to database query");
-                    }
-                }
-                
                 var house = await _context.Houses
                     .Include(h => h.Images)
                     .AsNoTracking()
@@ -363,20 +328,6 @@ namespace AmesaBackend.Lottery.Controllers
                     }).ToList(),
                     CreatedAt = house.CreatedAt
                 };
-
-                // Cache the response (with error handling)
-                if (_cache != null)
-                {
-                    try
-                    {
-                        await _cache.SetRecordAsync(cacheKey, houseDto, HouseCacheExpiration);
-                    }
-                    catch (Exception cacheEx)
-                    {
-                        // Log cache error but don't fail the request
-                        _logger.LogWarning(cacheEx, "Error caching house for id: {HouseId}", id);
-                    }
-                }
 
                 return Ok(new ApiResponse<HouseDto>
                 {
@@ -443,7 +394,7 @@ namespace AmesaBackend.Lottery.Controllers
                     CreatedByUserId = house.CreatedBy ?? Guid.Empty
                 });
 
-                // Invalidate house list caches (new house doesn't have individual cache yet)
+                // Invalidate house list caches
                 await InvalidateHouseCachesAsync();
 
                 var houseDto = new HouseDto
@@ -647,8 +598,8 @@ namespace AmesaBackend.Lottery.Controllers
                     CreatedAt = house.CreatedAt
                 };
 
-                // Invalidate house list caches and individual house cache
-                await InvalidateHouseCachesAsync(house.Id);
+                // Invalidate house list caches
+                await InvalidateHouseCachesAsync();
 
                 return Ok(new ApiResponse<HouseDto>
                 {
@@ -692,8 +643,8 @@ namespace AmesaBackend.Lottery.Controllers
                 house.DeletedAt = DateTime.UtcNow;
                 await _context.SaveChangesAsync();
 
-                // Invalidate house list caches and individual house cache
-                await InvalidateHouseCachesAsync(id);
+                // Invalidate house list caches
+                await InvalidateHouseCachesAsync();
 
                 return Ok(new ApiResponse<object>
                 {
@@ -789,9 +740,9 @@ namespace AmesaBackend.Lottery.Controllers
                 }
 
                 // #region agent log
-                _logger.LogInformation("[DEBUG] HousesController.AddToFavorites:before-service-call houseId={HouseId} userId={UserId} lotteryServiceType={Type}", id, userId ?? Guid.Empty, _lotteryService?.GetType().Name ?? "null");
+                _logger.LogInformation("[DEBUG] HousesController.AddToFavorites:before-service-call houseId={HouseId} userId={UserId} lotteryServiceType={Type}", id, userId.Value, _lotteryService?.GetType().Name ?? "null");
                 // #endregion
-                var success = await _lotteryService.AddHouseToFavoritesAsync(userId!.Value, id);
+                var success = await _lotteryService.AddHouseToFavoritesAsync(userId.Value, id);
                 // #region agent log
                 _logger.LogInformation("[DEBUG] HousesController.AddToFavorites:after-service-call houseId={HouseId} userId={UserId} success={Success} successType={Type}", id, userId.Value, success, success.GetType().Name);
                 // #endregion

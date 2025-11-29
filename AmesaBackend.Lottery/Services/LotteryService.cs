@@ -4,8 +4,7 @@ using AmesaBackend.Lottery.DTOs;
 using AmesaBackend.Lottery.Models;
 using AmesaBackend.Shared.Events;
 using AmesaBackend.Auth.Services;
-using ConfigService = AmesaBackend.Shared.Configuration.IConfigurationService;
-using System.Data.Common;
+using AmesaBackend.Shared.Configuration;
 
 namespace AmesaBackend.Lottery.Services
 {
@@ -15,14 +14,14 @@ namespace AmesaBackend.Lottery.Services
         private readonly IEventPublisher _eventPublisher;
         private readonly ILogger<LotteryService> _logger;
         private readonly IUserPreferencesService? _userPreferencesService;
-        private readonly ConfigService? _configurationService;
+        private readonly IConfigurationService? _configurationService;
 
         public LotteryService(
             LotteryDbContext context, 
             IEventPublisher eventPublisher, 
             ILogger<LotteryService> logger,
             IUserPreferencesService? userPreferencesService = null,
-            ConfigService? configurationService = null)
+            IConfigurationService? configurationService = null)
         {
             _context = context;
             _eventPublisher = eventPublisher;
@@ -34,7 +33,7 @@ namespace AmesaBackend.Lottery.Services
         /// <summary>
         /// Check if user verification is required and if user is verified
         /// </summary>
-        public async Task CheckVerificationRequirementAsync(Guid userId)
+        private async Task CheckVerificationRequirementAsync(Guid userId)
         {
             if (_configurationService == null)
             {
@@ -47,41 +46,16 @@ namespace AmesaBackend.Lottery.Services
                 return; // Verification not required
             }
 
-            // Check user verification status from amesa_auth.users table using raw SQL
-            var connection = _context.Database.GetDbConnection();
-            var wasOpen = connection.State == System.Data.ConnectionState.Open;
-            if (!wasOpen)
+            // Check user verification status from amesa_auth.users table
+            var sql = "SELECT verification_status FROM amesa_auth.users WHERE id = {0} AND deleted_at IS NULL LIMIT 1";
+            var verificationStatuses = await _context.Database
+                .SqlQueryRaw<string>(sql, userId)
+                .ToListAsync();
+
+            var verificationStatus = verificationStatuses.FirstOrDefault();
+            if (verificationStatus != "IdentityVerified")
             {
-                await connection.OpenAsync();
-            }
-            
-            try
-            {
-                using var command = connection.CreateCommand();
-                var param = command.CreateParameter();
-                param.ParameterName = "@userId";
-                param.Value = userId;
-                command.Parameters.Add(param);
-                command.CommandText = @"
-                    SELECT verification_status 
-                    FROM amesa_auth.users 
-                    WHERE id = @userId AND deleted_at IS NULL 
-                    LIMIT 1";
-                
-                var result = await command.ExecuteScalarAsync();
-                var verificationStatus = result?.ToString();
-                
-                if (verificationStatus != "IdentityVerified")
-                {
-                    throw new UnauthorizedAccessException("ID_VERIFICATION_REQUIRED: Identity verification required to purchase lottery tickets");
-                }
-            }
-            finally
-            {
-                if (!wasOpen)
-                {
-                    await connection.CloseAsync();
-                }
+                throw new UnauthorizedAccessException("ID_VERIFICATION_REQUIRED: Identity verification required to purchase lottery tickets");
             }
         }
 
@@ -208,60 +182,20 @@ namespace AmesaBackend.Lottery.Services
 
         public async Task<bool> AddHouseToFavoritesAsync(Guid userId, Guid houseId)
         {
-            // #region agent log
-            _logger.LogInformation("[DEBUG] LotteryService.AddHouseToFavoritesAsync:entry houseId={HouseId} userId={UserId} userPreferencesServiceNull={Null} contextNull={ContextNull}", houseId, userId, _userPreferencesService == null, _context == null);
-            // #endregion
-            try
+            if (_userPreferencesService == null)
             {
-                if (_userPreferencesService == null)
-                {
-                    // #region agent log
-                    _logger.LogWarning("[DEBUG] LotteryService.AddHouseToFavoritesAsync:null-service houseId={HouseId} userId={UserId} - returning false", houseId, userId);
-                    // #endregion
-                    _logger.LogWarning("UserPreferencesService not available");
-                    return false;
-                }
-
-                // Verify house exists
-                // #region agent log
-                _logger.LogInformation("[DEBUG] LotteryService.AddHouseToFavoritesAsync:before-house-query houseId={HouseId} userId={UserId} contextHousesNull={Null}", houseId, userId, _context?.Houses == null);
-                // #endregion
-                var house = await _context.Houses.FindAsync(houseId);
-                // #region agent log
-                _logger.LogInformation("[DEBUG] LotteryService.AddHouseToFavoritesAsync:after-house-query houseId={HouseId} userId={UserId} houseIsNull={IsNull} houseId={HouseIdValue} deletedAt={DeletedAt} status={Status}", houseId, userId, house == null, house?.Id ?? Guid.Empty, house?.DeletedAt ?? null, house?.Status ?? null);
-                // #endregion
-                if (house == null)
-                {
-                    // #region agent log
-                    _logger.LogWarning("[DEBUG] LotteryService.AddHouseToFavoritesAsync:house-is-null houseId={HouseId} userId={UserId} - returning false", houseId, userId);
-                    // #endregion
-                    return false;
-                }
-                if (house.DeletedAt != null)
-                {
-                    // #region agent log
-                    _logger.LogWarning("[DEBUG] LotteryService.AddHouseToFavoritesAsync:house-is-deleted houseId={HouseId} userId={UserId} deletedAt={DeletedAt} - returning false", houseId, userId, house.DeletedAt);
-                    // #endregion
-                    return false;
-                }
-
-                // #region agent log
-                _logger.LogInformation("[DEBUG] LotteryService.AddHouseToFavoritesAsync:before-userprefs-call houseId={HouseId} userId={UserId} userPreferencesServiceType={Type}", houseId, userId, _userPreferencesService.GetType().Name);
-                // #endregion
-                var result = await _userPreferencesService.AddHouseToFavoritesAsync(userId, houseId);
-                // #region agent log
-                _logger.LogInformation("[DEBUG] LotteryService.AddHouseToFavoritesAsync:after-userprefs-call houseId={HouseId} userId={UserId} result={Result} resultType={Type}", houseId, userId, result, result.GetType().Name);
-                // #endregion
-                return result;
-            }
-            catch (Exception ex)
-            {
-                // #region agent log
-                _logger.LogError(ex, "[DEBUG] LotteryService.AddHouseToFavoritesAsync:exception houseId={HouseId} userId={UserId} exceptionType={Type} message={Message} innerException={Inner}", houseId, userId, ex.GetType().Name, ex.Message, ex.InnerException?.Message);
-                // #endregion
-                _logger.LogError(ex, "Error in AddHouseToFavoritesAsync for house {HouseId} and user {UserId}", houseId, userId);
+                _logger.LogWarning("UserPreferencesService not available");
                 return false;
             }
+
+            // Verify house exists
+            var house = await _context.Houses.FindAsync(houseId);
+            if (house == null || house.DeletedAt != null)
+            {
+                return false;
+            }
+
+            return await _userPreferencesService.AddHouseToFavoritesAsync(userId, houseId);
         }
 
         public async Task<bool> RemoveHouseFromFavoritesAsync(Guid userId, Guid houseId)
@@ -383,6 +317,92 @@ namespace AmesaBackend.Lottery.Services
             };
         }
 
+        private HouseDto MapToHouseDto(House house)
+        {
+            var ticketsSold = house.Tickets?.Count(t => t.Status == "Active") ?? 0;
+            var participationPercentage = house.TotalTickets > 0 
+                ? (decimal)ticketsSold / house.TotalTickets * 100 
+                : 0;
+            var canExecute = participationPercentage >= house.MinimumParticipationPercentage;
+
+            return new HouseDto
+            {
+                Id = house.Id,
+                Title = house.Title,
+                Description = house.Description,
+                Price = house.Price,
+                Location = house.Location,
+                Address = house.Address,
+                Bedrooms = house.Bedrooms,
+                Bathrooms = house.Bathrooms,
+                SquareFeet = house.SquareFeet,
+                PropertyType = house.PropertyType,
+                YearBuilt = house.YearBuilt,
+                LotSize = house.LotSize,
+                Features = house.Features,
+                Status = house.Status,
+                TotalTickets = house.TotalTickets,
+                TicketPrice = house.TicketPrice,
+                LotteryStartDate = house.LotteryStartDate,
+                LotteryEndDate = house.LotteryEndDate,
+                DrawDate = house.DrawDate,
+                MinimumParticipationPercentage = house.MinimumParticipationPercentage,
+                TicketsSold = ticketsSold,
+                ParticipationPercentage = participationPercentage,
+                CanExecute = canExecute,
+                Images = house.Images?.Select(img => new HouseImageDto
+                {
+                    Id = img.Id,
+                    ImageUrl = img.ImageUrl,
+                    AltText = img.AltText,
+                    DisplayOrder = img.DisplayOrder,
+                    IsPrimary = img.IsPrimary,
+                    MediaType = img.MediaType,
+                    FileSize = img.FileSize,
+                    Width = img.Width,
+                    Height = img.Height
+                }).ToList() ?? new List<HouseImageDto>(),
+                CreatedAt = house.CreatedAt
+            };
+        }
+
+        private LotteryTicketDto MapToTicketDto(LotteryTicket ticket)
+        {
+            return new LotteryTicketDto
+            {
+                Id = ticket.Id,
+                TicketNumber = ticket.TicketNumber,
+                HouseId = ticket.HouseId,
+                HouseTitle = ticket.House?.Title ?? "",
+                PurchasePrice = ticket.PurchasePrice,
+                Status = ticket.Status,
+                PurchaseDate = ticket.PurchaseDate,
+                IsWinner = ticket.IsWinner,
+                CreatedAt = ticket.CreatedAt
+            };
+        }
+
+        private LotteryDrawDto MapToDrawDto(LotteryDraw draw)
+        {
+            return new LotteryDrawDto
+            {
+                Id = draw.Id,
+                HouseId = draw.HouseId,
+                HouseTitle = draw.House?.Title ?? "",
+                DrawDate = draw.DrawDate,
+                TotalTicketsSold = draw.TotalTicketsSold,
+                TotalParticipationPercentage = draw.TotalParticipationPercentage,
+                WinningTicketNumber = draw.WinningTicketNumber,
+                WinnerUserId = draw.WinnerUserId,
+                DrawStatus = draw.DrawStatus,
+                DrawMethod = draw.DrawMethod,
+                ConductedAt = draw.ConductedAt,
+                CreatedAt = draw.CreatedAt
+            };
+        }
+    }
+}
+
         public async Task<bool> IsParticipantCapReachedAsync(Guid houseId)
         {
             try
@@ -407,11 +427,13 @@ namespace AmesaBackend.Lottery.Services
         {
             try
             {
-                // Use the lottery_participants view for better performance
-                var viewData = await _context.Set<LotteryParticipants>()
-                    .FirstOrDefaultAsync(p => p.HouseId == houseId);
-                
-                return viewData?.UniqueParticipants ?? 0;
+                var count = await _context.LotteryTickets
+                    .Where(t => t.HouseId == houseId && t.Status == "Active")
+                    .Select(t => t.UserId)
+                    .Distinct()
+                    .CountAsync();
+
+                return count;
             }
             catch (Exception ex)
             {
@@ -457,6 +479,7 @@ namespace AmesaBackend.Lottery.Services
             try
             {
                 var house = await _context.Houses
+                    .Include(h => h.Tickets)
                     .FirstOrDefaultAsync(h => h.Id == houseId);
 
                 if (house == null)
@@ -464,13 +487,177 @@ namespace AmesaBackend.Lottery.Services
                     throw new KeyNotFoundException("House not found");
                 }
 
-                // Use the lottery_participants view for better performance
-                var viewData = await _context.Set<LotteryParticipants>()
-                    .FirstOrDefaultAsync(p => p.HouseId == houseId);
+                var activeTickets = house.Tickets?.Where(t => t.Status == "Active").ToList() ?? new List<LotteryTicket>();
+                var uniqueParticipants = activeTickets
+                    .Select(t => t.UserId)
+                    .Distinct()
+                    .Count();
+                var totalTickets = activeTickets.Count;
+                var lastEntryDate = activeTickets
+                    .OrderByDescending(t => t.PurchaseDate)
+                    .FirstOrDefault()?.PurchaseDate;
 
-                var uniqueParticipants = viewData?.UniqueParticipants ?? 0;
-                var totalTickets = viewData?.TotalTickets ?? 0;
-                var lastEntryDate = viewData?.LastEntryDate;
+                var isCapReached = house.MaxParticipants.HasValue 
+                    && uniqueParticipants >= house.MaxParticipants.Value;
+                var remainingSlots = house.MaxParticipants.HasValue
+                    ? Math.Max(0, house.MaxParticipants.Value - uniqueParticipants)
+                    : (int?)null;
+
+                return new LotteryParticipantStatsDto
+                {
+                    HouseId = house.Id,
+                    HouseTitle = house.Title,
+                    UniqueParticipants = uniqueParticipants,
+                    TotalTickets = totalTickets,
+                    MaxParticipants = house.MaxParticipants,
+                    IsCapReached = isCapReached,
+                    RemainingSlots = remainingSlots,
+                    LastEntryDate = lastEntryDate
+                };
+            }
+            catch (KeyNotFoundException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting participant stats for house {HouseId}", houseId);
+                throw;
+            }
+        }
+
+        private HouseDto MapToHouseDto(House house)
+        {
+            var ticketsSold = house.Tickets?.Count(t => t.Status == "Active") ?? 0;
+            var participationPercentage = house.TotalTickets > 0 
+                ? (decimal)ticketsSold / house.TotalTickets * 100 
+                : 0;
+            var canExecute = participationPercentage >= house.MinimumParticipationPercentage;
+
+            // Get unique participants count
+            var uniqueParticipants = house.Tickets?
+                .Where(t => t.Status == "Active")
+                .Select(t => t.UserId)
+                .Distinct()
+                .Count() ?? 0;
+
+            var isCapReached = house.MaxParticipants.HasValue 
+                && uniqueParticipants >= house.MaxParticipants.Value;
+            var remainingSlots = house.MaxParticipants.HasValue
+                ? Math.Max(0, house.MaxParticipants.Value - uniqueParticipants)
+                : (int?)null;
+
+            return new HouseDto
+            {
+                Id = house.Id,
+                Title = house.Title,
+                Description = house.Description,
+                Price = house.Price,
+                Location = house.Location,
+                Address = house.Address,
+                Bedrooms = house.Bedrooms,
+                Bathrooms = house.Bathrooms,
+                SquareFeet = house.SquareFeet,
+                PropertyType = house.PropertyType,
+                YearBuilt = house.YearBuilt,
+                LotSize = house.LotSize,
+                Features = house.Features,
+                Status = house.Status,
+                TotalTickets = house.TotalTickets,
+                TicketPrice = house.TicketPrice,
+                LotteryStartDate = house.LotteryStartDate,
+                LotteryEndDate = house.LotteryEndDate,
+                DrawDate = house.DrawDate,
+                MinimumParticipationPercentage = house.MinimumParticipationPercentage,
+                TicketsSold = ticketsSold,
+                ParticipationPercentage = participationPercentage,
+                CanExecute = canExecute,
+                MaxParticipants = house.MaxParticipants,
+                UniqueParticipants = uniqueParticipants,
+                IsParticipantCapReached = isCapReached,
+                RemainingParticipantSlots = remainingSlots,
+                Images = house.Images?.Select(img => new HouseImageDto
+                {
+                    Id = img.Id,
+                    ImageUrl = img.ImageUrl,
+                    AltText = img.AltText,
+                    DisplayOrder = img.DisplayOrder,
+                    IsPrimary = img.IsPrimary,
+                    MediaType = img.MediaType,
+                    FileSize = img.FileSize,
+                    Width = img.Width,
+                    Height = img.Height
+                }).ToList() ?? new List<HouseImageDto>(),
+                CreatedAt = house.CreatedAt
+            };
+        }
+
+        private LotteryTicketDto MapToTicketDto(LotteryTicket ticket)
+        {
+            return new LotteryTicketDto
+            {
+                Id = ticket.Id,
+                TicketNumber = ticket.TicketNumber,
+                HouseId = ticket.HouseId,
+                HouseTitle = ticket.House?.Title ?? "",
+                PurchasePrice = ticket.PurchasePrice,
+                Status = ticket.Status,
+                PurchaseDate = ticket.PurchaseDate,
+                IsWinner = ticket.IsWinner,
+                CreatedAt = ticket.CreatedAt
+            };
+        }
+
+        private LotteryDrawDto MapToDrawDto(LotteryDraw draw)
+        {
+            return new LotteryDrawDto
+            {
+                Id = draw.Id,
+                HouseId = draw.HouseId,
+                HouseTitle = draw.House?.Title ?? "",
+                DrawDate = draw.DrawDate,
+                TotalTicketsSold = draw.TotalTicketsSold,
+                TotalParticipationPercentage = draw.TotalParticipationPercentage,
+                WinningTicketNumber = draw.WinningTicketNumber,
+                WinnerUserId = draw.WinnerUserId,
+                DrawStatus = draw.DrawStatus,
+                DrawMethod = draw.DrawMethod,
+                ConductedAt = draw.ConductedAt,
+                CreatedAt = draw.CreatedAt
+            };
+        }
+    }
+}
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error checking if user {UserId} can enter lottery for house {HouseId}", userId, houseId);
+                throw;
+            }
+        }
+
+        public async Task<LotteryParticipantStatsDto> GetParticipantStatsAsync(Guid houseId)
+        {
+            try
+            {
+                var house = await _context.Houses
+                    .Include(h => h.Tickets)
+                    .FirstOrDefaultAsync(h => h.Id == houseId);
+
+                if (house == null)
+                {
+                    throw new KeyNotFoundException("House not found");
+                }
+
+                var activeTickets = house.Tickets?.Where(t => t.Status == "Active").ToList() ?? new List<LotteryTicket>();
+                var uniqueParticipants = activeTickets
+                    .Select(t => t.UserId)
+                    .Distinct()
+                    .Count();
+                var totalTickets = activeTickets.Count;
+                var lastEntryDate = activeTickets
+                    .OrderByDescending(t => t.PurchaseDate)
+                    .FirstOrDefault()?.PurchaseDate;
 
                 var isCapReached = house.MaxParticipants.HasValue 
                     && uniqueParticipants >= house.MaxParticipants.Value;

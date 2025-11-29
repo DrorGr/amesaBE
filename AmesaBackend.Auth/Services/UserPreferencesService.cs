@@ -32,6 +32,10 @@ namespace AmesaBackend.Auth.Services
                 // #region agent log
                 _logger.LogInformation("[DEBUG] UserPreferencesService.GetUserPreferencesAsync:before-db-query userId={UserId}", userId);
                 // #endregion
+                if (_context == null)
+                {
+                    throw new InvalidOperationException("Database context is not initialized");
+                }
                 var preferences = await _context.UserPreferences
                     .FirstOrDefaultAsync(up => up.UserId == userId);
                 // #region agent log

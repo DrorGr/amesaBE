@@ -8,15 +8,12 @@ using AmesaBackend.Lottery.Services;
 using AmesaBackend.Lottery.Hubs;
 using AmesaBackend.Shared.Extensions;
 using AmesaBackend.Shared.Middleware.Extensions;
-using AmesaBackend.Auth.Data;
-using AmesaBackend.Auth.Services;
 using Serilog;
 using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Note: NpgsqlConnection.GlobalTypeMapper.EnableDynamicJson() is obsolete in Npgsql 7.0+
-// JSON support is enabled by default in newer versions
+NpgsqlConnection.GlobalTypeMapper.EnableDynamicJson();
 
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
@@ -27,12 +24,7 @@ Log.Logger = new LoggerConfiguration()
 
 builder.Host.UseSerilog();
 
-builder.Services.AddControllers()
-    .AddJsonOptions(options =>
-    {
-        options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
-        options.JsonSerializerOptions.WriteIndented = false;
-    });
+builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
@@ -61,30 +53,6 @@ builder.Services.AddDbContext<LotteryDbContext>(options =>
 });
 
 builder.Services.AddAmesaBackendShared(builder.Configuration);
-
-// Configure AuthDbContext for UserPreferencesService (shares same database connection)
-builder.Services.AddDbContext<AuthDbContext>(options =>
-{
-    var connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING") 
-        ?? builder.Configuration.GetConnectionString("DefaultConnection");
-
-    if (!string.IsNullOrEmpty(connectionString))
-    {
-        options.UseNpgsql(connectionString, npgsqlOptions =>
-        {
-            npgsqlOptions.EnableRetryOnFailure(
-                maxRetryCount: 3,
-                maxRetryDelay: TimeSpan.FromSeconds(30),
-                errorCodesToAdd: null);
-        });
-    }
-
-    if (builder.Environment.IsDevelopment())
-    {
-        options.EnableSensitiveDataLogging();
-        options.EnableDetailedErrors();
-    }
-});
 
 // Configure JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
@@ -116,7 +84,7 @@ builder.Services.AddAuthentication(options =>
         ClockSkew = TimeSpan.Zero
     };
 
-    // Extract JWT token from query string for SignalR WebSocket connections and HTTP negotiate requests
+    // Extract JWT token from query string for SignalR WebSocket connections
     options.Events = new JwtBearerEvents
     {
         OnMessageReceived = context =>
@@ -147,18 +115,6 @@ builder.Services.AddAuthentication(options =>
             }
             return Task.CompletedTask;
         },
-        OnTokenValidated = context =>
-        {
-            // #region agent log
-            var path = context.HttpContext.Request.Path;
-            var queryString = context.HttpContext.Request.QueryString.ToString();
-            var principal = context.Principal;
-            var hasPrincipal = principal != null;
-            var userId = principal?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "null";
-            Log.Information("[DEBUG] OnTokenValidated: path={Path} hasPrincipal={HasPrincipal} userId={UserId} queryString={QueryString}", path, hasPrincipal, userId, queryString);
-            // #endregion
-            return Task.CompletedTask;
-        },
         OnAuthenticationFailed = context =>
         {
             // #region agent log
@@ -182,10 +138,10 @@ builder.Services.AddAuthentication(options =>
 });
 
 // Add Services
-// Register IUserPreferencesService for favorites functionality
-builder.Services.AddScoped<IUserPreferencesService, UserPreferencesService>();
+// Note: IUserPreferencesService is optional for ILotteryService
+// If you want favorites functionality, add project reference to AmesaBackend.Auth
+// and register: builder.Services.AddScoped<IUserPreferencesService, UserPreferencesService>();
 builder.Services.AddScoped<ILotteryService, LotteryService>();
-builder.Services.AddScoped<IWatchlistService, WatchlistService>();
 builder.Services.AddScoped<IFileService, FileService>();
 builder.Services.AddScoped<AmesaBackend.Shared.Configuration.IConfigurationService, AmesaBackend.Lottery.Services.ConfigurationService>();
 
@@ -194,9 +150,6 @@ builder.Services.AddHostedService<LotteryDrawService>();
 
 // Add SignalR for real-time updates
 builder.Services.AddSignalR();
-
-// Add Response Caching for HTTP cache headers
-builder.Services.AddResponseCaching();
 
 builder.Services.AddHealthChecks();
 
@@ -213,58 +166,7 @@ if (builder.Configuration.GetValue<bool>("XRay:Enabled", false))
 
 app.UseAmesaMiddleware();
 app.UseAmesaLogging();
-app.UseResponseCaching(); // Required for [ResponseCache] attributes
 app.UseRouting();
-
-// Extract JWT token from query string for SignalR HTTP requests (negotiate endpoint)
-app.Use(async (context, next) =>
-{
-    // #region agent log
-    var path = context.Request.Path;
-    var method = context.Request.Method;
-    var isWsPath = path.StartsWithSegments("/ws");
-    var rawQueryString = context.Request.QueryString.ToString();
-    var fullUrl = $"{context.Request.Scheme}://{context.Request.Host}{context.Request.Path}{rawQueryString}";
-    var accessTokenQuery = context.Request.Query["access_token"];
-    var accessToken = accessTokenQuery.ToString();
-    var hasToken = !string.IsNullOrWhiteSpace(accessToken);
-    var existingAuthHeader = context.Request.Headers["Authorization"].ToString();
-    var hasAuthHeader = !string.IsNullOrWhiteSpace(existingAuthHeader);
-    var allQueryKeys = string.Join(", ", context.Request.Query.Keys);
-    var allHeaders = string.Join("; ", context.Request.Headers.Select(h => $"{h.Key}={h.Value}"));
-    Log.Information("[DEBUG] SignalRTokenExtractor:entry path={Path} method={Method} isWsPath={IsWsPath} hasToken={HasToken} hasAuthHeader={HasAuthHeader} tokenLength={TokenLength} rawQueryString={RawQueryString} fullUrl={FullUrl} allQueryKeys={AllQueryKeys} allHeaders={AllHeaders}", 
-        path, method, isWsPath, hasToken, hasAuthHeader, accessToken.Length, rawQueryString, fullUrl, allQueryKeys, allHeaders);
-    // #endregion
-    
-    // For SignalR negotiate requests, extract token from query string if not in header
-    if (isWsPath && hasToken)
-    {
-        if (!hasAuthHeader)
-        {
-            // #region agent log
-            Log.Information("[DEBUG] SignalRTokenExtractor:extracting path={Path} method={Method} tokenLength={TokenLength}", path, method, accessToken.Length);
-            // #endregion
-            // Add token to Authorization header for JWT middleware
-            context.Request.Headers["Authorization"] = $"Bearer {accessToken}";
-            // #region agent log
-            Log.Information("[DEBUG] SignalRTokenExtractor:extracted path={Path} method={Method} headerSet={HeaderSet}", path, method, context.Request.Headers.ContainsKey("Authorization"));
-            // #endregion
-        }
-        else
-        {
-            // #region agent log
-            Log.Information("[DEBUG] SignalRTokenExtractor:skipped path={Path} method={Method} existingHeader={ExistingHeader}", path, method, existingAuthHeader);
-            // #endregion
-        }
-    }
-    
-    await next();
-    
-    // #region agent log
-    Log.Information("[DEBUG] SignalRTokenExtractor:exit path={Path} method={Method} statusCode={StatusCode}", path, method, context.Response.StatusCode);
-    // #endregion
-});
-
 app.UseAuthentication();
 app.UseAuthorization();
 

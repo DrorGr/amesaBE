@@ -122,7 +122,7 @@ namespace AmesaBackend.Auth.Services
                 {
                     UserId = user.Id,
                     Email = user.Email,
-                    VerificationToken = user.EmailVerificationToken
+                    VerificationToken = user.EmailVerificationToken ?? string.Empty
                 });
 
                 // Only generate tokens if email is verified (OAuth users)
@@ -526,7 +526,7 @@ namespace AmesaBackend.Auth.Services
                 {
                     UserId = user.Id,
                     Email = user.Email,
-                    VerificationToken = user.EmailVerificationToken
+                    VerificationToken = user.EmailVerificationToken ?? string.Empty
                 });
 
                 _logger.LogInformation("Verification email resent for user: {Email}", user.Email);
