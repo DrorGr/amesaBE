@@ -30,13 +30,17 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Restore dependencies
+      - name: Restore and build dependencies
         run: |
           dotnet restore AmesaBackend.Auth/AmesaBackend.Auth.csproj
-          dotnet restore AmesaBackend.Tests/AmesaBackend.Tests.csproj
+          dotnet build --no-restore AmesaBackend.Auth/AmesaBackend.Auth.csproj
         working-directory: .
 
-      - name: Build
+      - name: Restore test project
+        run: dotnet restore AmesaBackend.Tests/AmesaBackend.Tests.csproj
+        working-directory: .
+
+      - name: Build test project
         run: dotnet build --no-restore AmesaBackend.Tests/AmesaBackend.Tests.csproj
         working-directory: .
 
@@ -69,13 +73,17 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Restore dependencies
+      - name: Restore and build dependencies
         run: |
           dotnet restore AmesaBackend.Auth/AmesaBackend.Auth.csproj
-          dotnet restore AmesaBackend.Tests/AmesaBackend.Tests.csproj
+          dotnet build --no-restore AmesaBackend.Auth/AmesaBackend.Auth.csproj
         working-directory: .
 
-      - name: Build
+      - name: Restore test project
+        run: dotnet restore AmesaBackend.Tests/AmesaBackend.Tests.csproj
+        working-directory: .
+
+      - name: Build test project
         run: dotnet build --no-restore AmesaBackend.Tests/AmesaBackend.Tests.csproj
         working-directory: .
 
