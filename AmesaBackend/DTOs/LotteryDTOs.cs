@@ -27,6 +27,10 @@ namespace AmesaBackend.DTOs
         public int TicketsSold { get; set; }
         public decimal ParticipationPercentage { get; set; }
         public bool CanExecute { get; set; }
+        public int? MaxParticipants { get; set; }
+        public int UniqueParticipants { get; set; }
+        public bool IsParticipantCapReached { get; set; }
+        public int? RemainingParticipantSlots { get; set; }
         public List<HouseImageDto> Images { get; set; } = new();
         public DateTime CreatedAt { get; set; }
     }

@@ -90,11 +90,39 @@ namespace AmesaBackend.Controllers
                     .Select(g => new { HouseId = g.Key, Count = g.Count() })
                     .ToListAsync();
 
+                // Get unique participants count per house
+                var uniqueParticipantsCounts = await _context.LotteryTickets
+                    .Where(t => houseIds.Contains(t.HouseId) && t.Status == TicketStatus.Active)
+                    .GroupBy(t => t.HouseId)
+                    .Select(g => new { HouseId = g.Key, UniqueCount = g.Select(t => t.UserId).Distinct().Count() })
+                    .ToListAsync();
+
+                // Get MaxParticipants from database (column exists but not in model)
+                var maxParticipantsDict = new Dictionary<Guid, int?>();
+                if (houseIds.Any())
+                {
+                    var maxParticipantsList = await _context.Database
+                        .SqlQueryRaw<MaxParticipantsResult>(
+                            $"SELECT \"Id\", max_participants FROM amesa_lottery.houses WHERE \"Id\" = ANY({{0}})", 
+                            houseIds.ToArray())
+                        .ToListAsync();
+                    maxParticipantsDict = maxParticipantsList.ToDictionary(x => x.Id, x => x.MaxParticipants);
+                }
+
                 var houseDtos = houses.Select(house =>
                 {
                     var ticketsSold = ticketCounts.FirstOrDefault(tc => tc.HouseId == house.Id)?.Count ?? 0;
                     var participationPercentage = house.TotalTickets > 0 ? (decimal)ticketsSold / house.TotalTickets * 100 : 0;
                     var canExecute = participationPercentage >= house.MinimumParticipationPercentage;
+
+                    // Get unique participants count
+                    var uniqueParticipants = uniqueParticipantsCounts.FirstOrDefault(up => up.HouseId == house.Id)?.UniqueCount ?? 0;
+                    var maxParticipants = maxParticipantsDict.GetValueOrDefault(house.Id);
+                    var isCapReached = maxParticipants.HasValue 
+                        && uniqueParticipants >= maxParticipants.Value;
+                    var remainingSlots = maxParticipants.HasValue
+                        ? Math.Max(0, maxParticipants.Value - uniqueParticipants)
+                        : (int?)null;
 
                     return new HouseDto
                     {
@@ -121,6 +149,10 @@ namespace AmesaBackend.Controllers
                         TicketsSold = ticketsSold,
                         ParticipationPercentage = Math.Round(participationPercentage, 2),
                         CanExecute = canExecute,
+                        MaxParticipants = maxParticipants,
+                        UniqueParticipants = uniqueParticipants,
+                        IsParticipantCapReached = isCapReached,
+                        RemainingParticipantSlots = remainingSlots,
                         Images = house.Images.OrderBy(i => i.DisplayOrder).Select(i => new HouseImageDto
                         {
                             Id = i.Id,
@@ -200,6 +232,24 @@ namespace AmesaBackend.Controllers
                 var participationPercentage = house.TotalTickets > 0 ? (decimal)ticketsSold / house.TotalTickets * 100 : 0;
                 var canExecute = participationPercentage >= house.MinimumParticipationPercentage;
 
+                // Get unique participants count
+                var uniqueParticipants = await _context.LotteryTickets
+                    .Where(t => t.HouseId == id && t.Status == TicketStatus.Active)
+                    .Select(t => t.UserId)
+                    .Distinct()
+                    .CountAsync();
+
+                // Get MaxParticipants from database (column exists but not in model)
+                var maxParticipants = await _context.Database
+                    .SqlQueryRaw<int?>($"SELECT max_participants FROM amesa_lottery.houses WHERE \"Id\" = {{0}}", id)
+                    .FirstOrDefaultAsync();
+
+                var isCapReached = maxParticipants.HasValue 
+                    && uniqueParticipants >= maxParticipants.Value;
+                var remainingSlots = maxParticipants.HasValue
+                    ? Math.Max(0, maxParticipants.Value - uniqueParticipants)
+                    : (int?)null;
+
                 var houseDto = new HouseDto
                 {
                     Id = house.Id,
@@ -225,6 +275,10 @@ namespace AmesaBackend.Controllers
                     TicketsSold = ticketsSold,
                     ParticipationPercentage = Math.Round(participationPercentage, 2),
                     CanExecute = canExecute,
+                    MaxParticipants = maxParticipants,
+                    UniqueParticipants = uniqueParticipants,
+                    IsParticipantCapReached = isCapReached,
+                    RemainingParticipantSlots = remainingSlots,
                     Images = house.Images.OrderBy(i => i.DisplayOrder).Select(i => new HouseImageDto
                     {
                         Id = i.Id,
@@ -437,5 +491,12 @@ namespace AmesaBackend.Controllers
         public int TotalPages { get; set; }
         public bool HasNext { get; set; }
         public bool HasPrevious { get; set; }
+    }
+
+    // Helper class for MaxParticipants query result
+    public class MaxParticipantsResult
+    {
+        public Guid Id { get; set; }
+        public int? MaxParticipants { get; set; }
     }
 }

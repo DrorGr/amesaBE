@@ -100,7 +100,12 @@ namespace AmesaBackend.Lottery.Controllers
                     {
                         Id = Guid.NewGuid(),
                         HouseId = id,
-                        House = new HouseDto(),
+                        House = new HouseDto
+                        {
+                            Id = id,
+                            UniqueParticipants = 0,
+                            IsParticipantCapReached = false
+                        },
                         NotificationEnabled = notificationEnabled,
                         AddedAt = DateTime.UtcNow
                     };
