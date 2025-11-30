@@ -34,7 +34,7 @@
       "secrets": [
         {
           "name": "ConnectionStrings__DefaultConnection",
-          "valueFrom": "arn:aws:secretsmanager:eu-north-1:129394705401:secret:amesa/auth/db-connection"
+          "valueFrom": "/amesa/prod/ConnectionStrings/Auth"
         },
         {
           "name": "GOOGLE_SERVICE_ACCOUNT_JSON",
