@@ -27,13 +27,23 @@ namespace AmesaBackend.Shared.Extensions
             services.AddAWSService<IAmazonEventBridge>();
             services.AddScoped<IEventPublisher, EventBridgePublisher>();
 
-            // Add Redis Cache (if configured)
+            // Add Redis Cache - Required for production
             var redisConnection = configuration.GetConnectionString("Redis") 
-                ?? configuration["CacheConfig:RedisConnection"];
+                ?? configuration["CacheConfig:RedisConnection"]
+                ?? Environment.GetEnvironmentVariable("ConnectionStrings__Redis");
+            
+            var isProduction = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Production" ||
+                              configuration["ASPNETCORE_ENVIRONMENT"] == "Production";
             
             if (!string.IsNullOrEmpty(redisConnection))
             {
                 services.UseRedisCache(configuration);
+            }
+            else if (isProduction)
+            {
+                throw new InvalidOperationException(
+                    "Redis connection string is required in production. " +
+                    "Set ConnectionStrings__Redis environment variable or configure CacheConfig:RedisConnection in appsettings.");
             }
 
             return services;
