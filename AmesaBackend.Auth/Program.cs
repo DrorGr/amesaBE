@@ -40,6 +40,11 @@ if (!string.IsNullOrEmpty(googleCredentialsPath) && !string.IsNullOrEmpty(google
         // Step 1: Initial trim (but preserve potential BOM at start)
         string processedJson = googleServiceAccountJson.TrimStart();
         
+        // BOM byte constants (used in multiple places)
+        const byte UTF8_BOM_BYTE1 = 0xEF;
+        const byte UTF8_BOM_BYTE2 = 0xBB;
+        const byte UTF8_BOM_BYTE3 = 0xBF;
+        
         // Step 2: Remove UTF-8 BOM - handle multiple cases in order:
         // Case 1: Unicode BOM character (\uFEFF) - single character
         if (processedJson.Length > 0 && processedJson[0] == '\uFEFF')
@@ -60,9 +65,6 @@ if (!string.IsNullOrEmpty(googleCredentialsPath) && !string.IsNullOrEmpty(google
         else
         {
             byte[] jsonBytes = System.Text.Encoding.UTF8.GetBytes(processedJson);
-            const byte UTF8_BOM_BYTE1 = 0xEF;
-            const byte UTF8_BOM_BYTE2 = 0xBB;
-            const byte UTF8_BOM_BYTE3 = 0xBF;
             
             if (jsonBytes.Length >= 3 && 
                 jsonBytes[0] == UTF8_BOM_BYTE1 && 
