@@ -8,6 +8,8 @@ using AmesaBackend.Lottery.Services;
 using AmesaBackend.Lottery.Hubs;
 using AmesaBackend.Shared.Extensions;
 using AmesaBackend.Shared.Middleware.Extensions;
+using AmesaBackend.Auth.Data;
+using AmesaBackend.Auth.Services;
 using Serilog;
 using Npgsql;
 
@@ -33,6 +35,30 @@ builder.Services.AddResponseCaching();
 
 // Configure Entity Framework
 builder.Services.AddDbContext<LotteryDbContext>(options =>
+{
+    var connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING") 
+        ?? builder.Configuration.GetConnectionString("DefaultConnection");
+
+    if (!string.IsNullOrEmpty(connectionString))
+    {
+        options.UseNpgsql(connectionString, npgsqlOptions =>
+        {
+            npgsqlOptions.EnableRetryOnFailure(
+                maxRetryCount: 3,
+                maxRetryDelay: TimeSpan.FromSeconds(30),
+                errorCodesToAdd: null);
+        });
+    }
+
+    if (builder.Environment.IsDevelopment())
+    {
+        options.EnableSensitiveDataLogging();
+        options.EnableDetailedErrors();
+    }
+});
+
+// Register AuthDbContext for UserPreferencesService (shared database, same connection string)
+builder.Services.AddDbContext<AuthDbContext>(options =>
 {
     var connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING") 
         ?? builder.Configuration.GetConnectionString("DefaultConnection");
@@ -142,10 +168,10 @@ builder.Services.AddAuthentication(options =>
 });
 
 // Add Services
-// Note: IUserPreferencesService is optional for ILotteryService
-// If you want favorites functionality, add project reference to AmesaBackend.Auth
-// and register: builder.Services.AddScoped<IUserPreferencesService, UserPreferencesService>();
+// Register UserPreferencesService for favorites functionality
+builder.Services.AddScoped<IUserPreferencesService, UserPreferencesService>();
 builder.Services.AddScoped<ILotteryService, LotteryService>();
+builder.Services.AddScoped<IHouseCacheService, HouseCacheService>();
 builder.Services.AddScoped<IFileService, FileService>();
 builder.Services.AddScoped<AmesaBackend.Shared.Configuration.IConfigurationService, AmesaBackend.Lottery.Services.ConfigurationService>();
 
