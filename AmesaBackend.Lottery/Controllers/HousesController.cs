@@ -167,11 +167,27 @@ namespace AmesaBackend.Lottery.Controllers
                     .Select(g => new { HouseId = g.Key, Count = g.Count() })
                     .ToListAsync();
 
+                // Query unique participants count per house
+                var uniqueParticipantsCounts = await _context.LotteryTickets
+                    .AsNoTracking()
+                    .Where(t => houseIds.Contains(t.HouseId) && t.Status == "Active")
+                    .GroupBy(t => t.HouseId)
+                    .Select(g => new { HouseId = g.Key, UniqueCount = g.Select(t => t.UserId).Distinct().Count() })
+                    .ToListAsync();
+
                 var houseDtos = houses.Select(house =>
                 {
                     var ticketsSold = ticketCounts.FirstOrDefault(tc => tc.HouseId == house.Id)?.Count ?? 0;
                     var participationPercentage = house.TotalTickets > 0 ? (decimal)ticketsSold / house.TotalTickets * 100 : 0;
                     var canExecute = participationPercentage >= house.MinimumParticipationPercentage;
+
+                    // Get unique participants count
+                    var uniqueParticipants = uniqueParticipantsCounts.FirstOrDefault(up => up.HouseId == house.Id)?.UniqueCount ?? 0;
+                    var isCapReached = house.MaxParticipants.HasValue 
+                        && uniqueParticipants >= house.MaxParticipants.Value;
+                    var remainingSlots = house.MaxParticipants.HasValue
+                        ? Math.Max(0, house.MaxParticipants.Value - uniqueParticipants)
+                        : (int?)null;
 
                     return new HouseDto
                     {
@@ -198,6 +214,10 @@ namespace AmesaBackend.Lottery.Controllers
                         TicketsSold = ticketsSold,
                         ParticipationPercentage = Math.Round(participationPercentage, 2),
                         CanExecute = canExecute,
+                        MaxParticipants = house.MaxParticipants,
+                        UniqueParticipants = uniqueParticipants,
+                        IsParticipantCapReached = isCapReached,
+                        RemainingParticipantSlots = remainingSlots,
                         Images = house.Images.OrderBy(i => i.DisplayOrder).Select(i => new HouseImageDto
                         {
                             Id = i.Id,
@@ -289,6 +309,19 @@ namespace AmesaBackend.Lottery.Controllers
                 var participationPercentage = house.TotalTickets > 0 ? (decimal)ticketsSold / house.TotalTickets * 100 : 0;
                 var canExecute = participationPercentage >= house.MinimumParticipationPercentage;
 
+                // Get unique participants count
+                var uniqueParticipants = await _context.LotteryTickets
+                    .Where(t => t.HouseId == id && t.Status == "Active")
+                    .Select(t => t.UserId)
+                    .Distinct()
+                    .CountAsync();
+
+                var isCapReached = house.MaxParticipants.HasValue 
+                    && uniqueParticipants >= house.MaxParticipants.Value;
+                var remainingSlots = house.MaxParticipants.HasValue
+                    ? Math.Max(0, house.MaxParticipants.Value - uniqueParticipants)
+                    : (int?)null;
+
                 var houseDto = new HouseDto
                 {
                     Id = house.Id,
@@ -314,6 +347,10 @@ namespace AmesaBackend.Lottery.Controllers
                     TicketsSold = ticketsSold,
                     ParticipationPercentage = Math.Round(participationPercentage, 2),
                     CanExecute = canExecute,
+                    MaxParticipants = house.MaxParticipants,
+                    UniqueParticipants = uniqueParticipants,
+                    IsParticipantCapReached = isCapReached,
+                    RemainingParticipantSlots = remainingSlots,
                     Images = house.Images.OrderBy(i => i.DisplayOrder).Select(i => new HouseImageDto
                     {
                         Id = i.Id,
@@ -422,6 +459,10 @@ namespace AmesaBackend.Lottery.Controllers
                     TicketsSold = 0,
                     ParticipationPercentage = 0,
                     CanExecute = false,
+                    MaxParticipants = house.MaxParticipants,
+                    UniqueParticipants = 0,
+                    IsParticipantCapReached = false,
+                    RemainingParticipantSlots = house.MaxParticipants,
                     Images = new List<HouseImageDto>(),
                     CreatedAt = house.CreatedAt
                 };
@@ -569,6 +610,19 @@ namespace AmesaBackend.Lottery.Controllers
                 var participationPercentage = house.TotalTickets > 0 ? (decimal)ticketsSold / house.TotalTickets * 100 : 0;
                 var canExecute = participationPercentage >= house.MinimumParticipationPercentage;
 
+                // Get unique participants count
+                var uniqueParticipants = await _context.LotteryTickets
+                    .Where(t => t.HouseId == id && t.Status == "Active")
+                    .Select(t => t.UserId)
+                    .Distinct()
+                    .CountAsync();
+
+                var isCapReached = house.MaxParticipants.HasValue 
+                    && uniqueParticipants >= house.MaxParticipants.Value;
+                var remainingSlots = house.MaxParticipants.HasValue
+                    ? Math.Max(0, house.MaxParticipants.Value - uniqueParticipants)
+                    : (int?)null;
+
                 var houseDto = new HouseDto
                 {
                     Id = house.Id,
@@ -594,6 +648,10 @@ namespace AmesaBackend.Lottery.Controllers
                     TicketsSold = ticketsSold,
                     ParticipationPercentage = Math.Round(participationPercentage, 2),
                     CanExecute = canExecute,
+                    MaxParticipants = house.MaxParticipants,
+                    UniqueParticipants = uniqueParticipants,
+                    IsParticipantCapReached = isCapReached,
+                    RemainingParticipantSlots = remainingSlots,
                     Images = new List<HouseImageDto>(),
                     CreatedAt = house.CreatedAt
                 };
