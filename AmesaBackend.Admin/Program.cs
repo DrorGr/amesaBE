@@ -19,7 +19,7 @@ builder.Host.UseSerilog();
 builder.Services.AddRazorPages();
 builder.Services.AddServerSideBlazor();
 
-builder.Services.AddAmesaBackendShared(builder.Configuration);
+builder.Services.AddAmesaBackendShared(builder.Configuration, builder.Environment);
 
 // Add Admin Services
 builder.Services.AddScoped<IAdminAuthService, AdminAuthService>();

@@ -46,7 +46,7 @@ builder.Services.AddDbContext<ContentDbContext>(options =>
     }
 });
 
-builder.Services.AddAmesaBackendShared(builder.Configuration);
+builder.Services.AddAmesaBackendShared(builder.Configuration, builder.Environment);
 builder.Services.AddHealthChecks();
 
 var app = builder.Build();

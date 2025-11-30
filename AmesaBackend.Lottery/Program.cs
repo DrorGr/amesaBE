@@ -55,7 +55,7 @@ builder.Services.AddDbContext<LotteryDbContext>(options =>
     }
 });
 
-builder.Services.AddAmesaBackendShared(builder.Configuration);
+builder.Services.AddAmesaBackendShared(builder.Configuration, builder.Environment);
 
 // Configure JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");

@@ -820,7 +820,8 @@ builder.Services.AddCors(options =>
 });
 
 // Add Shared Library Services
-builder.Services.AddAmesaBackendShared(builder.Configuration);
+// Auth service requires Redis for AccountLockoutService, RateLimitService, and EmailVerificationMiddleware
+builder.Services.AddAmesaBackendShared(builder.Configuration, builder.Environment, requireRedis: true);
 
 // Add AWS Services
 var awsRegion = builder.Configuration["Aws:Region"] ?? Environment.GetEnvironmentVariable("AWS_REGION") ?? "eu-north-1";

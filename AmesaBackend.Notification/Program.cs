@@ -53,7 +53,7 @@ builder.Services.AddDbContext<NotificationDbContext>(options =>
     }
 });
 
-builder.Services.AddAmesaBackendShared(builder.Configuration);
+builder.Services.AddAmesaBackendShared(builder.Configuration, builder.Environment);
 
 // Configure JWT Authentication (required for SignalR [Authorize] attribute)
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");

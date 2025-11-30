@@ -47,7 +47,7 @@ builder.Services.AddDbContext<AnalyticsDbContext>(options =>
     }
 });
 
-builder.Services.AddAmesaBackendShared(builder.Configuration);
+builder.Services.AddAmesaBackendShared(builder.Configuration, builder.Environment);
 
 // Add Services
 builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();

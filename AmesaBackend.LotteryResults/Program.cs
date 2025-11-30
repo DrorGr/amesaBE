@@ -47,7 +47,7 @@ builder.Services.AddDbContext<LotteryResultsDbContext>(options =>
     }
 });
 
-builder.Services.AddAmesaBackendShared(builder.Configuration);
+builder.Services.AddAmesaBackendShared(builder.Configuration, builder.Environment);
 
 // Add Services
 builder.Services.AddScoped<IQRCodeService, QRCodeService>();
