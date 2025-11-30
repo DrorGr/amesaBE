@@ -567,7 +567,8 @@ if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(goo
                 
                 // #region agent log
                 var redirectUriBefore = context.Properties.RedirectUri ?? "NULL";
-                logger.LogInformation("[DEBUG] OnCreatingTicket:entry hypothesisId=A,B redirectUriBefore={RedirectUriBefore}", redirectUriBefore);
+                var callbackPath = context.Options.CallbackPath.ToString();
+                logger.LogInformation("[DEBUG] OnCreatingTicket:entry hypothesisId=A,B redirectUriBefore={RedirectUriBefore} callbackPath={CallbackPath}", redirectUriBefore, callbackPath);
                 // #endregion
                 
                 var claims = context.Principal?.Claims.ToList() ?? new List<Claim>();
@@ -686,10 +687,19 @@ if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(goo
                 context.Properties.RedirectUri = modifiedRedirectUri;
                 
                 // #region agent log
-                logger.LogInformation("[DEBUG] OnCreatingTicket:after-modify hypothesisId=A,B,C redirectUriAfter={RedirectUriAfter} hasCode={HasCode}", modifiedRedirectUri, modifiedRedirectUri.Contains("code="));
+                logger.LogInformation("[DEBUG] OnCreatingTicket:after-modify hypothesisId=A,B,C redirectUriAfter={RedirectUriAfter} hasCode={HasCode} contextPropertiesRedirectUri={ContextPropertiesRedirectUri}", 
+                    modifiedRedirectUri, 
+                    modifiedRedirectUri.Contains("code="),
+                    context.Properties.RedirectUri);
                 // #endregion
                 
                 logger.LogInformation("User created/updated and tokens cached for: {Email}, temp_token: {TempToken}", email, tempToken);
+                
+                // #region agent log
+                logger.LogInformation("[DEBUG] OnCreatingTicket:exit hypothesisId=A,B,C finalRedirectUri={FinalRedirectUri} tempTokenInProperties={TempTokenInProperties}", 
+                    context.Properties.RedirectUri,
+                    context.Properties.Items.ContainsKey("temp_token"));
+                // #endregion
             }
             catch (Exception ex)
             {
@@ -727,6 +737,11 @@ if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(goo
             var errorMessage = context.Failure?.Message ?? "Unknown error";
             var errorDescription = context.Failure?.ToString() ?? "No additional details";
             
+            // #region agent log
+            var logger = context.HttpContext.RequestServices.GetService<ILogger<Program>>();
+            logger?.LogError("[DEBUG] OnRemoteFailure:entry hypothesisId=A,B,C,D,E errorMessage={ErrorMessage}", errorMessage);
+            // #endregion
+            
             Log.Error("Google OAuth remote failure: {Error}", errorMessage);
             Log.Error("Google OAuth failure details: {Details}", errorDescription);
             
@@ -760,10 +775,27 @@ if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(goo
         
         options.Events.OnAccessDenied = context =>
         {
+            // #region agent log
+            var logger = context.HttpContext.RequestServices.GetService<ILogger<Program>>();
+            logger?.LogWarning("[DEBUG] OnAccessDenied:entry hypothesisId=A,B,C,D,E");
+            // #endregion
+            
             Log.Warning("Google OAuth access denied");
             var frontendUrl = builder.Configuration["FrontendUrl"] ?? "http://localhost:4200";
             context.Response.Redirect($"{frontendUrl}/auth/callback?error={Uri.EscapeDataString("Access denied")}");
             context.HandleResponse();
+            return Task.CompletedTask;
+        };
+        
+        // Add OnTicketReceived to track when ticket is received (after OnCreatingTicket)
+        options.Events.OnTicketReceived = context =>
+        {
+            // #region agent log
+            var logger = context.HttpContext.RequestServices.GetService<ILogger<Program>>();
+            var redirectUri = context.Properties?.RedirectUri ?? "NULL";
+            var hasTempToken = context.Properties?.Items?.ContainsKey("temp_token") ?? false;
+            logger?.LogInformation("[DEBUG] OnTicketReceived:entry hypothesisId=A,B,C redirectUri={RedirectUri} hasTempToken={HasTempToken}", redirectUri, hasTempToken);
+            // #endregion
             return Task.CompletedTask;
         };
     });

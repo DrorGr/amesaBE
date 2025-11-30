@@ -98,7 +98,21 @@ namespace AmesaBackend.Auth.Controllers
             {
                 var frontendUrl = _configuration["FrontendUrl"] ?? "http://localhost:4200";
 
+                // #region agent log
+                _logger.LogInformation("[DEBUG] GoogleCallback:entry hypothesisId=C,D queryString={QueryString} hasCodeParam={HasCodeParam} hasErrorParam={HasErrorParam}", 
+                    Request.QueryString.ToString(), 
+                    Request.Query.ContainsKey("code"), 
+                    Request.Query.ContainsKey("error"));
+                // #endregion
+
                 var googleResult = await HttpContext.AuthenticateAsync(GoogleDefaults.AuthenticationScheme);
+                
+                // #region agent log
+                _logger.LogInformation("[DEBUG] GoogleCallback:after-AuthenticateAsync hypothesisId=C,D succeeded={Succeeded} hasPrincipal={HasPrincipal} hasProperties={HasProperties}", 
+                    googleResult.Succeeded, 
+                    googleResult.Principal != null, 
+                    googleResult.Properties != null);
+                // #endregion
                 
                 if (!googleResult.Succeeded)
                 {
@@ -109,10 +123,25 @@ namespace AmesaBackend.Auth.Controllers
                 // Get email from authenticated principal (used in multiple places)
                 var email = googleResult.Principal?.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
                 
+                // #region agent log
+                var propertiesItemsCount = googleResult.Properties?.Items?.Count ?? 0;
+                var hasTempTokenInProperties = googleResult.Properties?.Items?.ContainsKey("temp_token") ?? false;
+                var redirectUri = googleResult.Properties?.RedirectUri;
+                _logger.LogInformation("[DEBUG] GoogleCallback:before-tempToken-lookup hypothesisId=C,D email={Email} propertiesItemsCount={PropertiesItemsCount} hasTempTokenInProperties={HasTempTokenInProperties} redirectUri={RedirectUri}", 
+                    email, propertiesItemsCount, hasTempTokenInProperties, redirectUri);
+                // #endregion
+                
                 // Try to get temp_token from authentication properties (set in OnCreatingTicket)
                 var tempToken = googleResult.Properties?.Items.TryGetValue("temp_token", out var token) == true 
                     ? token 
                     : Request.Query["temp_token"].FirstOrDefault();
+                
+                // #region agent log
+                _logger.LogInformation("[DEBUG] GoogleCallback:after-tempToken-lookup hypothesisId=C,D tempTokenFound={TempTokenFound} tempTokenLength={TempTokenLength} source={Source}", 
+                    !string.IsNullOrEmpty(tempToken), 
+                    tempToken?.Length ?? 0,
+                    googleResult.Properties?.Items.TryGetValue("temp_token", out _) == true ? "Properties" : Request.Query.ContainsKey("temp_token") ? "Query" : "None");
+                // #endregion
                 
                 // If not found in properties, try to get it from email cache (fallback)
                 if (string.IsNullOrEmpty(tempToken) && !string.IsNullOrEmpty(email))
