@@ -18,20 +18,22 @@ namespace AmesaBackend.Lottery.Controllers
         private readonly IEventPublisher _eventPublisher;
         private readonly ILogger<HousesController> _logger;
         private readonly ILotteryService _lotteryService;
-        private readonly IHouseCacheService? _houseCacheService;
+        // TODO: HouseCacheService - part of cost optimization refactoring
+        // private readonly IHouseCacheService? _houseCacheService;
 
         public HousesController(
             LotteryDbContext context, 
             IEventPublisher eventPublisher, 
             ILogger<HousesController> logger,
-            ILotteryService lotteryService,
-            IHouseCacheService? houseCacheService = null)
+            ILotteryService lotteryService)
+            // TODO: HouseCacheService - part of cost optimization refactoring
+            // IHouseCacheService? houseCacheService = null)
         {
             _context = context;
             _eventPublisher = eventPublisher;
             _logger = logger;
             _lotteryService = lotteryService;
-            _houseCacheService = houseCacheService;
+            // _houseCacheService = houseCacheService;
         }
 
         [HttpGet("{id}")]
@@ -182,11 +184,11 @@ namespace AmesaBackend.Lottery.Controllers
                     CreatedByUserId = house.CreatedBy ?? Guid.Empty
                 });
 
-                // Invalidate house list caches
-                if (_houseCacheService != null)
-                {
-                    await _houseCacheService.InvalidateHouseCachesAsync();
-                }
+                // TODO: Invalidate house list caches - part of cost optimization refactoring
+                // if (_houseCacheService != null)
+                // {
+                //     await _houseCacheService.InvalidateHouseCachesAsync();
+                // }
 
                 var houseDto = new HouseDto
                 {
@@ -410,11 +412,11 @@ namespace AmesaBackend.Lottery.Controllers
                     CreatedAt = house.CreatedAt
                 };
 
-                // Invalidate house list caches
-                if (_houseCacheService != null)
-                {
-                    await _houseCacheService.InvalidateHouseCachesAsync();
-                }
+                // TODO: Invalidate house list caches - part of cost optimization refactoring
+                // if (_houseCacheService != null)
+                // {
+                //     await _houseCacheService.InvalidateHouseCachesAsync();
+                // }
 
                 return Ok(new ApiResponse<HouseDto>
                 {
@@ -458,11 +460,11 @@ namespace AmesaBackend.Lottery.Controllers
                 house.DeletedAt = DateTime.UtcNow;
                 await _context.SaveChangesAsync();
 
-                // Invalidate house list caches
-                if (_houseCacheService != null)
-                {
-                    await _houseCacheService.InvalidateHouseCachesAsync();
-                }
+                // TODO: Invalidate house list caches - part of cost optimization refactoring
+                // if (_houseCacheService != null)
+                // {
+                //     await _houseCacheService.InvalidateHouseCachesAsync();
+                // }
 
                 return Ok(new ApiResponse<object>
                 {
