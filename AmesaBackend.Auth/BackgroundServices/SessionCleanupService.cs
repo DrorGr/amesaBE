@@ -59,48 +59,53 @@ namespace AmesaBackend.Auth.BackgroundServices
             {
                 var now = DateTime.UtcNow;
                 
-                // Use transaction for atomicity
-                using var transaction = await dbContext.Database.BeginTransactionAsync();
-                try
+                // Use execution strategy to support retry with transactions
+                var strategy = dbContext.Database.CreateExecutionStrategy();
+                await strategy.ExecuteAsync(async () =>
                 {
-                    // Mark expired sessions as inactive
-                    var expiredSessions = await dbContext.UserSessions
-                        .Where(s => s.ExpiresAt < now && s.IsActive)
-                        .ToListAsync();
-
-                    var expiredCount = expiredSessions.Count;
-                    foreach (var session in expiredSessions)
+                    // Use transaction for atomicity
+                    using var transaction = await dbContext.Database.BeginTransactionAsync();
+                    try
                     {
-                        session.IsActive = false;
+                        // Mark expired sessions as inactive
+                        var expiredSessions = await dbContext.UserSessions
+                            .Where(s => s.ExpiresAt < now && s.IsActive)
+                            .ToListAsync();
+
+                        var expiredCount = expiredSessions.Count;
+                        foreach (var session in expiredSessions)
+                        {
+                            session.IsActive = false;
+                        }
+
+                        // Archive old sessions (older than 30 days) - avoid double-processing
+                        var oldSessions = await dbContext.UserSessions
+                            .Where(s => s.CreatedAt < now - _archiveThreshold && s.IsActive)
+                            .ToListAsync();
+
+                        var archivedCount = oldSessions.Count;
+                        // In a production system, you might move these to an archive table
+                        // For now, we'll just mark them as inactive
+                        foreach (var session in oldSessions)
+                        {
+                            session.IsActive = false;
+                        }
+
+                        await dbContext.SaveChangesAsync();
+                        await transaction.CommitAsync();
+
+                        if (expiredCount > 0 || archivedCount > 0)
+                        {
+                            _logger.LogInformation("Session cleanup completed: {ExpiredCount} expired sessions, {ArchivedCount} archived sessions",
+                                expiredCount, archivedCount);
+                        }
                     }
-
-                    // Archive old sessions (older than 30 days) - avoid double-processing
-                    var oldSessions = await dbContext.UserSessions
-                        .Where(s => s.CreatedAt < now - _archiveThreshold && s.IsActive)
-                        .ToListAsync();
-
-                    var archivedCount = oldSessions.Count;
-                    // In a production system, you might move these to an archive table
-                    // For now, we'll just mark them as inactive
-                    foreach (var session in oldSessions)
+                    catch
                     {
-                        session.IsActive = false;
+                        await transaction.RollbackAsync();
+                        throw;
                     }
-
-                    await dbContext.SaveChangesAsync();
-                    await transaction.CommitAsync();
-
-                    if (expiredCount > 0 || archivedCount > 0)
-                    {
-                        _logger.LogInformation("Session cleanup completed: {ExpiredCount} expired sessions, {ArchivedCount} archived sessions",
-                            expiredCount, archivedCount);
-                    }
-                }
-                catch
-                {
-                    await transaction.RollbackAsync();
-                    throw;
-                }
+                });
             }
             catch (Exception ex)
             {

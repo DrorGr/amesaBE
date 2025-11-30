@@ -82,31 +82,36 @@ namespace AmesaBackend.Auth.Services
                     UpdatedAt = DateTime.UtcNow
                 };
 
-                // Use transaction to ensure atomicity
-                using var transaction = await _context.Database.BeginTransactionAsync();
-                try
+                // Use execution strategy to support retry with transactions
+                var strategy = _context.Database.CreateExecutionStrategy();
+                await strategy.ExecuteAsync(async () =>
                 {
-                    _context.Users.Add(user);
-                    await _context.SaveChangesAsync();
-
-                    // Save password to history
-                    var passwordHistory = new UserPasswordHistory
+                    // Use transaction to ensure atomicity
+                    using var transaction = await _context.Database.BeginTransactionAsync();
+                    try
                     {
-                        Id = Guid.NewGuid(),
-                        UserId = user.Id,
-                        PasswordHash = user.PasswordHash,
-                        CreatedAt = DateTime.UtcNow
-                    };
-                    _context.Set<UserPasswordHistory>().Add(passwordHistory);
-                    await _context.SaveChangesAsync();
+                        _context.Users.Add(user);
+                        await _context.SaveChangesAsync();
 
-                    await transaction.CommitAsync();
-                }
-                catch
-                {
-                    await transaction.RollbackAsync();
-                    throw;
-                }
+                        // Save password to history
+                        var passwordHistory = new UserPasswordHistory
+                        {
+                            Id = Guid.NewGuid(),
+                            UserId = user.Id,
+                            PasswordHash = user.PasswordHash,
+                            CreatedAt = DateTime.UtcNow
+                        };
+                        _context.Set<UserPasswordHistory>().Add(passwordHistory);
+                        await _context.SaveChangesAsync();
+
+                        await transaction.CommitAsync();
+                    }
+                    catch
+                    {
+                        await transaction.RollbackAsync();
+                        throw;
+                    }
+                });
 
                 // Publish events
                 await _eventPublisher.PublishAsync(new UserCreatedEvent
@@ -394,34 +399,39 @@ namespace AmesaBackend.Auth.Services
                     throw new InvalidOperationException("Password was recently used. Please choose a different password");
                 }
 
-                // Use transaction to ensure atomicity
-                using var transaction = await _context.Database.BeginTransactionAsync();
-                try
+                // Use execution strategy to support retry with transactions
+                var strategy = _context.Database.CreateExecutionStrategy();
+                await strategy.ExecuteAsync(async () =>
                 {
-                    var oldPasswordHash = user.PasswordHash;
-                    user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
-                    user.PasswordResetToken = null;
-                    user.PasswordResetExpiresAt = null;
-                    await _context.SaveChangesAsync();
-
-                    // Save to password history
-                    var passwordHistory = new UserPasswordHistory
+                    // Use transaction to ensure atomicity
+                    using var transaction = await _context.Database.BeginTransactionAsync();
+                    try
                     {
-                        Id = Guid.NewGuid(),
-                        UserId = user.Id,
-                        PasswordHash = user.PasswordHash,
-                        CreatedAt = DateTime.UtcNow
-                    };
-                    _context.Set<UserPasswordHistory>().Add(passwordHistory);
-                    await _context.SaveChangesAsync();
+                        var oldPasswordHash = user.PasswordHash;
+                        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+                        user.PasswordResetToken = null;
+                        user.PasswordResetExpiresAt = null;
+                        await _context.SaveChangesAsync();
 
-                    await transaction.CommitAsync();
-                }
-                catch
-                {
-                    await transaction.RollbackAsync();
-                    throw;
-                }
+                        // Save to password history
+                        var passwordHistory = new UserPasswordHistory
+                        {
+                            Id = Guid.NewGuid(),
+                            UserId = user.Id,
+                            PasswordHash = user.PasswordHash,
+                            CreatedAt = DateTime.UtcNow
+                        };
+                        _context.Set<UserPasswordHistory>().Add(passwordHistory);
+                        await _context.SaveChangesAsync();
+
+                        await transaction.CommitAsync();
+                    }
+                    catch
+                    {
+                        await transaction.RollbackAsync();
+                        throw;
+                    }
+                });
 
                 _logger.LogInformation("Password reset successfully for user: {Email}", user.Email);
             }
@@ -804,32 +814,37 @@ namespace AmesaBackend.Auth.Services
 
         private async Task EnforceSessionLimitAsync(Guid userId)
         {
-            // Use transaction to prevent race conditions when multiple requests create sessions simultaneously
-            using var transaction = await _context.Database.BeginTransactionAsync();
-            try
+            // Use execution strategy to support retry with transactions
+            var strategy = _context.Database.CreateExecutionStrategy();
+            await strategy.ExecuteAsync(async () =>
             {
-                var activeSessions = await _context.UserSessions
-                    .Where(s => s.UserId == userId && s.IsActive && s.ExpiresAt > DateTime.UtcNow)
-                    .OrderBy(s => s.CreatedAt)
-                    .ToListAsync();
-
-                if (activeSessions.Count >= 5)
+                // Use transaction to prevent race conditions when multiple requests create sessions simultaneously
+                using var transaction = await _context.Database.BeginTransactionAsync();
+                try
                 {
-                    // Remove oldest sessions (keep 4 most recent)
-                    var sessionsToRemove = activeSessions.Take(activeSessions.Count - 4).ToList();
-                    foreach (var session in sessionsToRemove)
+                    var activeSessions = await _context.UserSessions
+                        .Where(s => s.UserId == userId && s.IsActive && s.ExpiresAt > DateTime.UtcNow)
+                        .OrderBy(s => s.CreatedAt)
+                        .ToListAsync();
+
+                    if (activeSessions.Count >= 5)
                     {
-                        session.IsActive = false;
+                        // Remove oldest sessions (keep 4 most recent)
+                        var sessionsToRemove = activeSessions.Take(activeSessions.Count - 4).ToList();
+                        foreach (var session in sessionsToRemove)
+                        {
+                            session.IsActive = false;
+                        }
+                        await _context.SaveChangesAsync();
                     }
-                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
                 }
-                await transaction.CommitAsync();
-            }
-            catch
-            {
-                await transaction.RollbackAsync();
-                throw;
-            }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
         }
 
         private async Task InvalidateAllSessionsAsync(Guid userId)
