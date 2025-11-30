@@ -38,7 +38,7 @@ public class TranslationsControllerIntegrationTests : IClassFixture<ContentWebAp
         _context.ChangeTracker.Clear();
         
         // Check if language already exists to avoid tracking conflicts
-        var existingLanguage = await _context.Languages.FirstOrDefaultAsync(l => l.Code == "en");
+        var existingLanguage = _context.Languages.FirstOrDefault(l => l.Code == "en");
         if (existingLanguage == null)
         {
             var language = new Language
@@ -141,7 +141,8 @@ public class TranslationsControllerIntegrationTests : IClassFixture<ContentWebAp
         // Assert - Both responses should be identical
         content2.Should().NotBeNull();
         content2!.Data.Should().NotBeNull();
-        content2.Data!.Should().BeEquivalentTo(content1.Data!);
+        content1!.Data.Should().NotBeNull();
+        content2.Data!.Should().BeEquivalentTo(content1.Data);
     }
 
     public void Dispose()
