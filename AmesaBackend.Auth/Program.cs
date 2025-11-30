@@ -94,8 +94,10 @@ if (!string.IsNullOrEmpty(googleCredentialsPath) && !string.IsNullOrEmpty(google
     }
     catch (JsonException ex)
     {
-        var errorMsg = $"Invalid Google service account JSON: {ex.Message}. " +
-                      $"First 100 chars: {googleServiceAccountJson?.Substring(0, Math.Min(100, googleServiceAccountJson.Length ?? 0))}";
+        var preview = string.IsNullOrEmpty(googleServiceAccountJson) 
+            ? "null or empty" 
+            : googleServiceAccountJson.Substring(0, Math.Min(100, googleServiceAccountJson.Length));
+        var errorMsg = $"Invalid Google service account JSON: {ex.Message}. First 100 chars: {preview}";
         Console.WriteLine($"ERROR: {errorMsg}");
         if (isProduction)
         {
