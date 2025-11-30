@@ -37,25 +37,46 @@ if (!string.IsNullOrEmpty(googleCredentialsPath) && !string.IsNullOrEmpty(google
 {
     try
     {
-        // Step 1: Trim whitespace
-        string processedJson = googleServiceAccountJson.Trim();
+        // Step 1: Initial trim (but preserve potential BOM at start)
+        string processedJson = googleServiceAccountJson.TrimStart();
         
-        // Step 2: Remove UTF-8 BOM by checking raw bytes (0xEF 0xBB 0xBF)
-        // Convert to bytes to detect BOM accurately regardless of string encoding
-        byte[] jsonBytes = System.Text.Encoding.UTF8.GetBytes(processedJson);
-        const byte UTF8_BOM_BYTE1 = 0xEF;
-        const byte UTF8_BOM_BYTE2 = 0xBB;
-        const byte UTF8_BOM_BYTE3 = 0xBF;
-        
-        if (jsonBytes.Length >= 3 && 
-            jsonBytes[0] == UTF8_BOM_BYTE1 && 
-            jsonBytes[1] == UTF8_BOM_BYTE2 && 
-            jsonBytes[2] == UTF8_BOM_BYTE3)
+        // Step 2: Remove UTF-8 BOM - handle multiple cases in order:
+        // Case 1: Unicode BOM character (\uFEFF) - single character
+        if (processedJson.Length > 0 && processedJson[0] == '\uFEFF')
         {
-            // Remove BOM by creating new string from bytes without first 3 bytes
-            processedJson = System.Text.Encoding.UTF8.GetString(jsonBytes, 3, jsonBytes.Length - 3);
-            Console.WriteLine("Removed UTF-8 BOM from Google service account JSON");
+            processedJson = processedJson.Substring(1).TrimStart();
+            Console.WriteLine("Removed Unicode BOM character (\\uFEFF) from Google service account JSON");
         }
+        // Case 2: BOM stored as Unicode characters (\u00EF\u00BB\u00BF = ï»¿) - three characters
+        else if (processedJson.Length >= 3 && 
+                 processedJson[0] == '\u00EF' && 
+                 processedJson[1] == '\u00BB' && 
+                 processedJson[2] == '\u00BF')
+        {
+            processedJson = processedJson.Substring(3).TrimStart();
+            Console.WriteLine("Removed UTF-8 BOM characters (ï»¿) from Google service account JSON");
+        }
+        // Case 3: Raw BOM bytes (0xEF 0xBB 0xBF) - check after converting to bytes
+        else
+        {
+            byte[] jsonBytes = System.Text.Encoding.UTF8.GetBytes(processedJson);
+            const byte UTF8_BOM_BYTE1 = 0xEF;
+            const byte UTF8_BOM_BYTE2 = 0xBB;
+            const byte UTF8_BOM_BYTE3 = 0xBF;
+            
+            if (jsonBytes.Length >= 3 && 
+                jsonBytes[0] == UTF8_BOM_BYTE1 && 
+                jsonBytes[1] == UTF8_BOM_BYTE2 && 
+                jsonBytes[2] == UTF8_BOM_BYTE3)
+            {
+                // Remove BOM by creating new string from bytes without first 3 bytes
+                processedJson = System.Text.Encoding.UTF8.GetString(jsonBytes, 3, jsonBytes.Length - 3).TrimStart();
+                Console.WriteLine("Removed UTF-8 BOM bytes (0xEF 0xBB 0xBF) from Google service account JSON");
+            }
+        }
+        
+        // Step 3: Final trim (remove trailing whitespace)
+        processedJson = processedJson.TrimEnd();
         
         // Step 3: Try base64 decode if it doesn't start with '{' after trimming
         string trimmedJson = processedJson.TrimStart();
