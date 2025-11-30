@@ -11,6 +11,7 @@ using System.Net;
 using System.Net.Http.Json;
 using Xunit;
 using FluentAssertions;
+using System.Threading.Tasks;
 
 namespace AmesaBackend.Tests.Integration;
 
@@ -33,17 +34,24 @@ public class TranslationsControllerIntegrationTests : IClassFixture<ContentWebAp
         _context.Database.EnsureDeleted();
         _context.Database.EnsureCreated();
         
-        // Add test language
-        var language = new Language
+        // Clear any tracked entities to avoid conflicts
+        _context.ChangeTracker.Clear();
+        
+        // Check if language already exists to avoid tracking conflicts
+        var existingLanguage = await _context.Languages.FirstOrDefaultAsync(l => l.Code == "en");
+        if (existingLanguage == null)
         {
-            Code = "en",
-            Name = "English",
-            NativeName = "English",
-            IsActive = true,
-            IsDefault = true,
-            DisplayOrder = 1
-        };
-        _context.Languages.Add(language);
+            var language = new Language
+            {
+                Code = "en",
+                Name = "English",
+                NativeName = "English",
+                IsActive = true,
+                IsDefault = true,
+                DisplayOrder = 1
+            };
+            _context.Languages.Add(language);
+        }
         
         // Add test translations
         var translations = new List<Translation>

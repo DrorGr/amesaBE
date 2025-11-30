@@ -156,6 +156,8 @@ public class HousesControllerIntegrationTests : IClassFixture<WebApplicationFixt
     {
         // Arrange
         var cache = _fixture.Services.GetRequiredService<ICache>();
+        // Cache key format: houses_{page}_{limit}_{status}_{minPrice}_{maxPrice}_{location}_{bedrooms}_{bathrooms}
+        // All null values become "null" string
         var cacheKey = "houses_1_20_null_null_null_null_null_null";
         
         // Act - First request (cache miss)
@@ -166,9 +168,21 @@ public class HousesControllerIntegrationTests : IClassFixture<WebApplicationFixt
         content1!.Success.Should().BeTrue();
         content1.Data.Should().NotBeNull();
         
-        // Verify cache was set
-        var cached = await cache.GetRecordAsync<PagedResponse<HouseDto>>(cacheKey);
-        cached.Should().NotBeNull();
+        // Small delay to ensure cache operation completes
+        await Task.Delay(100);
+        
+        // Verify cache was set - try a few times in case of timing issues
+        PagedResponse<HouseDto>? cached = null;
+        for (int i = 0; i < 5 && cached == null; i++)
+        {
+            cached = await cache.GetRecordAsync<PagedResponse<HouseDto>>(cacheKey);
+            if (cached == null)
+            {
+                await Task.Delay(50);
+            }
+        }
+        
+        cached.Should().NotBeNull("Cache should be set after first request");
         cached!.Items.Should().HaveCount(content1.Data!.Items.Count);
         
         // Act - Second request (cache hit)
