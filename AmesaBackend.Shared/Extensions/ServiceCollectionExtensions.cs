@@ -41,11 +41,14 @@ namespace AmesaBackend.Shared.Extensions
                 ?? configuration["CacheConfig:RedisConnection"]
                 ?? Environment.GetEnvironmentVariable("ConnectionStrings__Redis");
             
+            // Trim whitespace if connection string is found
+            redisConnection = redisConnection?.Trim();
+            
             // Correct production detection: use IHostEnvironment if available, fallback to environment variable
             var isProduction = environment?.IsProduction() ?? 
                               Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Production";
             
-            if (!string.IsNullOrEmpty(redisConnection))
+            if (!string.IsNullOrWhiteSpace(redisConnection))
             {
                 services.UseRedisCache(configuration, redisConnection);  // Pass the connection string we found
             }

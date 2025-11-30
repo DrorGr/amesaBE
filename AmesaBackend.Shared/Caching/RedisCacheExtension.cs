@@ -27,7 +27,13 @@ namespace AmesaBackend.Shared.Caching
                 ?? Environment.GetEnvironmentVariable("ConnectionStrings__Redis")  // Also check env var directly as fallback
                 ?? throw new InvalidOperationException("Redis connection string is not configured");
 
-            var connection = finalRedisConnectionString.Split(",");
+            // Validate connection string is not empty or whitespace
+            if (string.IsNullOrWhiteSpace(finalRedisConnectionString))
+            {
+                throw new InvalidOperationException("Redis connection string is empty or whitespace. Set ConnectionStrings__Redis environment variable or configure CacheConfig:RedisConnection in appsettings.");
+            }
+
+            var connection = finalRedisConnectionString.Split(",", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
             var configurationOptions = new ConfigurationOptions
             {
@@ -36,6 +42,9 @@ namespace AmesaBackend.Shared.Caching
 
             for (var i = connection.Length - 1; i >= 0; i--)
             {
+                if (string.IsNullOrWhiteSpace(connection[i]))
+                    continue;  // Skip empty parts
+                    
                 if (connection[i].StartsWith("password", StringComparison.OrdinalIgnoreCase))
                     configurationOptions.Password = connection[i].Split("=")[1];
                 else if (connection[i].StartsWith("serviceName", StringComparison.OrdinalIgnoreCase))
