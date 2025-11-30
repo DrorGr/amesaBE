@@ -160,19 +160,23 @@ public class HousesControllerIntegrationTests : IClassFixture<WebApplicationFixt
         
         // Act - First request (cache miss)
         var response1 = await _client.GetAsync("/api/v1/houses?page=1&limit=20");
+        response1.EnsureSuccessStatusCode();
         var content1 = await response1.Content.ReadFromJsonAsync<ApiResponse<PagedResponse<HouseDto>>>();
+        content1.Should().NotBeNull();
+        content1!.Success.Should().BeTrue();
+        content1.Data.Should().NotBeNull();
         
         // Verify cache was set
         var cached = await cache.GetRecordAsync<PagedResponse<HouseDto>>(cacheKey);
         cached.Should().NotBeNull();
-        cached!.Items.Should().HaveCount(content1!.Data!.Items.Count);
+        cached!.Items.Should().HaveCount(content1.Data!.Items.Count);
         
         // Act - Second request (cache hit)
         var response2 = await _client.GetAsync("/api/v1/houses?page=1&limit=20");
+        response2.EnsureSuccessStatusCode();
         var content2 = await response2.Content.ReadFromJsonAsync<ApiResponse<PagedResponse<HouseDto>>>();
         
         // Assert - Both responses should be identical
-        response2.EnsureSuccessStatusCode();
         content2.Should().NotBeNull();
         content2!.Data.Should().BeEquivalentTo(content1.Data);
     }

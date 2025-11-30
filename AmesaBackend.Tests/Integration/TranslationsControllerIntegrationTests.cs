@@ -81,7 +81,11 @@ public class TranslationsControllerIntegrationTests : IClassFixture<ContentWebAp
         
         // Act - First request (cache miss)
         var response1 = await _client.GetAsync("/api/v1/translations/en");
+        response1.EnsureSuccessStatusCode();
         var content1 = await response1.Content.ReadFromJsonAsync<ApiResponse<TranslationsResponseDto>>();
+        content1.Should().NotBeNull();
+        content1!.Success.Should().BeTrue();
+        content1.Data.Should().NotBeNull();
         
         // Verify cache was set
         var cached = await _cache.GetRecordAsync<TranslationsResponseDto>(cacheKey);
@@ -92,13 +96,13 @@ public class TranslationsControllerIntegrationTests : IClassFixture<ContentWebAp
         
         // Act - Second request (cache hit)
         var response2 = await _client.GetAsync("/api/v1/translations/en");
+        response2.EnsureSuccessStatusCode();
         var content2 = await response2.Content.ReadFromJsonAsync<ApiResponse<TranslationsResponseDto>>();
         
         // Assert - Both responses should be identical
-        response2.EnsureSuccessStatusCode();
         content2.Should().NotBeNull();
         content2!.Data.Should().NotBeNull();
-        content2.Data!.Translations.Should().BeEquivalentTo(content1!.Data!.Translations);
+        content2.Data!.Translations.Should().BeEquivalentTo(content1.Data!.Translations);
     }
 
     [Fact]
@@ -109,7 +113,11 @@ public class TranslationsControllerIntegrationTests : IClassFixture<ContentWebAp
         
         // Act - First request (cache miss)
         var response1 = await _client.GetAsync("/api/v1/translations/languages");
+        response1.EnsureSuccessStatusCode();
         var content1 = await response1.Content.ReadFromJsonAsync<ApiResponse<List<LanguageDto>>>();
+        content1.Should().NotBeNull();
+        content1!.Success.Should().BeTrue();
+        content1.Data.Should().NotBeNull();
         
         // Verify cache was set
         var cached = await _cache.GetRecordAsync<List<LanguageDto>>(cacheKey);
@@ -119,13 +127,13 @@ public class TranslationsControllerIntegrationTests : IClassFixture<ContentWebAp
         
         // Act - Second request (cache hit)
         var response2 = await _client.GetAsync("/api/v1/translations/languages");
+        response2.EnsureSuccessStatusCode();
         var content2 = await response2.Content.ReadFromJsonAsync<ApiResponse<List<LanguageDto>>>();
         
         // Assert - Both responses should be identical
-        response2.EnsureSuccessStatusCode();
         content2.Should().NotBeNull();
         content2!.Data.Should().NotBeNull();
-        content2.Data!.Should().BeEquivalentTo(content1!.Data!);
+        content2.Data!.Should().BeEquivalentTo(content1.Data!);
     }
 
     public void Dispose()
