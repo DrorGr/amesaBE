@@ -171,7 +171,8 @@ builder.Services.AddAuthentication(options =>
 // Register UserPreferencesService for favorites functionality
 builder.Services.AddScoped<IUserPreferencesService, UserPreferencesService>();
 builder.Services.AddScoped<ILotteryService, LotteryService>();
-builder.Services.AddScoped<IHouseCacheService, HouseCacheService>();
+// TODO: HouseCacheService registration - part of cost optimization refactoring
+// builder.Services.AddScoped<IHouseCacheService, HouseCacheService>();
 builder.Services.AddScoped<IFileService, FileService>();
 builder.Services.AddScoped<AmesaBackend.Shared.Configuration.IConfigurationService, AmesaBackend.Lottery.Services.ConfigurationService>();
 
