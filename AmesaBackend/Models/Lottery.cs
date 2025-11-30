@@ -62,6 +62,9 @@ namespace AmesaBackend.Models
         [Column(TypeName = "decimal(5,2)")]
         public decimal MinimumParticipationPercentage { get; set; } = 75.00m;
 
+        [Column("max_participants")]
+        public int? MaxParticipants { get; set; }
+
         public Guid? CreatedBy { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

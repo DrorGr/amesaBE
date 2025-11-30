@@ -39,6 +39,7 @@ namespace AmesaBackend.Controllers
             {
                 var query = _context.Houses
                     .Include(h => h.Images)
+                    .AsNoTracking()  // Performance optimization for read-only queries
                     .AsQueryable();
 
                 // Apply filters
@@ -97,17 +98,7 @@ namespace AmesaBackend.Controllers
                     .Select(g => new { HouseId = g.Key, UniqueCount = g.Select(t => t.UserId).Distinct().Count() })
                     .ToListAsync();
 
-                // Get MaxParticipants from database (column exists but not in model)
-                var maxParticipantsDict = new Dictionary<Guid, int?>();
-                if (houseIds.Any())
-                {
-                    var maxParticipantsList = await _context.Database
-                        .SqlQueryRaw<MaxParticipantsResult>(
-                            $"SELECT \"Id\", max_participants FROM amesa_lottery.houses WHERE \"Id\" = ANY({{0}})", 
-                            houseIds.ToArray())
-                        .ToListAsync();
-                    maxParticipantsDict = maxParticipantsList.ToDictionary(x => x.Id, x => x.MaxParticipants);
-                }
+                // MaxParticipants is now in the House model, so we can access it directly from the houses query
 
                 var houseDtos = houses.Select(house =>
                 {
@@ -117,7 +108,7 @@ namespace AmesaBackend.Controllers
 
                     // Get unique participants count
                     var uniqueParticipants = uniqueParticipantsCounts.FirstOrDefault(up => up.HouseId == house.Id)?.UniqueCount ?? 0;
-                    var maxParticipants = maxParticipantsDict.GetValueOrDefault(house.Id);
+                    var maxParticipants = house.MaxParticipants; // Now available directly from the model
                     var isCapReached = maxParticipants.HasValue 
                         && uniqueParticipants >= maxParticipants.Value;
                     var remainingSlots = maxParticipants.HasValue
@@ -239,10 +230,8 @@ namespace AmesaBackend.Controllers
                     .Distinct()
                     .CountAsync();
 
-                // Get MaxParticipants from database (column exists but not in model)
-                var maxParticipants = await _context.Database
-                    .SqlQueryRaw<int?>($"SELECT max_participants FROM amesa_lottery.houses WHERE \"Id\" = {{0}}", id)
-                    .FirstOrDefaultAsync();
+                // MaxParticipants is now in the House model, so we can access it directly
+                var maxParticipants = house.MaxParticipants;
 
                 var isCapReached = maxParticipants.HasValue 
                     && uniqueParticipants >= maxParticipants.Value;
@@ -493,10 +482,4 @@ namespace AmesaBackend.Controllers
         public bool HasPrevious { get; set; }
     }
 
-    // Helper class for MaxParticipants query result
-    public class MaxParticipantsResult
-    {
-        public Guid Id { get; set; }
-        public int? MaxParticipants { get; set; }
-    }
 }
