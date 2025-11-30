@@ -10,7 +10,7 @@ namespace AmesaBackend.Shared.Caching
     {
         private static string _caPath = string.Empty;
 
-        public static void UseRedisCache(this IServiceCollection services, IConfiguration configuration)
+        public static void UseRedisCache(this IServiceCollection services, IConfiguration configuration, string? redisConnectionString = null)
         {
             var pfxFilePath = configuration.GetValue<string>("CacheConfig:PfxFilePath");
             _caPath = configuration.GetValue<string>("CacheConfig:CaPath") ?? string.Empty;
@@ -19,13 +19,15 @@ namespace AmesaBackend.Shared.Caching
             var cacheConfig = configuration.GetSection("CacheConfig").Get<CacheConfig>() 
                 ?? new CacheConfig();
 
-            // Get Redis connection string from configuration
-            var redisConnectionString = cacheConfig.RedisConnection 
+            // Get Redis connection string - use passed value first, then fallback to configuration sources
+            var finalRedisConnectionString = redisConnectionString  // Use passed parameter first
+                ?? cacheConfig.RedisConnection 
                 ?? configuration.GetConnectionString("Redis") 
-                ?? configuration["CacheConfig:RedisConnection"] 
+                ?? configuration["CacheConfig:RedisConnection"]
+                ?? Environment.GetEnvironmentVariable("ConnectionStrings__Redis")  // Also check env var directly as fallback
                 ?? throw new InvalidOperationException("Redis connection string is not configured");
 
-            var connection = redisConnectionString.Split(",");
+            var connection = finalRedisConnectionString.Split(",");
 
             var configurationOptions = new ConfigurationOptions
             {
@@ -51,13 +53,13 @@ namespace AmesaBackend.Shared.Caching
 
             services.AddStackExchangeRedisCache(options =>
             {
-                options.Configuration = redisConnectionString;
+                options.Configuration = finalRedisConnectionString;
                 options.InstanceName = cacheConfig.InstanceName;
             });
 
             // Configure CacheConfig
             services.Configure<CacheConfig>(configuration.GetSection("CacheConfig"));
-            cacheConfig.RedisConnection = redisConnectionString;
+            cacheConfig.RedisConnection = finalRedisConnectionString;
             services.AddSingleton(cacheConfig);
 
             services.AddSingleton<ICache, StackRedisCache>();

@@ -47,7 +47,7 @@ namespace AmesaBackend.Shared.Extensions
             
             if (!string.IsNullOrEmpty(redisConnection))
             {
-                services.UseRedisCache(configuration);
+                services.UseRedisCache(configuration, redisConnection);  // Pass the connection string we found
             }
             else if (isProduction && requireRedis)
             {
