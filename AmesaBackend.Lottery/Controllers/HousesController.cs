@@ -6,6 +6,7 @@ using AmesaBackend.Lottery.DTOs;
 using AmesaBackend.Lottery.Models;
 using AmesaBackend.Lottery.Services;
 using AmesaBackend.Shared.Events;
+using AmesaBackend.Shared.Caching;
 using System.Security.Claims;
 
 namespace AmesaBackend.Lottery.Controllers
@@ -18,22 +19,20 @@ namespace AmesaBackend.Lottery.Controllers
         private readonly IEventPublisher _eventPublisher;
         private readonly ILogger<HousesController> _logger;
         private readonly ILotteryService _lotteryService;
-        // TODO: HouseCacheService - part of cost optimization refactoring
-        // private readonly IHouseCacheService? _houseCacheService;
+        private readonly ICache _cache;
 
         public HousesController(
             LotteryDbContext context, 
             IEventPublisher eventPublisher, 
             ILogger<HousesController> logger,
-            ILotteryService lotteryService)
-            // TODO: HouseCacheService - part of cost optimization refactoring
-            // IHouseCacheService? houseCacheService = null)
+            ILotteryService lotteryService,
+            ICache cache)
         {
             _context = context;
             _eventPublisher = eventPublisher;
             _logger = logger;
             _lotteryService = lotteryService;
-            // _houseCacheService = houseCacheService;
+            _cache = cache ?? throw new ArgumentNullException(nameof(cache));
         }
 
         [HttpGet("{id}")]
@@ -184,11 +183,18 @@ namespace AmesaBackend.Lottery.Controllers
                     CreatedByUserId = house.CreatedBy ?? Guid.Empty
                 });
 
-                // TODO: Invalidate house list caches - part of cost optimization refactoring
-                // if (_houseCacheService != null)
-                // {
-                //     await _houseCacheService.InvalidateHouseCachesAsync();
-                // }
+                // Invalidate house list caches
+                try
+                {
+                    await _cache.DeleteByRegex("houses_*");
+                    _logger.LogDebug("Invalidated all house list caches");
+                }
+                catch (Exception ex)
+                {
+                    // Log error but don't fail the request
+                    // Cache invalidation is non-critical - worst case, stale data is served briefly
+                    _logger.LogWarning(ex, "Error invalidating house caches (non-critical)");
+                }
 
                 var houseDto = new HouseDto
                 {
@@ -412,11 +418,18 @@ namespace AmesaBackend.Lottery.Controllers
                     CreatedAt = house.CreatedAt
                 };
 
-                // TODO: Invalidate house list caches - part of cost optimization refactoring
-                // if (_houseCacheService != null)
-                // {
-                //     await _houseCacheService.InvalidateHouseCachesAsync();
-                // }
+                // Invalidate house list caches
+                try
+                {
+                    await _cache.DeleteByRegex("houses_*");
+                    _logger.LogDebug("Invalidated all house list caches");
+                }
+                catch (Exception ex)
+                {
+                    // Log error but don't fail the request
+                    // Cache invalidation is non-critical - worst case, stale data is served briefly
+                    _logger.LogWarning(ex, "Error invalidating house caches (non-critical)");
+                }
 
                 return Ok(new ApiResponse<HouseDto>
                 {
@@ -460,11 +473,18 @@ namespace AmesaBackend.Lottery.Controllers
                 house.DeletedAt = DateTime.UtcNow;
                 await _context.SaveChangesAsync();
 
-                // TODO: Invalidate house list caches - part of cost optimization refactoring
-                // if (_houseCacheService != null)
-                // {
-                //     await _houseCacheService.InvalidateHouseCachesAsync();
-                // }
+                // Invalidate house list caches
+                try
+                {
+                    await _cache.DeleteByRegex("houses_*");
+                    _logger.LogDebug("Invalidated all house list caches");
+                }
+                catch (Exception ex)
+                {
+                    // Log error but don't fail the request
+                    // Cache invalidation is non-critical - worst case, stale data is served briefly
+                    _logger.LogWarning(ex, "Error invalidating house caches (non-critical)");
+                }
 
                 return Ok(new ApiResponse<object>
                 {
