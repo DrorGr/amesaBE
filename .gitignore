@@ -413,3 +413,19 @@ AmesaBackend.DatabaseSeeder/
 
 # PowerShell scripts
 *.ps1
+
+# Documentation files
+*.md
+*.txt
+
+# Cursor rules and context files
+.cursorrules
+*.cursorrules
+
+# SQL scripts (unless part of migrations in code)
+*.sql
+!**/Migrations/**/*.sql
+
+# Infrastructure documentation
+Infrastructure/**/*.md
+Infrastructure/**/*.txt
