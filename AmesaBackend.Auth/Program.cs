@@ -36,8 +36,33 @@ if (!string.IsNullOrEmpty(googleCredentialsPath) && !string.IsNullOrEmpty(google
 {
     try
     {
+        // Process the JSON string - handle base64 encoding, BOM, and whitespace
+        string processedJson = googleServiceAccountJson.Trim();
+        
+        // Remove UTF-8 BOM if present (0xEF 0xBB 0xBF)
+        if (processedJson.Length > 0 && processedJson[0] == '\uFEFF')
+        {
+            processedJson = processedJson.Substring(1);
+        }
+        
+        // Try base64 decode if it doesn't start with '{' (JSON object start)
+        if (!processedJson.TrimStart().StartsWith("{"))
+        {
+            try
+            {
+                byte[] decodedBytes = Convert.FromBase64String(processedJson);
+                processedJson = System.Text.Encoding.UTF8.GetString(decodedBytes);
+                Console.WriteLine("Google service account JSON was base64 encoded, decoded successfully");
+            }
+            catch (FormatException)
+            {
+                // Not base64, continue with original string
+                Console.WriteLine("Google service account JSON is not base64 encoded, using as-is");
+            }
+        }
+        
         // Validate JSON before writing
-        using (JsonDocument.Parse(googleServiceAccountJson))
+        using (JsonDocument.Parse(processedJson))
         {
             // JSON is valid, continue
         }
@@ -48,7 +73,8 @@ if (!string.IsNullOrEmpty(googleCredentialsPath) && !string.IsNullOrEmpty(google
             Directory.CreateDirectory(directory);
         }
         
-        File.WriteAllText(googleCredentialsPath, googleServiceAccountJson);
+        // Write with UTF-8 encoding (no BOM)
+        File.WriteAllText(googleCredentialsPath, processedJson, System.Text.Encoding.UTF8);
         
         // Set restrictive file permissions on Linux/Unix
         if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
@@ -68,7 +94,8 @@ if (!string.IsNullOrEmpty(googleCredentialsPath) && !string.IsNullOrEmpty(google
     }
     catch (JsonException ex)
     {
-        var errorMsg = $"Invalid Google service account JSON: {ex.Message}";
+        var errorMsg = $"Invalid Google service account JSON: {ex.Message}. " +
+                      $"First 100 chars: {googleServiceAccountJson?.Substring(0, Math.Min(100, googleServiceAccountJson.Length ?? 0))}";
         Console.WriteLine($"ERROR: {errorMsg}");
         if (isProduction)
         {
