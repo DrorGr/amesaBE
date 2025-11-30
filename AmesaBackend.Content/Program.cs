@@ -46,7 +46,8 @@ builder.Services.AddDbContext<ContentDbContext>(options =>
     }
 });
 
-builder.Services.AddAmesaBackendShared(builder.Configuration, builder.Environment);
+// Content service requires Redis for translations and languages caching
+builder.Services.AddAmesaBackendShared(builder.Configuration, builder.Environment, requireRedis: true);
 builder.Services.AddHealthChecks();
 
 var app = builder.Build();

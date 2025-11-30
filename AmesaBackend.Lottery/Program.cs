@@ -55,7 +55,8 @@ builder.Services.AddDbContext<LotteryDbContext>(options =>
     }
 });
 
-builder.Services.AddAmesaBackendShared(builder.Configuration, builder.Environment);
+// Lottery service requires Redis for house list caching and cache invalidation
+builder.Services.AddAmesaBackendShared(builder.Configuration, builder.Environment, requireRedis: true);
 
 // Configure JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");

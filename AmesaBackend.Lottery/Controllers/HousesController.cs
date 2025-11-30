@@ -19,7 +19,7 @@ namespace AmesaBackend.Lottery.Controllers
         private readonly IEventPublisher _eventPublisher;
         private readonly ILogger<HousesController> _logger;
         private readonly ILotteryService _lotteryService;
-        private readonly ICache? _cache;
+        private readonly ICache _cache;
         private static readonly TimeSpan HousesCacheExpiration = TimeSpan.FromMinutes(30);
 
         public HousesController(
@@ -27,13 +27,13 @@ namespace AmesaBackend.Lottery.Controllers
             IEventPublisher eventPublisher, 
             ILogger<HousesController> logger,
             ILotteryService lotteryService,
-            ICache? cache = null)
+            ICache cache)
         {
             _context = context;
             _eventPublisher = eventPublisher;
             _logger = logger;
             _lotteryService = lotteryService;
-            _cache = cache;
+            _cache = cache ?? throw new ArgumentNullException(nameof(cache));
         }
 
         private Guid? GetCurrentUserId()
@@ -47,28 +47,26 @@ namespace AmesaBackend.Lottery.Controllers
         /// </summary>
         private async Task InvalidateHouseCachesAsync()
         {
-            if (_cache != null)
+            try
             {
-                try
+                // Delete all cache keys matching the pattern "houses_*"
+                // Note: Redis pattern matching - the actual key format includes instance prefix
+                // but DeleteByRegex should handle the pattern correctly
+                var result = await _cache.DeleteByRegex("houses_*");
+                if (result)
                 {
-                    // Delete all cache keys matching the pattern "houses_*"
-                    // Note: Redis pattern matching - the actual key format includes instance prefix
-                    // but DeleteByRegex should handle the pattern correctly
-                    var result = await _cache.DeleteByRegex("houses_*");
-                    if (result)
-                    {
-                        _logger.LogDebug("Invalidated all house list caches");
-                    }
-                    else
-                    {
-                        _logger.LogDebug("No house list caches found to invalidate");
-                    }
+                    _logger.LogDebug("Invalidated all house list caches");
                 }
-                catch (Exception ex)
+                else
                 {
-                    // Log but don't throw - cache invalidation failure shouldn't break the operation
-                    _logger.LogWarning(ex, "Failed to invalidate house caches (non-critical)");
+                    _logger.LogDebug("No house list caches found to invalidate");
                 }
+            }
+            catch (Exception ex)
+            {
+                // Log but don't throw - cache invalidation failure shouldn't break the operation
+                // Fail-open design (matches Auth service pattern)
+                _logger.LogWarning(ex, "Failed to invalidate house caches (non-critical)");
             }
         }
 
@@ -90,27 +88,25 @@ namespace AmesaBackend.Lottery.Controllers
                 var cacheKey = $"houses_{page}_{limit}_{status ?? "null"}_{minPrice?.ToString() ?? "null"}_{maxPrice?.ToString() ?? "null"}_{(location ?? "null").Replace(" ", "_")}_{bedrooms?.ToString() ?? "null"}_{bathrooms?.ToString() ?? "null"}";
                 
                 // Try to get from cache first (with error handling)
-                if (_cache != null)
+                try
                 {
-                    try
+                    var cachedResponse = await _cache.GetRecordAsync<PagedResponse<HouseDto>>(cacheKey);
+                    if (cachedResponse != null)
                     {
-                        var cachedResponse = await _cache.GetRecordAsync<PagedResponse<HouseDto>>(cacheKey);
-                        if (cachedResponse != null)
+                        _logger.LogDebug("Houses list retrieved from cache for key: {CacheKey}", cacheKey);
+                        return Ok(new ApiResponse<PagedResponse<HouseDto>>
                         {
-                            _logger.LogDebug("Houses list retrieved from cache for key: {CacheKey}", cacheKey);
-                            return Ok(new ApiResponse<PagedResponse<HouseDto>>
-                            {
-                                Success = true,
-                                Data = cachedResponse,
-                                Message = "Houses retrieved successfully (cached)"
-                            });
-                        }
+                            Success = true,
+                            Data = cachedResponse,
+                            Message = "Houses retrieved successfully (cached)"
+                        });
                     }
-                    catch (Exception cacheEx)
-                    {
-                        // Log cache error but continue with database query
-                        _logger.LogWarning(cacheEx, "Error retrieving from cache, falling back to database query");
-                    }
+                }
+                catch (Exception cacheEx)
+                {
+                    // Log cache error but continue with database query
+                    // Fail-open design (matches Auth service pattern)
+                    _logger.LogWarning(cacheEx, "Error retrieving from cache, falling back to database query");
                 }
                 
                 var query = _context.Houses
@@ -246,18 +242,16 @@ namespace AmesaBackend.Lottery.Controllers
                 };
 
                 // Cache the response (with error handling)
-                if (_cache != null)
+                try
                 {
-                    try
-                    {
-                        await _cache.SetRecordAsync(cacheKey, pagedResponse, HousesCacheExpiration);
-                        _logger.LogDebug("Houses list cached with key: {CacheKey}", cacheKey);
-                    }
-                    catch (Exception cacheEx)
-                    {
-                        // Log cache error but don't fail the request
-                        _logger.LogWarning(cacheEx, "Error caching houses list, request still successful");
-                    }
+                    await _cache.SetRecordAsync(cacheKey, pagedResponse, HousesCacheExpiration);
+                    _logger.LogDebug("Houses list cached with key: {CacheKey}", cacheKey);
+                }
+                catch (Exception cacheEx)
+                {
+                    // Log cache error but don't fail the request
+                    // Fail-open design (matches Auth service pattern)
+                    _logger.LogWarning(cacheEx, "Error caching houses list, request still successful");
                 }
 
                 return Ok(new ApiResponse<PagedResponse<HouseDto>>

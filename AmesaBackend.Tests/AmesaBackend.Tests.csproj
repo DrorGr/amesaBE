@@ -33,6 +33,7 @@
   <ItemGroup>
     <ProjectReference Include="..\AmesaBackend\AmesaBackend.csproj" Aliases="MainApp" />
     <ProjectReference Include="..\AmesaBackend.Auth\AmesaBackend.Auth.csproj" Aliases="AuthApp" />
+    <ProjectReference Include="..\AmesaBackend.Content\AmesaBackend.Content.csproj" Aliases="ContentApp" />
     <ProjectReference Include="..\AmesaBackend.Shared\AmesaBackend.Shared.csproj" />
   </ItemGroup>
 

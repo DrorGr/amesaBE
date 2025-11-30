@@ -15,7 +15,7 @@ namespace AmesaBackend.Content.Controllers
         private readonly ContentDbContext _context;
         private readonly ILogger<TranslationsController> _logger;
         private readonly IEventPublisher _eventPublisher;
-        private readonly ICache? _cache;
+        private readonly ICache _cache;
         private static readonly TimeSpan CacheExpiration = TimeSpan.FromMinutes(30);
         private static readonly TimeSpan LanguagesCacheExpiration = TimeSpan.FromHours(1);
 
@@ -23,12 +23,12 @@ namespace AmesaBackend.Content.Controllers
             ContentDbContext context, 
             ILogger<TranslationsController> logger,
             IEventPublisher eventPublisher,
-            ICache? cache = null)
+            ICache cache)
         {
             _context = context;
             _logger = logger;
             _eventPublisher = eventPublisher;
-            _cache = cache;
+            _cache = cache ?? throw new ArgumentNullException(nameof(cache));
         }
 
         [HttpGet("{languageCode}")]
@@ -40,7 +40,7 @@ namespace AmesaBackend.Content.Controllers
                 var cacheKey = $"translations_{languageCode}";
                 
                 // Try to get from Redis cache first
-                if (_cache != null)
+                try
                 {
                     var cachedResponse = await _cache.GetRecordAsync<TranslationsResponseDto>(cacheKey);
                     if (cachedResponse != null)
@@ -52,6 +52,12 @@ namespace AmesaBackend.Content.Controllers
                             Message = "Translations retrieved successfully (cached)"
                         });
                     }
+                }
+                catch (Exception cacheEx)
+                {
+                    // Log cache error but continue with database query
+                    // Fail-open design (matches Auth service pattern)
+                    _logger.LogWarning(cacheEx, "Error retrieving from cache, falling back to database");
                 }
 
                 // Query database with AsNoTracking for better performance
@@ -71,9 +77,15 @@ namespace AmesaBackend.Content.Controllers
                 };
 
                 // Cache the response in Redis
-                if (_cache != null)
+                try
                 {
                     await _cache.SetRecordAsync(cacheKey, response, CacheExpiration);
+                }
+                catch (Exception cacheEx)
+                {
+                    // Log cache error but don't fail the request
+                    // Fail-open design (matches Auth service pattern)
+                    _logger.LogWarning(cacheEx, "Error caching translations, request still successful");
                 }
 
                 return Ok(new ApiResponse<TranslationsResponseDto>
@@ -108,7 +120,7 @@ namespace AmesaBackend.Content.Controllers
                 const string cacheKey = "languages_list";
                 
                 // Try to get from cache first
-                if (_cache != null)
+                try
                 {
                     var cachedResponse = await _cache.GetRecordAsync<List<LanguageDto>>(cacheKey);
                     if (cachedResponse != null)
@@ -121,6 +133,12 @@ namespace AmesaBackend.Content.Controllers
                             Message = "Languages retrieved successfully (cached)"
                         });
                     }
+                }
+                catch (Exception cacheEx)
+                {
+                    // Log cache error but continue with database query
+                    // Fail-open design (matches Auth service pattern)
+                    _logger.LogWarning(cacheEx, "Error retrieving from cache, falling back to database");
                 }
                 
                 var languages = await _context.Languages
@@ -141,10 +159,16 @@ namespace AmesaBackend.Content.Controllers
                 }).ToList();
 
                 // Cache the response
-                if (_cache != null)
+                try
                 {
                     await _cache.SetRecordAsync(cacheKey, languageDtos, LanguagesCacheExpiration);
                     _logger.LogDebug("Languages list cached");
+                }
+                catch (Exception cacheEx)
+                {
+                    // Log cache error but don't fail the request
+                    // Fail-open design (matches Auth service pattern)
+                    _logger.LogWarning(cacheEx, "Error caching languages list, request still successful");
                 }
 
                 return Ok(new ApiResponse<List<LanguageDto>>

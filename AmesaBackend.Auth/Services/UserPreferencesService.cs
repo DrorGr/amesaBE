@@ -3,6 +3,7 @@ using AmesaBackend.Auth.Data;
 using AmesaBackend.Auth.DTOs;
 using AmesaBackend.Auth.Models;
 using System.Text.Json;
+using System.Linq;
 
 namespace AmesaBackend.Auth.Services
 {
@@ -225,9 +226,11 @@ namespace AmesaBackend.Auth.Services
                 }
 
                 // Serialize merged preferences
-                var mergedJson = JsonSerializer.Serialize(existingPrefsDict);
+                // CRITICAL FIX: Convert all JsonElement values to proper objects before serialization
+                var cleanedPrefs = ConvertJsonElementsToObjects(existingPrefsDict);
+                var mergedJson = JsonSerializer.Serialize(cleanedPrefs);
                 // #region agent log
-                _logger.LogInformation("[DEBUG] UserPreferencesService.UpdateUserPreferencesAsync:merged-preferences userId={UserId} mergedJsonLength={Length} finalKeys={Keys}", userId, mergedJson.Length, string.Join(",", existingPrefsDict.Keys));
+                _logger.LogInformation("[DEBUG] UserPreferencesService.UpdateUserPreferencesAsync:merged-preferences userId={UserId} mergedJsonLength={Length} finalKeys={Keys}", userId, mergedJson.Length, string.Join(",", cleanedPrefs.Keys));
                 // #endregion
 
                 existingPreferences.PreferencesJson = mergedJson;
@@ -344,20 +347,35 @@ namespace AmesaBackend.Auth.Services
             };
 
             // Merge with existing preferences
-            var existingPrefs = new Dictionary<string, JsonElement>();
-            if (rootElement.ValueKind == JsonValueKind.Object)
+            // CRITICAL FIX: Use Dictionary<string, object> instead of Dictionary<string, JsonElement>
+            // and convert JsonElement values to proper objects before serialization
+            Dictionary<string, object> existingPrefs;
+            if (preferences != null && rootElement.ValueKind == JsonValueKind.Object)
             {
-                foreach (var prop in rootElement.EnumerateObject())
+                try
                 {
-                    existingPrefs[prop.Name] = prop.Value;
+                    // Deserialize the entire preferences JSON to a dictionary
+                    existingPrefs = JsonSerializer.Deserialize<Dictionary<string, object>>(preferences.PreferencesJson) 
+                        ?? new Dictionary<string, object>();
                 }
+                catch
+                {
+                    existingPrefs = new Dictionary<string, object>();
+                }
+            }
+            else
+            {
+                existingPrefs = new Dictionary<string, object>();
             }
 
             // Update lottery preferences
-            existingPrefs["lotteryPreferences"] = JsonSerializer.SerializeToElement(lotteryPrefs);
+            existingPrefs["lotteryPreferences"] = lotteryPrefs;
 
+            // CRITICAL FIX: Convert all JsonElement values to proper objects before serialization
+            var cleanedPrefs = ConvertJsonElementsToObjects(existingPrefs);
+            
             // Update the full preferences JSON
-            await UpdateUserPreferencesAsync(userId, JsonSerializer.SerializeToElement(existingPrefs));
+            await UpdateUserPreferencesAsync(userId, JsonSerializer.SerializeToElement(cleanedPrefs));
 
             return await GetLotteryPreferencesAsync(userId) ?? new LotteryPreferencesDto();
         }
@@ -652,10 +670,14 @@ namespace AmesaBackend.Auth.Services
                     // #endregion
 
                     // Serialize the entire preferences dictionary back to JSON
+                    // CRITICAL FIX: Convert all JsonElement values to proper objects before serialization
+                    // When deserializing JSONB to Dictionary<string, object>, nested objects become JsonElement
+                    // JsonElement values can't be serialized properly, so we need to convert them first
+                    var cleanedPrefs = ConvertJsonElementsToObjects(existingPrefs);
                     // #region agent log
-                    _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:before-serialize attempt={Attempt} houseId={HouseId} userId={UserId} existingPrefsCount={Count}", attempt, houseId, userId, existingPrefs.Count);
+                    _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:before-serialize attempt={Attempt} houseId={HouseId} userId={UserId} existingPrefsCount={Count} cleanedPrefsCount={CleanedCount}", attempt, houseId, userId, existingPrefs.Count, cleanedPrefs.Count);
                     // #endregion
-                    var serializedJson = JsonSerializer.SerializeToElement(existingPrefs);
+                    var serializedJson = JsonSerializer.SerializeToElement(cleanedPrefs);
                     // #region agent log
                     _logger.LogInformation("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:after-serialize attempt={Attempt} houseId={HouseId} userId={UserId} serializedJsonValueKind={ValueKind}", attempt, houseId, userId, serializedJson.ValueKind);
                     // #endregion
@@ -727,6 +749,56 @@ namespace AmesaBackend.Auth.Services
             _logger.LogError("[DEBUG] UserPreferencesService.AddHouseToFavoritesAsync:unexpected-exit houseId={HouseId} userId={UserId}", houseId, userId);
             // #endregion
             return false;
+        }
+
+        /// <summary>
+        /// Converts JsonElement values in a dictionary to proper objects for serialization
+        /// When deserializing JSONB to Dictionary&lt;string, object&gt;, nested objects become JsonElement
+        /// JsonElement values can't be serialized properly, so we need to convert them first
+        /// </summary>
+        private Dictionary<string, object> ConvertJsonElementsToObjects(Dictionary<string, object> dict)
+        {
+            var result = new Dictionary<string, object>();
+            foreach (var kvp in dict)
+            {
+                if (kvp.Value is JsonElement jsonElement)
+                {
+                    // Convert JsonElement to proper object based on its type
+                    result[kvp.Key] = ConvertJsonElementToObject(jsonElement);
+                }
+                else if (kvp.Value is Dictionary<string, object> nestedDict)
+                {
+                    // Recursively convert nested dictionaries
+                    result[kvp.Key] = ConvertJsonElementsToObjects(nestedDict);
+                }
+                else
+                {
+                    // Already a proper object, keep as is
+                    result[kvp.Key] = kvp.Value;
+                }
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// Converts a JsonElement to a proper object (Dictionary, List, or primitive)
+        /// </summary>
+        private object ConvertJsonElementToObject(JsonElement element)
+        {
+            return element.ValueKind switch
+            {
+                JsonValueKind.Object => element.EnumerateObject()
+                    .ToDictionary(prop => prop.Name, prop => ConvertJsonElementToObject(prop.Value)),
+                JsonValueKind.Array => element.EnumerateArray()
+                    .Select(ConvertJsonElementToObject)
+                    .ToList(),
+                JsonValueKind.String => element.GetString()!,
+                JsonValueKind.Number => element.TryGetInt64(out var intVal) ? intVal : element.GetDecimal(),
+                JsonValueKind.True => true,
+                JsonValueKind.False => false,
+                JsonValueKind.Null => (object?)null,
+                _ => element.GetRawText()
+            };
         }
 
         public async Task<bool> RemoveHouseFromFavoritesAsync(Guid userId, Guid houseId)
@@ -811,7 +883,9 @@ namespace AmesaBackend.Auth.Services
                 existingPrefs["lotteryPreferences"] = lotteryPrefsDict;
 
                 // Serialize the entire preferences dictionary back to JSON
-                await UpdateUserPreferencesAsync(userId, JsonSerializer.SerializeToElement(existingPrefs));
+                // CRITICAL FIX: Convert all JsonElement values to proper objects before serialization
+                var cleanedPrefs = ConvertJsonElementsToObjects(existingPrefs);
+                await UpdateUserPreferencesAsync(userId, JsonSerializer.SerializeToElement(cleanedPrefs));
 
                 _logger.LogInformation("Removed house {HouseId} from favorites for user {UserId}", houseId, userId);
                 return true;

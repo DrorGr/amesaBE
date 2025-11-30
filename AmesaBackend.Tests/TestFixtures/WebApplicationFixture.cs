@@ -4,6 +4,8 @@ using MainApp::AmesaBackend.Data;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using AmesaBackend.Shared.Caching;
+using AmesaBackend.Tests.TestHelpers;
 
 namespace AmesaBackend.Tests.TestFixtures;
 
@@ -17,6 +19,7 @@ public class WebApplicationFixture : IDisposable
     public WebApplicationFactory<MainProgram> Factory { get; }
     public HttpClient Client { get; }
     public AmesaDbContext DbContext { get; }
+    public IServiceProvider Services { get; }
     private readonly IServiceScope _scope;
     private readonly string _databaseName = $"TestDb_{Guid.NewGuid()}";
 
@@ -41,11 +44,23 @@ public class WebApplicationFixture : IDisposable
                     {
                         options.UseInMemoryDatabase(databaseName);
                     });
+
+                    // Remove existing ICache registration if present
+                    var cacheDescriptor = services.SingleOrDefault(
+                        d => d.ServiceType == typeof(ICache));
+                    if (cacheDescriptor != null)
+                    {
+                        services.Remove(cacheDescriptor);
+                    }
+
+                    // Add in-memory cache mock for tests
+                    services.AddSingleton<ICache, InMemoryCache>();
                 });
             });
 
         Client = Factory.CreateClient();
         _scope = Factory.Services.CreateScope();
+        Services = _scope.ServiceProvider;
         DbContext = _scope.ServiceProvider.GetRequiredService<AmesaDbContext>();
     }
 

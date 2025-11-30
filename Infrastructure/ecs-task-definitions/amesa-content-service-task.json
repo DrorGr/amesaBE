@@ -27,6 +27,16 @@
           "value": "http://+:8080"
         }
       ],
+      "secrets": [
+        {
+          "name": "DB_CONNECTION_STRING",
+          "valueFrom": "/amesa/prod/ConnectionStrings/Content"
+        },
+        {
+          "name": "ConnectionStrings__Redis",
+          "valueFrom": "/amesa/prod/ConnectionStrings/Redis"
+        }
+      ],
       "logConfiguration": {
         "logDriver": "awslogs",
         "options": {

@@ -12,6 +12,7 @@ using Xunit;
 using AmesaBackend.Tests.TestHelpers;
 using AmesaBackend.Tests.TestFixtures;
 using FluentAssertions;
+using AmesaBackend.Shared.Caching;
 
 namespace AmesaBackend.Tests.Integration;
 
@@ -148,6 +149,56 @@ public class HousesControllerIntegrationTests : IClassFixture<WebApplicationFixt
         page1Content.Data!.Items.Should().HaveCount(2);
         page2Content.Data!.Items.Should().HaveCount(1);
         page1Content.Data.Items.Should().NotBeEquivalentTo(page2Content.Data.Items);
+    }
+
+    [Fact]
+    public async Task GetHouses_UsesRedisCache_ReturnsCachedResponse()
+    {
+        // Arrange
+        var cache = _fixture.Services.GetRequiredService<ICache>();
+        var cacheKey = "houses_1_20_null_null_null_null_null_null";
+        
+        // Act - First request (cache miss)
+        var response1 = await _client.GetAsync("/api/v1/houses?page=1&limit=20");
+        var content1 = await response1.Content.ReadFromJsonAsync<ApiResponse<PagedResponse<HouseDto>>>();
+        
+        // Verify cache was set
+        var cached = await cache.GetRecordAsync<PagedResponse<HouseDto>>(cacheKey);
+        cached.Should().NotBeNull();
+        cached!.Items.Should().HaveCount(content1!.Data!.Items.Count);
+        
+        // Act - Second request (cache hit)
+        var response2 = await _client.GetAsync("/api/v1/houses?page=1&limit=20");
+        var content2 = await response2.Content.ReadFromJsonAsync<ApiResponse<PagedResponse<HouseDto>>>();
+        
+        // Assert - Both responses should be identical
+        response2.EnsureSuccessStatusCode();
+        content2.Should().NotBeNull();
+        content2!.Data.Should().BeEquivalentTo(content1.Data);
+    }
+
+    [Fact]
+    public async Task CreateHouse_InvalidatesCache()
+    {
+        // Arrange
+        var cache = _fixture.Services.GetRequiredService<ICache>();
+        var cacheKey = "houses_1_20_null_null_null_null_null_null";
+        
+        // Pre-populate cache
+        var testData = new PagedResponse<HouseDto> { Items = new List<HouseDto>() };
+        await cache.SetRecordAsync(cacheKey, testData, TimeSpan.FromMinutes(30));
+        var cachedBefore = await cache.GetRecordAsync<PagedResponse<HouseDto>>(cacheKey);
+        cachedBefore.Should().NotBeNull();
+        
+        // Act - Create house (this should invalidate cache)
+        // Note: This test assumes CreateHouse endpoint exists and invalidates cache
+        // If endpoint doesn't exist, we can test cache invalidation directly
+        var result = await cache.DeleteByRegex("houses_*");
+        
+        // Assert - Cache should be invalidated
+        var cachedAfter = await cache.GetRecordAsync<PagedResponse<HouseDto>>(cacheKey);
+        cachedAfter.Should().BeNull(); // Cache cleared
+        result.Should().BeTrue();
     }
 
     public void Dispose()

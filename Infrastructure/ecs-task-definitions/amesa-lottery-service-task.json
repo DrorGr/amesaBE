@@ -35,6 +35,10 @@
         {
           "name": "ConnectionStrings__DefaultConnection",
           "valueFrom": "/amesa/prod/ConnectionStrings/Lottery"
+        },
+        {
+          "name": "ConnectionStrings__Redis",
+          "valueFrom": "/amesa/prod/ConnectionStrings/Redis"
         }
       ],
       "logConfiguration": {
