@@ -43,16 +43,36 @@ namespace AmesaBackend.Shared.Caching
             for (var i = connection.Length - 1; i >= 0; i--)
             {
                 if (string.IsNullOrWhiteSpace(connection[i]))
-                    continue;  // Skip empty parts
-                    
+                    continue;  // Skip empty parts (defensive check, though TrimEntries should handle this)
+                
                 if (connection[i].StartsWith("password", StringComparison.OrdinalIgnoreCase))
-                    configurationOptions.Password = connection[i].Split("=")[1];
-                else if (connection[i].StartsWith("serviceName", StringComparison.OrdinalIgnoreCase))
-                    configurationOptions.ServiceName = connection[i].Split("=")[1];
-                else
                 {
-                    configurationOptions.EndPoints.Add(connection[i]);
+                    var parts = connection[i].Split("=", 2);
+                    if (parts.Length == 2 && !string.IsNullOrWhiteSpace(parts[1]))
+                    {
+                        configurationOptions.Password = parts[1];
+                    }
+                    continue;
                 }
+                
+                if (connection[i].StartsWith("serviceName", StringComparison.OrdinalIgnoreCase))
+                {
+                    var parts = connection[i].Split("=", 2);
+                    if (parts.Length == 2 && !string.IsNullOrWhiteSpace(parts[1]))
+                    {
+                        configurationOptions.ServiceName = parts[1];
+                    }
+                    continue;
+                }
+                
+                // Must be an endpoint
+                configurationOptions.EndPoints.Add(connection[i]);
+            }
+
+            // Validate that at least one endpoint was added
+            if (configurationOptions.EndPoints.Count == 0)
+            {
+                throw new InvalidOperationException("Redis connection string must contain at least one endpoint (host:port). No valid endpoints found in connection string.");
             }
 
             if (isTlsOn)
