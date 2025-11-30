@@ -28,6 +28,9 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// Add Response Caching for [ResponseCache] attribute support
+builder.Services.AddResponseCaching();
+
 // Configure Entity Framework
 builder.Services.AddDbContext<LotteryDbContext>(options =>
 {
@@ -166,6 +169,7 @@ if (builder.Configuration.GetValue<bool>("XRay:Enabled", false))
 
 app.UseAmesaMiddleware();
 app.UseAmesaLogging();
+app.UseResponseCaching(); // Must be before UseRouting for VaryByQueryKeys to work
 app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
