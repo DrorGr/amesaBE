@@ -32,26 +32,51 @@ var isProduction = builder.Environment.IsProduction();
 // Write Google service account JSON from environment variable to file (for ECS deployment)
 var googleCredentialsPath = Environment.GetEnvironmentVariable("GOOGLE_APPLICATION_CREDENTIALS");
 var googleServiceAccountJson = Environment.GetEnvironmentVariable("GOOGLE_SERVICE_ACCOUNT_JSON");
+
 if (!string.IsNullOrEmpty(googleCredentialsPath) && !string.IsNullOrEmpty(googleServiceAccountJson) && !File.Exists(googleCredentialsPath))
 {
     try
     {
-        // Process the JSON string - handle base64 encoding, BOM, and whitespace
+        // Step 1: Trim whitespace
         string processedJson = googleServiceAccountJson.Trim();
         
-        // Remove UTF-8 BOM if present (0xEF 0xBB 0xBF)
-        if (processedJson.Length > 0 && processedJson[0] == '\uFEFF')
+        // Step 2: Remove UTF-8 BOM by checking raw bytes (0xEF 0xBB 0xBF)
+        // Convert to bytes to detect BOM accurately regardless of string encoding
+        byte[] jsonBytes = System.Text.Encoding.UTF8.GetBytes(processedJson);
+        const byte UTF8_BOM_BYTE1 = 0xEF;
+        const byte UTF8_BOM_BYTE2 = 0xBB;
+        const byte UTF8_BOM_BYTE3 = 0xBF;
+        
+        if (jsonBytes.Length >= 3 && 
+            jsonBytes[0] == UTF8_BOM_BYTE1 && 
+            jsonBytes[1] == UTF8_BOM_BYTE2 && 
+            jsonBytes[2] == UTF8_BOM_BYTE3)
         {
-            processedJson = processedJson.Substring(1);
+            // Remove BOM by creating new string from bytes without first 3 bytes
+            processedJson = System.Text.Encoding.UTF8.GetString(jsonBytes, 3, jsonBytes.Length - 3);
+            Console.WriteLine("Removed UTF-8 BOM from Google service account JSON");
         }
         
-        // Try base64 decode if it doesn't start with '{' (JSON object start)
-        if (!processedJson.TrimStart().StartsWith("{"))
+        // Step 3: Try base64 decode if it doesn't start with '{' after trimming
+        string trimmedJson = processedJson.TrimStart();
+        if (!trimmedJson.StartsWith("{") && !trimmedJson.StartsWith("["))
         {
             try
             {
-                byte[] decodedBytes = Convert.FromBase64String(processedJson);
-                processedJson = System.Text.Encoding.UTF8.GetString(decodedBytes);
+                byte[] decodedBytes = Convert.FromBase64String(trimmedJson);
+                string decodedJson = System.Text.Encoding.UTF8.GetString(decodedBytes);
+                
+                // Check if decoded result has BOM and remove it
+                byte[] decodedBytesCheck = System.Text.Encoding.UTF8.GetBytes(decodedJson);
+                if (decodedBytesCheck.Length >= 3 && 
+                    decodedBytesCheck[0] == UTF8_BOM_BYTE1 && 
+                    decodedBytesCheck[1] == UTF8_BOM_BYTE2 && 
+                    decodedBytesCheck[2] == UTF8_BOM_BYTE3)
+                {
+                    decodedJson = System.Text.Encoding.UTF8.GetString(decodedBytesCheck, 3, decodedBytesCheck.Length - 3);
+                }
+                
+                processedJson = decodedJson;
                 Console.WriteLine("Google service account JSON was base64 encoded, decoded successfully");
             }
             catch (FormatException)
@@ -61,32 +86,57 @@ if (!string.IsNullOrEmpty(googleCredentialsPath) && !string.IsNullOrEmpty(google
             }
         }
         
-        // Validate JSON before writing
+        // Step 4: Final trim after all processing
+        processedJson = processedJson.Trim();
+        
+        // Step 5: Validate JSON structure before writing
+        if (string.IsNullOrWhiteSpace(processedJson))
+        {
+            throw new InvalidOperationException("Google service account JSON is empty after processing");
+        }
+        
         using (JsonDocument.Parse(processedJson))
         {
             // JSON is valid, continue
         }
 
+        // Step 6: Ensure directory exists
         var directory = Path.GetDirectoryName(googleCredentialsPath);
         if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
         {
-            Directory.CreateDirectory(directory);
+            try
+            {
+                Directory.CreateDirectory(directory);
+                Console.WriteLine($"Created directory: {directory}");
+            }
+            catch (Exception dirEx)
+            {
+                throw new InvalidOperationException($"Failed to create directory {directory}: {dirEx.Message}", dirEx);
+            }
         }
         
-        // Write with UTF-8 encoding (no BOM)
-        File.WriteAllText(googleCredentialsPath, processedJson, System.Text.Encoding.UTF8);
+        // Step 7: Write file with UTF-8 encoding (no BOM)
+        // Use UTF8Encoding(false) to explicitly avoid BOM
+        var utf8NoBom = new System.Text.UTF8Encoding(false);
+        File.WriteAllText(googleCredentialsPath, processedJson, utf8NoBom);
         
-        // Set restrictive file permissions on Linux/Unix
+        // Step 8: Set restrictive file permissions on Linux/Unix
         if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
         {
             try
             {
                 File.SetUnixFileMode(googleCredentialsPath, 
                     System.IO.UnixFileMode.UserRead | System.IO.UnixFileMode.UserWrite);
+                Console.WriteLine($"Set file permissions for: {googleCredentialsPath}");
             }
             catch (PlatformNotSupportedException)
             {
                 // Not on Unix, ignore
+            }
+            catch (Exception permEx)
+            {
+                // Log but don't fail - file is written, permissions are nice-to-have
+                Console.WriteLine($"Warning: Failed to set file permissions: {permEx.Message}");
             }
         }
         
@@ -96,10 +146,20 @@ if (!string.IsNullOrEmpty(googleCredentialsPath) && !string.IsNullOrEmpty(google
     {
         var preview = string.IsNullOrEmpty(googleServiceAccountJson) 
             ? "null or empty" 
-            : googleServiceAccountJson.Substring(0, Math.Min(100, googleServiceAccountJson.Length));
-        var errorMsg = $"Invalid Google service account JSON: {ex.Message}. First 100 chars: {preview}";
+            : googleServiceAccountJson.Length > 100 
+                ? googleServiceAccountJson.Substring(0, 100) 
+                : googleServiceAccountJson;
+        var errorMsg = $"Invalid Google service account JSON: {ex.Message}. First 100 chars (hex): {BitConverter.ToString(System.Text.Encoding.UTF8.GetBytes(preview).Take(100).ToArray())}";
         Console.WriteLine($"ERROR: {errorMsg}");
+        
+        // In production, make this non-blocking to allow service to start
+        // CAPTCHA will be disabled, but service remains functional
         if (isProduction)
+        {
+            Console.WriteLine("WARNING: Service will start without Google credentials. CAPTCHA features will be disabled.");
+            // Don't throw - allow service to start
+        }
+        else
         {
             throw new InvalidOperationException(errorMsg, ex);
         }
@@ -108,7 +168,14 @@ if (!string.IsNullOrEmpty(googleCredentialsPath) && !string.IsNullOrEmpty(google
     {
         var errorMsg = $"Failed to write Google service account credentials file: {ex.Message}";
         Console.WriteLine($"ERROR: {errorMsg}");
+        
+        // In production, make this non-blocking
         if (isProduction)
+        {
+            Console.WriteLine("WARNING: Service will start without Google credentials. CAPTCHA features will be disabled.");
+            // Don't throw - allow service to start
+        }
+        else
         {
             throw new InvalidOperationException(errorMsg, ex);
         }
