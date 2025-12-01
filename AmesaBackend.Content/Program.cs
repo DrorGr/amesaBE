@@ -22,6 +22,22 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// Configure CORS for frontend access
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowFrontend", policy =>
+    {
+        var allowedOrigins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>() 
+            ?? new[] { "http://localhost:4200", "https://dpqbvdgnenckf.cloudfront.net" };
+        Log.Information("CORS allowed origins: {Origins}", string.Join(", ", allowedOrigins));
+        policy.WithOrigins(allowedOrigins)
+              .AllowAnyMethod()
+              .AllowAnyHeader()
+              .AllowCredentials()
+              .SetPreflightMaxAge(TimeSpan.FromHours(24));
+    });
+});
+
 // Configure Entity Framework
 builder.Services.AddDbContext<ContentDbContext>(options =>
 {
@@ -64,6 +80,10 @@ if (builder.Configuration.GetValue<bool>("XRay:Enabled", false))
 app.UseAmesaMiddleware();
 app.UseAmesaLogging();
 app.UseRouting();
+
+// Add CORS early in pipeline (before UseAuthentication)
+app.UseCors("AllowFrontend");
+
 app.UseAuthentication();
 app.UseAuthorization();
 
