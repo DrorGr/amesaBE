@@ -45,12 +45,18 @@ namespace AmesaBackend.Content.Controllers
                     var cachedResponse = await _cache.GetRecordAsync<TranslationsResponseDto>(cacheKey);
                     if (cachedResponse != null)
                     {
-                        return Ok(new ApiResponse<TranslationsResponseDto>
-                        {
-                            Success = true,
-                            Data = cachedResponse,
-                            Message = "Translations retrieved successfully (cached)"
-                        });
+                // #region agent log
+                var cachedApiResponse = new ApiResponse<TranslationsResponseDto>
+                {
+                    Success = true,
+                    Data = cachedResponse,
+                    Message = "Translations retrieved successfully (cached)"
+                };
+                var cachedJson = System.Text.Json.JsonSerializer.Serialize(cachedApiResponse, new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase });
+                _logger.LogInformation("[DEBUG_TRANSLATIONS] Cached response - HasSuccess: {HasSuccess}, HasData: {HasData}, JsonPreview: {JsonPreview}", 
+                    cachedApiResponse.Success, cachedApiResponse.Data != null, cachedJson.Substring(0, Math.Min(200, cachedJson.Length)));
+                // #endregion
+                return Ok(cachedApiResponse);
                     }
                 }
                 catch (Exception cacheEx)
@@ -88,12 +94,19 @@ namespace AmesaBackend.Content.Controllers
                     _logger.LogWarning(cacheEx, "Error caching translations, request still successful");
                 }
 
-                return Ok(new ApiResponse<TranslationsResponseDto>
+                // #region agent log
+                var apiResponse = new ApiResponse<TranslationsResponseDto>
                 {
                     Success = true,
                     Data = response,
                     Message = "Translations retrieved successfully"
-                });
+                };
+                var jsonPreview = System.Text.Json.JsonSerializer.Serialize(apiResponse, new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase });
+                _logger.LogInformation("[DEBUG_TRANSLATIONS] Database response - HasSuccess: {HasSuccess}, HasData: {HasData}, JsonPreview: {JsonPreview}, PropertyNames: Success={Success}, Data={Data}", 
+                    apiResponse.Success, apiResponse.Data != null, jsonPreview.Substring(0, Math.Min(200, jsonPreview.Length)), 
+                    nameof(apiResponse.Success), nameof(apiResponse.Data));
+                // #endregion
+                return Ok(apiResponse);
             }
             catch (Exception ex)
             {

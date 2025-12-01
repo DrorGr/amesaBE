@@ -25,6 +25,11 @@ builder.Services.AddControllers()
         // This ensures frontend receives properties in camelCase (e.g., "success" instead of "Success")
         options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
         options.JsonSerializerOptions.WriteIndented = false;
+        // #region agent log
+        Log.Information("[DEBUG_TRANSLATIONS] JsonOptions configured - PropertyNamingPolicy: {Policy}, WriteIndented: {Indented}", 
+            options.JsonSerializerOptions.PropertyNamingPolicy?.GetType().Name ?? "null", 
+            options.JsonSerializerOptions.WriteIndented);
+        // #endregion
     });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
