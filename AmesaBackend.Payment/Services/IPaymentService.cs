@@ -9,7 +9,7 @@ namespace AmesaBackend.Payment.Services
         Task<PaymentMethodDto> UpdatePaymentMethodAsync(Guid userId, Guid paymentMethodId, UpdatePaymentMethodRequest request);
         Task DeletePaymentMethodAsync(Guid userId, Guid paymentMethodId);
         Task<List<TransactionDto>> GetTransactionsAsync(Guid userId);
-        Task<TransactionDto> GetTransactionAsync(Guid transactionId);
-        Task<PaymentResponse> ProcessPaymentAsync(Guid userId, ProcessPaymentRequest request);
+        Task<TransactionDto> GetTransactionAsync(Guid transactionId, Guid userId);
+        Task<PaymentResponse> ProcessPaymentAsync(Guid userId, ProcessPaymentRequest request, string? ipAddress = null, string? userAgent = null);
     }
 }

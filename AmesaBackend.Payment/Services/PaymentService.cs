@@ -8,16 +8,22 @@ namespace AmesaBackend.Payment.Services
 {
     public class PaymentService : IPaymentService
     {
-        private readonly PaymentDbContext _context;
-        private readonly IEventPublisher _eventPublisher;
-        private readonly ILogger<PaymentService> _logger;
+    private readonly PaymentDbContext _context;
+    private readonly IEventPublisher _eventPublisher;
+    private readonly ILogger<PaymentService> _logger;
+    private readonly IPaymentAuditService? _auditService;
 
-        public PaymentService(PaymentDbContext context, IEventPublisher eventPublisher, ILogger<PaymentService> logger)
-        {
-            _context = context;
-            _eventPublisher = eventPublisher;
-            _logger = logger;
-        }
+    public PaymentService(
+        PaymentDbContext context, 
+        IEventPublisher eventPublisher, 
+        ILogger<PaymentService> logger,
+        IServiceProvider serviceProvider)
+    {
+        _context = context;
+        _eventPublisher = eventPublisher;
+        _logger = logger;
+        _auditService = serviceProvider.GetService<IPaymentAuditService>();
+    }
 
         public async Task<List<PaymentMethodDto>> GetPaymentMethodsAsync(Guid userId)
         {
@@ -105,10 +111,10 @@ namespace AmesaBackend.Payment.Services
             return transactions.Select(MapToTransactionDto).ToList();
         }
 
-        public async Task<TransactionDto> GetTransactionAsync(Guid transactionId)
+        public async Task<TransactionDto> GetTransactionAsync(Guid transactionId, Guid userId)
         {
             var transaction = await _context.Transactions
-                .FirstOrDefaultAsync(t => t.Id == transactionId);
+                .FirstOrDefaultAsync(t => t.Id == transactionId && t.UserId == userId);
 
             if (transaction == null)
             {
@@ -118,19 +124,88 @@ namespace AmesaBackend.Payment.Services
             return MapToTransactionDto(transaction);
         }
 
-        public async Task<PaymentResponse> ProcessPaymentAsync(Guid userId, ProcessPaymentRequest request)
+        public async Task<PaymentResponse> ProcessPaymentAsync(Guid userId, ProcessPaymentRequest request, string? ipAddress = null, string? userAgent = null)
         {
+            // Check idempotency key
+            if (!string.IsNullOrEmpty(request.IdempotencyKey))
+            {
+                var existingTransaction = await _context.Transactions
+                    .FirstOrDefaultAsync(t => t.IdempotencyKey == request.IdempotencyKey);
+
+                if (existingTransaction != null)
+                {
+                    return new PaymentResponse
+                    {
+                        Success = true,
+                        TransactionId = existingTransaction.Id.ToString(),
+                        ProviderTransactionId = existingTransaction.ProviderTransactionId,
+                        Message = "Payment already processed (idempotency)"
+                    };
+                }
+            }
+
+            // Validate payment method ownership
+            if (request.PaymentMethodId != Guid.Empty)
+            {
+                var paymentMethod = await _context.UserPaymentMethods
+                    .FirstOrDefaultAsync(pm => pm.Id == request.PaymentMethodId && pm.UserId == userId && pm.IsActive);
+
+                if (paymentMethod == null)
+                {
+                    throw new UnauthorizedAccessException("Payment method not found or does not belong to user");
+                }
+
+                // Check expiration
+                if (paymentMethod.CardExpYear.HasValue && paymentMethod.CardExpMonth.HasValue)
+                {
+                    var expirationDate = new DateTime(paymentMethod.CardExpYear.Value, paymentMethod.CardExpMonth.Value, 1);
+                    if (expirationDate < DateTime.UtcNow)
+                    {
+                        throw new InvalidOperationException("Payment method has expired");
+                    }
+                }
+            }
+
+            // Validate amount
+            if (request.Amount <= 0 || request.Amount > 10000)
+            {
+                throw new ArgumentOutOfRangeException(nameof(request.Amount), "Amount must be between 0.01 and 10000");
+            }
+
+            // Server-side price validation if product-based
+            decimal validatedAmount = request.Amount;
+            if (request.ProductId.HasValue)
+            {
+                var product = await _context.Products.FindAsync(request.ProductId.Value);
+                if (product == null)
+                {
+                    throw new KeyNotFoundException("Product not found");
+                }
+
+                var calculatedPrice = product.BasePrice * (request.Quantity ?? 1);
+                if (Math.Abs(request.Amount - calculatedPrice) > 0.01m)
+                {
+                    throw new InvalidOperationException("Amount mismatch - server calculated price differs from client");
+                }
+
+                validatedAmount = calculatedPrice;
+            }
+
             var transaction = new Transaction
             {
+                Id = Guid.NewGuid(),
                 UserId = userId,
-                Type = "TicketPurchase", // Default transaction type for ticket purchases
-                Amount = request.Amount,
+                Type = request.Type ?? "Payment",
+                Amount = validatedAmount,
                 Currency = request.Currency ?? "USD",
-                Status = "Completed",
+                Status = "Pending", // Changed from "Completed" - payment gateways will update this
                 Description = request.Description,
                 ReferenceId = request.ReferenceId,
-                PaymentMethodId = request.PaymentMethodId,
-                ProcessedAt = DateTime.UtcNow,
+                PaymentMethodId = request.PaymentMethodId != Guid.Empty ? request.PaymentMethodId : null,
+                ProductId = request.ProductId,
+                IdempotencyKey = request.IdempotencyKey,
+                IpAddress = ipAddress,
+                UserAgent = userAgent,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };
@@ -142,26 +217,36 @@ namespace AmesaBackend.Payment.Services
             {
                 PaymentId = transaction.Id,
                 UserId = userId,
-                Amount = request.Amount,
+                Amount = validatedAmount,
                 Currency = request.Currency ?? "USD",
                 PaymentMethod = request.PaymentMethodId.ToString()
             });
 
-            await _eventPublisher.PublishAsync(new PaymentCompletedEvent
+            // Audit log
+            if (_auditService != null)
             {
-                PaymentId = transaction.Id,
-                TransactionId = transaction.Id,
-                UserId = userId,
-                Amount = request.Amount,
-                Currency = request.Currency ?? "USD",
-                PaymentMethod = request.PaymentMethodId.ToString()
-            });
+                await _auditService.LogActionAsync(
+                    userId,
+                    "payment_initiated",
+                    "transaction",
+                    transaction.Id,
+                    validatedAmount,
+                    request.Currency ?? "USD",
+                    ipAddress,
+                    userAgent,
+                    new Dictionary<string, object> 
+                    { 
+                        ["IdempotencyKey"] = request.IdempotencyKey ?? "",
+                        ["ProductId"] = request.ProductId?.ToString() ?? "",
+                        ["Quantity"] = request.Quantity?.ToString() ?? "1"
+                    });
+            }
 
             return new PaymentResponse
             {
                 Success = true,
                 TransactionId = transaction.Id.ToString(),
-                Message = "Payment processed successfully"
+                Message = "Payment initiated successfully"
             };
         }
 

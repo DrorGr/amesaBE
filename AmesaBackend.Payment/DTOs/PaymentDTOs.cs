@@ -79,7 +79,7 @@ namespace AmesaBackend.Payment.DTOs
         public Guid PaymentMethodId { get; set; }
 
         [Required]
-        [Range(0.01, double.MaxValue)]
+        [Range(0.01, 10000)]
         public decimal Amount { get; set; }
 
         [Required]
@@ -94,6 +94,29 @@ namespace AmesaBackend.Payment.DTOs
 
         [StringLength(50)]
         public string? Type { get; set; }
+
+        [MaxLength(255)]
+        public string? IdempotencyKey { get; set; }
+
+        public Guid? ProductId { get; set; }
+
+        [Range(1, int.MaxValue)]
+        public int? Quantity { get; set; }
+    }
+
+    public class ProcessProductPaymentRequest
+    {
+        [Required]
+        public Guid ProductId { get; set; }
+
+        [Required]
+        [Range(1, int.MaxValue)]
+        public int Quantity { get; set; } = 1;
+
+        public Guid? PaymentMethodId { get; set; }
+
+        [MaxLength(255)]
+        public string? IdempotencyKey { get; set; }
     }
 
     public class PaymentResponse

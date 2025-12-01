@@ -36,6 +36,15 @@ namespace AmesaBackend.Payment.Models
 
         public bool IsActive { get; set; } = true;
 
+        [MaxLength(100)]
+        public string? WalletType { get; set; }
+
+        [MaxLength(255)]
+        public string? WalletAccountId { get; set; }
+
+        [Column(TypeName = "jsonb")]
+        public string? PaymentMethodMetadata { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
@@ -77,6 +86,19 @@ namespace AmesaBackend.Payment.Models
         [MaxLength(255)]
         public string? ProviderTransactionId { get; set; }
 
+        public Guid? ProductId { get; set; }
+
+        [MaxLength(255)]
+        public string? IdempotencyKey { get; set; }
+
+        [MaxLength(255)]
+        public string? ClientSecret { get; set; }
+
+        [MaxLength(45)]
+        public string? IpAddress { get; set; }
+
+        public string? UserAgent { get; set; }
+
         [Column(TypeName = "jsonb")]
         public string? ProviderResponse { get; set; }
 
@@ -90,5 +112,7 @@ namespace AmesaBackend.Payment.Models
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
         public virtual UserPaymentMethod? PaymentMethod { get; set; }
+        public virtual Product? Product { get; set; }
+        public virtual ICollection<TransactionItem> TransactionItems { get; set; } = new List<TransactionItem>();
     }
 }

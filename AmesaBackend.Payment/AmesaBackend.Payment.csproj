@@ -13,10 +13,12 @@
     <PackageReference Include="Serilog.AspNetCore" Version="8.0.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
     <PackageReference Include="Stripe.net" Version="44.0.0" />
+    <PackageReference Include="AWSSDK.SecretsManager" Version="3.7.400.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\AmesaBackend.Shared\AmesaBackend.Shared.csproj" />
+    <ProjectReference Include="..\AmesaBackend.Auth\AmesaBackend.Auth.csproj" />
   </ItemGroup>
 
 </Project>

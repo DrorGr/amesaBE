@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
 using AmesaBackend.Payment.Services;
 using AmesaBackend.Payment.DTOs;
+using AmesaBackend.Payment.Helpers;
 
 namespace AmesaBackend.Payment.Controllers
 {
@@ -11,14 +12,20 @@ namespace AmesaBackend.Payment.Controllers
     [Authorize]
     public class PaymentController : ControllerBase
     {
-        private readonly IPaymentService _paymentService;
-        private readonly ILogger<PaymentController> _logger;
+    private readonly IPaymentService _paymentService;
+    private readonly IPaymentRateLimitService? _rateLimitService;
+    private readonly ILogger<PaymentController> _logger;
+    private const int MAX_REQUEST_SIZE = 1024 * 1024; // 1MB
 
-        public PaymentController(IPaymentService paymentService, ILogger<PaymentController> logger)
-        {
-            _paymentService = paymentService;
-            _logger = logger;
-        }
+    public PaymentController(
+        IPaymentService paymentService,
+        ILogger<PaymentController> logger,
+        IServiceProvider serviceProvider)
+    {
+        _paymentService = paymentService;
+        _logger = logger;
+        _rateLimitService = serviceProvider.GetService<IPaymentRateLimitService>();
+    }
 
         [HttpGet("methods")]
         public async Task<ActionResult<ApiResponse<List<PaymentMethodDto>>>> GetPaymentMethods()
@@ -32,7 +39,7 @@ namespace AmesaBackend.Payment.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting payment methods");
-                return StatusCode(500, new ApiResponse<List<PaymentMethodDto>> { Success = false, Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = ex.Message } });
+                return StatusCode(500, new ApiResponse<List<PaymentMethodDto>> { Success = false, Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = "An error occurred retrieving payment methods" } });
             }
         }
 
@@ -48,7 +55,7 @@ namespace AmesaBackend.Payment.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error adding payment method");
-                return StatusCode(500, new ApiResponse<PaymentMethodDto> { Success = false, Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = ex.Message } });
+                return StatusCode(500, new ApiResponse<PaymentMethodDto> { Success = false, Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = "An error occurred adding payment method" } });
             }
         }
 
@@ -68,7 +75,7 @@ namespace AmesaBackend.Payment.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error updating payment method");
-                return StatusCode(500, new ApiResponse<PaymentMethodDto> { Success = false, Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = ex.Message } });
+                return StatusCode(500, new ApiResponse<PaymentMethodDto> { Success = false, Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = "An error occurred updating payment method" } });
             }
         }
 
@@ -88,7 +95,7 @@ namespace AmesaBackend.Payment.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error deleting payment method");
-                return StatusCode(500, new ApiResponse<object> { Success = false, Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = ex.Message } });
+                return StatusCode(500, new ApiResponse<object> { Success = false, Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = "An error occurred deleting payment method" } });
             }
         }
 
@@ -104,7 +111,7 @@ namespace AmesaBackend.Payment.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting transactions");
-                return StatusCode(500, new ApiResponse<List<TransactionDto>> { Success = false, Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = ex.Message } });
+                return StatusCode(500, new ApiResponse<List<TransactionDto>> { Success = false, Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = "An error occurred retrieving transactions" } });
             }
         }
 
@@ -113,7 +120,12 @@ namespace AmesaBackend.Payment.Controllers
         {
             try
             {
-                var transaction = await _paymentService.GetTransactionAsync(id);
+                if (!ControllerHelpers.TryGetUserId(User, out var userId))
+                {
+                    return ControllerHelpers.UnauthorizedResponse<TransactionDto>();
+                }
+
+                var transaction = await _paymentService.GetTransactionAsync(id, userId);
                 return Ok(new ApiResponse<TransactionDto> { Success = true, Data = transaction });
             }
             catch (KeyNotFoundException ex)
@@ -123,7 +135,7 @@ namespace AmesaBackend.Payment.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting transaction");
-                return StatusCode(500, new ApiResponse<TransactionDto> { Success = false, Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = ex.Message } });
+                return StatusCode(500, new ApiResponse<TransactionDto> { Success = false, Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = "An error occurred retrieving transaction" } });
             }
         }
 
@@ -139,7 +151,7 @@ namespace AmesaBackend.Payment.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error processing payment");
-                return StatusCode(500, new ApiResponse<PaymentResponse> { Success = false, Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = ex.Message } });
+                return StatusCode(500, new ApiResponse<PaymentResponse> { Success = false, Error = new ErrorResponse { Code = "PAYMENT_PROCESSING_ERROR", Message = "An error occurred processing your payment. Please try again." } });
             }
         }
     }

@@ -228,6 +228,9 @@ builder.Services.AddHealthChecks()
     .AddCheck<AmesaBackend.Notification.HealthChecks.SMSChannelHealthCheck>("sms_channel")
     .AddCheck<AmesaBackend.Notification.HealthChecks.WebPushChannelHealthCheck>("webpush_channel")
     .AddCheck<AmesaBackend.Notification.HealthChecks.TelegramChannelHealthCheck>("telegram_channel");
+// #region agent log
+Log.Information("[DEBUG] Health checks registered - sessionId=debug-session runId=run1 hypothesisId=A,B location=Program.cs:230 checkCount={CheckCount} basicRegistered={BasicRegistered}", 5, true);
+// #endregion
 
 var app = builder.Build();
 
@@ -295,8 +298,22 @@ app.UseAuthorization();
 // Basic health check for ALB - only checks if service is running
 app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
 {
-    Predicate = check => check.Name == "basic"
+    Predicate = check => {
+        // #region agent log
+        var matches = check.Name == "basic";
+        Log.Information("[DEBUG] Predicate evaluating check - sessionId=debug-session runId=run1 hypothesisId=A,B location=Program.cs:301 checkName={CheckName} matches={Matches}", check.Name, matches);
+        // #endregion
+        return matches;
+    },
+    ResultStatusCodes = {
+        [Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus.Healthy] = Microsoft.AspNetCore.Http.StatusCodes.Status200OK,
+        [Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus.Degraded] = Microsoft.AspNetCore.Http.StatusCodes.Status200OK,
+        [Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus.Unhealthy] = Microsoft.AspNetCore.Http.StatusCodes.Status503ServiceUnavailable
+    }
 });
+// #region agent log
+Log.Information("[DEBUG] Health endpoint mapped - sessionId=debug-session runId=run1 hypothesisId=A,B,C location=Program.cs:313 path=/health hasPredicate=true");
+// #endregion
 
 // Detailed health check with all channels - for monitoring/debugging
 app.MapHealthChecks("/health/notifications", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
@@ -319,6 +336,17 @@ app.MapHealthChecks("/health/notifications", new Microsoft.AspNetCore.Diagnostic
         await context.Response.WriteAsync(result);
     }
 });
+// #region agent log
+app.Use(async (context, next) => {
+    if (context.Request.Path == "/health") {
+        Log.Information("[DEBUG] Health endpoint request received - sessionId=debug-session runId=run1 hypothesisId=C,D location=Program.cs:338 path={Path} method={Method}", context.Request.Path, context.Request.Method);
+    }
+    await next();
+    if (context.Request.Path == "/health") {
+        Log.Information("[DEBUG] Health endpoint response - sessionId=debug-session runId=run1 hypothesisId=C,D location=Program.cs:345 statusCode={StatusCode} path={Path}", context.Response.StatusCode, context.Request.Path);
+    }
+});
+// #endregion
 app.MapControllers();
 
 // Map SignalR hubs

@@ -1,12 +1,18 @@
 using Microsoft.EntityFrameworkCore;
 using AmesaBackend.Payment.Data;
 using AmesaBackend.Payment.Services;
+using AmesaBackend.Payment.Configuration;
+using AmesaBackend.Payment.Middleware;
 using AmesaBackend.Shared.Extensions;
 using AmesaBackend.Shared.Middleware.Extensions;
 using Serilog;
 using Npgsql;
+using ProductHandlers = AmesaBackend.Payment.Services.ProductHandlers;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Load payment secrets from AWS Secrets Manager (production only)
+builder.Configuration.LoadPaymentSecretsFromAws(builder.Environment);
 
 NpgsqlConnection.GlobalTypeMapper.EnableDynamicJson();
 
@@ -40,6 +46,7 @@ builder.Services.AddDbContext<PaymentDbContext>(options =>
         });
     }
 
+    // Never enable sensitive data logging in production
     if (builder.Environment.IsDevelopment())
     {
         options.EnableSensitiveDataLogging();
@@ -47,14 +54,40 @@ builder.Services.AddDbContext<PaymentDbContext>(options =>
     }
 });
 
-builder.Services.AddAmesaBackendShared(builder.Configuration, builder.Environment);
+// Add shared services with Redis required for rate limiting
+builder.Services.AddAmesaBackendShared(builder.Configuration, builder.Environment, requireRedis: true);
 
 // Add Services
 builder.Services.AddScoped<IPaymentService, PaymentService>();
+builder.Services.AddScoped<IPaymentRateLimitService, PaymentRateLimitService>();
+builder.Services.AddScoped<IProductService, ProductService>();
+builder.Services.AddScoped<IStripeService, StripeService>();
+builder.Services.AddScoped<ICoinbaseCommerceService, CoinbaseCommerceService>();
+builder.Services.AddScoped<IPaymentAuditService, PaymentAuditService>();
+
+// Product Handlers
+builder.Services.AddScoped<ProductHandlers.IProductHandler, ProductHandlers.LotteryTicketProductHandler>();
+builder.Services.AddSingleton<ProductHandlers.IProductHandlerRegistry>(serviceProvider =>
+{
+    var registry = new ProductHandlers.ProductHandlerRegistry();
+    var lotteryHandler = serviceProvider.GetRequiredService<ProductHandlers.IProductHandler>();
+    registry.RegisterHandler(lotteryHandler);
+    return registry;
+});
 
 builder.Services.AddHealthChecks();
 
 var app = builder.Build();
+
+// Security middleware (before other middleware)
+app.UseMiddleware<SecurityHeadersMiddleware>();
+
+// HTTPS redirection and HSTS (production only)
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHsts();
+    app.UseHttpsRedirection();
+}
 
 app.UseSwagger();
 app.UseSwaggerUI();
