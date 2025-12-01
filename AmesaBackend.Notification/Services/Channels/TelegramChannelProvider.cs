@@ -13,7 +13,7 @@ namespace AmesaBackend.Notification.Services.Channels
     {
         public string ChannelName => NotificationChannelConstants.Telegram;
 
-        private readonly ITelegramBotClient _botClient;
+        private readonly ITelegramBotClient? _botClient;
         private readonly IConfiguration _configuration;
         private readonly ILogger<TelegramChannelProvider> _logger;
         private readonly NotificationDbContext _context;
@@ -64,6 +64,14 @@ namespace AmesaBackend.Notification.Services.Channels
                 var message = $"*{request.Title}*\n\n{request.Message}";
                 
                 // Send message via Telegram Bot API
+                if (_botClient == null)
+                {
+                    return new DeliveryResult
+                    {
+                        Success = false,
+                        ErrorMessage = "Telegram bot client not initialized"
+                    };
+                }
                 var sentMessage = await _botClient.SendTextMessageAsync(
                     chatId: telegramLink.ChatId,
                     text: message,

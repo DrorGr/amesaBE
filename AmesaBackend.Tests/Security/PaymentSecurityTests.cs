@@ -287,7 +287,7 @@ public class PaymentSecurityTests
         return validationResults;
     }
 
-    public void Dispose()
+    private void Dispose()
     {
         _dbContext?.Dispose();
     }

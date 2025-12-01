@@ -41,7 +41,7 @@ public class PaymentIntegrationTests : IDisposable
         _mockHandlerLogger = new Mock<ILogger<LotteryTicketProductHandler>>();
         _mockHttpRequest = new Mock<IHttpRequest>();
 
-        _productService = new ProductService(_dbContext, _mockProductLogger.Object, _mockHandlerRegistry.Object);
+        _productService = new ProductService(_dbContext, _mockProductLogger.Object);
         _lotteryHandler = new LotteryTicketProductHandler(_mockHandlerLogger.Object, _mockHttpRequest.Object);
     }
 
@@ -52,12 +52,12 @@ public class PaymentIntegrationTests : IDisposable
         var userId = Guid.NewGuid();
         var request = new CreateProductRequest
         {
+            Code = "TEST-LOTTERY-001",
             Name = "Test Lottery Ticket",
             Description = "Test Description",
-            Type = "lottery_ticket",
+            ProductType = "lottery_ticket",
             BasePrice = 100.00m,
-            Currency = "USD",
-            IsActive = true
+            Currency = "USD"
         };
 
         // Act
@@ -81,21 +81,21 @@ public class PaymentIntegrationTests : IDisposable
         var userId = Guid.NewGuid();
         var product = new Product
         {
+            Code = "TEST-PRODUCT-001",
             Name = "Test Product",
-            Type = "lottery_ticket",
+            ProductType = "lottery_ticket",
             BasePrice = 50.00m,
             Currency = "USD",
             IsActive = true,
             CreatedBy = userId,
             CreatedAt = DateTime.UtcNow,
-            UpdatedBy = userId,
             UpdatedAt = DateTime.UtcNow
         };
         _dbContext.Products.Add(product);
         await _dbContext.SaveChangesAsync();
 
         // Act
-        var result = await _productService.GetProductByIdAsync(product.Id);
+        var result = await _productService.GetProductAsync(product.Id);
 
         // Assert
         result.Should().NotBeNull();
@@ -110,33 +110,33 @@ public class PaymentIntegrationTests : IDisposable
         var userId = Guid.NewGuid();
         var activeProduct = new Product
         {
+            Code = "ACTIVE-PRODUCT-001",
             Name = "Active Product",
-            Type = "lottery_ticket",
+            ProductType = "lottery_ticket",
             BasePrice = 50.00m,
             Currency = "USD",
             IsActive = true,
             CreatedBy = userId,
             CreatedAt = DateTime.UtcNow,
-            UpdatedBy = userId,
             UpdatedAt = DateTime.UtcNow
         };
         var inactiveProduct = new Product
         {
+            Code = "INACTIVE-PRODUCT-001",
             Name = "Inactive Product",
-            Type = "lottery_ticket",
+            ProductType = "lottery_ticket",
             BasePrice = 50.00m,
             Currency = "USD",
             IsActive = false,
             CreatedBy = userId,
             CreatedAt = DateTime.UtcNow,
-            UpdatedBy = userId,
             UpdatedAt = DateTime.UtcNow
         };
         _dbContext.Products.AddRange(activeProduct, inactiveProduct);
         await _dbContext.SaveChangesAsync();
 
         // Act
-        var result = await _productService.GetAllProductsAsync(includeInactive: false);
+        var result = await _productService.GetActiveProductsAsync();
 
         // Assert
         result.Should().Contain(p => p.Id == activeProduct.Id);
@@ -150,15 +150,15 @@ public class PaymentIntegrationTests : IDisposable
         var userId = Guid.NewGuid();
         var product = new Product
         {
+            Code = "TEST-PRODUCT-002",
             Name = "Test Product",
-            Type = "lottery_ticket",
+            ProductType = "lottery_ticket",
             BasePrice = 50.00m,
             Currency = "USD",
             IsActive = true,
             MaxQuantityPerUser = 5,
             CreatedBy = userId,
             CreatedAt = DateTime.UtcNow,
-            UpdatedBy = userId,
             UpdatedAt = DateTime.UtcNow
         };
         _dbContext.Products.Add(product);
@@ -183,15 +183,15 @@ public class PaymentIntegrationTests : IDisposable
         var userId = Guid.NewGuid();
         var product = new Product
         {
+            Code = "FUTURE-PRODUCT-001",
             Name = "Future Product",
-            Type = "lottery_ticket",
+            ProductType = "lottery_ticket",
             BasePrice = 50.00m,
             Currency = "USD",
             IsActive = true,
             AvailableFrom = DateTime.UtcNow.AddDays(1), // Not yet available
             CreatedBy = userId,
             CreatedAt = DateTime.UtcNow,
-            UpdatedBy = userId,
             UpdatedAt = DateTime.UtcNow
         };
         _dbContext.Products.Add(product);
@@ -216,14 +216,14 @@ public class PaymentIntegrationTests : IDisposable
         var userId = Guid.NewGuid();
         var product = new Product
         {
+            Code = "TEST-PRODUCT-004",
             Name = "Test Product",
-            Type = "lottery_ticket",
+            ProductType = "lottery_ticket",
             BasePrice = 25.00m,
             Currency = "USD",
             IsActive = true,
             CreatedBy = userId,
             CreatedAt = DateTime.UtcNow,
-            UpdatedBy = userId,
             UpdatedAt = DateTime.UtcNow
         };
         _dbContext.Products.Add(product);
@@ -234,7 +234,7 @@ public class PaymentIntegrationTests : IDisposable
             .Returns((IProductHandler?)null);
 
         // Act
-        var price = await _productService.CalculateProductPriceAsync(product.Id, 3, userId);
+        var price = await _productService.CalculatePriceAsync(product.Id, 3, userId);
 
         // Assert
         price.Should().Be(75.00m); // 25.00 * 3
@@ -247,14 +247,14 @@ public class PaymentIntegrationTests : IDisposable
         var userId = Guid.NewGuid();
         var product = new Product
         {
+            Code = "ORIGINAL-PRODUCT-001",
             Name = "Original Name",
-            Type = "lottery_ticket",
+            ProductType = "lottery_ticket",
             BasePrice = 50.00m,
             Currency = "USD",
             IsActive = true,
             CreatedBy = userId,
             CreatedAt = DateTime.UtcNow,
-            UpdatedBy = userId,
             UpdatedAt = DateTime.UtcNow
         };
         _dbContext.Products.Add(product);
@@ -264,7 +264,6 @@ public class PaymentIntegrationTests : IDisposable
         {
             Name = "Updated Name",
             Description = "Updated Description",
-            Type = "lottery_ticket",
             BasePrice = 75.00m,
             Currency = "USD",
             IsActive = true
@@ -289,26 +288,26 @@ public class PaymentIntegrationTests : IDisposable
         var userId = Guid.NewGuid();
         var product = new Product
         {
+            Code = "DELETE-PRODUCT-001",
             Name = "Product To Delete",
-            Type = "lottery_ticket",
+            ProductType = "lottery_ticket",
             BasePrice = 50.00m,
             Currency = "USD",
             IsActive = true,
             CreatedBy = userId,
             CreatedAt = DateTime.UtcNow,
-            UpdatedBy = userId,
             UpdatedAt = DateTime.UtcNow
         };
         _dbContext.Products.Add(product);
         await _dbContext.SaveChangesAsync();
 
         // Act
-        await _productService.DeleteProductAsync(product.Id, userId);
+        await _productService.DeactivateProductAsync(product.Id, userId);
 
         // Assert
         var productInDb = await _dbContext.Products.FindAsync(product.Id);
-        productInDb!.IsDeleted.Should().BeTrue();
-        productInDb.IsActive.Should().BeFalse();
+        productInDb!.IsActive.Should().BeFalse();
+        productInDb.Status.Should().Be("inactive");
     }
 
     [Fact]
@@ -323,15 +322,15 @@ public class PaymentIntegrationTests : IDisposable
         var product = new Product
         {
             Id = productId,
+            Code = "LOTTERY-TICKET-001",
             Name = "Lottery Ticket",
-            Type = "lottery_ticket",
+            ProductType = "lottery_ticket",
             BasePrice = 50.00m,
             Currency = "USD",
             IsActive = true,
-            Metadata = JsonSerializer.Serialize(new { houseId = houseId.ToString() }),
+            ProductMetadata = JsonSerializer.Serialize(new { houseId = houseId.ToString() }),
             CreatedBy = userId,
             CreatedAt = DateTime.UtcNow,
-            UpdatedBy = userId,
             UpdatedAt = DateTime.UtcNow
         };
         _dbContext.Products.Add(product);
@@ -339,14 +338,19 @@ public class PaymentIntegrationTests : IDisposable
 
         var mockResponse = new AmesaBackend.Shared.Contracts.ApiResponse<object>
         {
-            Success = true,
+            IsError = false,
+            Code = 200,
+            Message = "Success",
             Data = new { isValid = true }
         };
 
         _mockHttpRequest
             .Setup(x => x.PostRequest<AmesaBackend.Shared.Contracts.ApiResponse<object>>(
                 It.IsAny<string>(),
-                It.IsAny<object>()))
+                It.IsAny<object>(),
+                It.IsAny<string>(),
+                It.IsAny<List<KeyValuePair<string, string>>>(),
+                It.IsAny<string>()))
             .ReturnsAsync(mockResponse);
 
         // Act
@@ -357,7 +361,10 @@ public class PaymentIntegrationTests : IDisposable
         _mockHttpRequest.Verify(
             x => x.PostRequest<AmesaBackend.Shared.Contracts.ApiResponse<object>>(
                 It.Is<string>(url => url.Contains("/tickets/validate")),
-                It.IsAny<object>()),
+                It.IsAny<object>(),
+                It.IsAny<string>(),
+                It.IsAny<List<KeyValuePair<string, string>>>(),
+                It.IsAny<string>()),
             Times.Once);
     }
 
