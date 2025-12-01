@@ -12,7 +12,7 @@ using System.Security.Claims;
 namespace AmesaBackend.Lottery.Controllers
 {
     [ApiController]
-    [Route("api/v1/[controller]")]
+    [Route("api/v1/houses")]
     public class HousesController : ControllerBase
     {
         private readonly LotteryDbContext _context;
