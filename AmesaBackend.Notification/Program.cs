@@ -219,7 +219,11 @@ builder.Services.AddHostedService<NotificationQueueProcessor>(sp =>
 // Add SignalR for real-time updates
 builder.Services.AddSignalR();
 
+// Register all health checks
+// Basic check for ALB (only verifies service is running)
+// Channel checks for detailed monitoring
 builder.Services.AddHealthChecks()
+    .AddCheck<AmesaBackend.Notification.HealthChecks.BasicHealthCheck>("basic")
     .AddCheck<AmesaBackend.Notification.HealthChecks.EmailChannelHealthCheck>("email_channel")
     .AddCheck<AmesaBackend.Notification.HealthChecks.SMSChannelHealthCheck>("sms_channel")
     .AddCheck<AmesaBackend.Notification.HealthChecks.WebPushChannelHealthCheck>("webpush_channel")
@@ -288,7 +292,13 @@ app.Use(async (context, next) =>
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapHealthChecks("/health");
+// Basic health check for ALB - only checks if service is running
+app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = check => check.Name == "basic"
+});
+
+// Detailed health check with all channels - for monitoring/debugging
 app.MapHealthChecks("/health/notifications", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
 {
     ResponseWriter = async (context, report) =>
