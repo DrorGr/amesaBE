@@ -49,6 +49,14 @@ namespace AmesaBackend.Shared.Events
 
             // System Events
             public const string SystemSettingUpdated = "SystemSettingUpdated";
+
+            // Notification Events
+            public const string NotificationSent = "NotificationSent";
+            public const string NotificationDelivered = "NotificationDelivered";
+            public const string NotificationFailed = "NotificationFailed";
+            public const string NotificationBounced = "NotificationBounced";
+            public const string NotificationOpened = "NotificationOpened";
+            public const string NotificationClicked = "NotificationClicked";
         }
     }
 }

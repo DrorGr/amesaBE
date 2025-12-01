@@ -198,5 +198,57 @@ namespace AmesaBackend.Shared.Events
         public string SettingKey { get; set; } = string.Empty;
         public string? SettingValue { get; set; }
     }
+
+    // Notification Events
+    public class NotificationSentEvent : DomainEvent
+    {
+        public Guid NotificationId { get; set; }
+        public Guid UserId { get; set; }
+        public string Channel { get; set; } = string.Empty;
+        public string Type { get; set; } = string.Empty;
+    }
+
+    public class NotificationDeliveredEvent : DomainEvent
+    {
+        public Guid DeliveryId { get; set; }
+        public Guid NotificationId { get; set; }
+        public string Channel { get; set; } = string.Empty;
+        public DateTime DeliveredAt { get; set; }
+    }
+
+    public class NotificationFailedEvent : DomainEvent
+    {
+        public Guid DeliveryId { get; set; }
+        public Guid NotificationId { get; set; }
+        public string Channel { get; set; } = string.Empty;
+        public string ErrorMessage { get; set; } = string.Empty;
+        public int RetryCount { get; set; }
+    }
+
+    public class NotificationBouncedEvent : DomainEvent
+    {
+        public Guid DeliveryId { get; set; }
+        public Guid NotificationId { get; set; }
+        public string Channel { get; set; } = string.Empty;
+        public string BounceType { get; set; } = string.Empty;
+        public string BounceReason { get; set; } = string.Empty;
+    }
+
+    public class NotificationOpenedEvent : DomainEvent
+    {
+        public Guid DeliveryId { get; set; }
+        public Guid NotificationId { get; set; }
+        public string Channel { get; set; } = string.Empty;
+        public DateTime OpenedAt { get; set; }
+    }
+
+    public class NotificationClickedEvent : DomainEvent
+    {
+        public Guid DeliveryId { get; set; }
+        public Guid NotificationId { get; set; }
+        public string Channel { get; set; } = string.Empty;
+        public DateTime ClickedAt { get; set; }
+        public string? ClickUrl { get; set; }
+    }
 }
 

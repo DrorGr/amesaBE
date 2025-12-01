@@ -15,10 +15,17 @@
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
     <PackageReference Include="MailKit" Version="4.3.0" />
     <PackageReference Include="MimeKit" Version="4.3.0" />
+    <PackageReference Include="AWSSDK.SimpleEmail" Version="3.7.400.0" />
+    <PackageReference Include="AWSSDK.SimpleNotificationService" Version="3.7.400.0" />
+    <PackageReference Include="AWSSDK.SQS" Version="3.7.400.0" />
+    <PackageReference Include="AWSSDK.SecretsManager" Version="3.7.400.0" />
+    <PackageReference Include="WebPush" Version="1.0.11" />
+    <PackageReference Include="Telegram.Bot" Version="19.0.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\AmesaBackend.Shared\AmesaBackend.Shared.csproj" />
+    <ProjectReference Include="..\AmesaBackend.Auth\AmesaBackend.Auth.csproj" />
   </ItemGroup>
 
 </Project>

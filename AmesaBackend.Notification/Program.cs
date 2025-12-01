@@ -3,16 +3,26 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using System.Threading.Tasks;
+using Amazon.SimpleEmail;
+using Amazon.SimpleNotificationService;
+using Amazon.SQS;
 using AmesaBackend.Notification.Data;
 using AmesaBackend.Notification.Services;
+using AmesaBackend.Notification.Services.Channels;
 using AmesaBackend.Notification.Handlers;
 using AmesaBackend.Notification.Hubs;
+using AmesaBackend.Notification.Configuration;
 using AmesaBackend.Shared.Extensions;
 using AmesaBackend.Shared.Middleware.Extensions;
+using AmesaBackend.Auth.Services;
+using Telegram.Bot;
 using Serilog;
 using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Load notification secrets from AWS Secrets Manager (production only)
+builder.Configuration.LoadNotificationSecretsFromAws(builder.Environment);
 
 NpgsqlConnection.GlobalTypeMapper.EnableDynamicJson();
 
@@ -53,7 +63,8 @@ builder.Services.AddDbContext<NotificationDbContext>(options =>
     }
 });
 
-builder.Services.AddAmesaBackendShared(builder.Configuration, builder.Environment);
+// Add shared services with Redis required for RateLimitService
+builder.Services.AddAmesaBackendShared(builder.Configuration, builder.Environment, requireRedis: true);
 
 // Configure JWT Authentication (required for SignalR [Authorize] attribute)
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
@@ -145,13 +156,74 @@ else
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 
+// AWS SDK clients
+var emailConfig = builder.Configuration.GetSection("NotificationChannels:Email");
+var smsConfig = builder.Configuration.GetSection("NotificationChannels:SMS");
+var emailRegion = Amazon.RegionEndpoint.GetBySystemName(emailConfig["Region"] ?? "eu-north-1");
+var smsRegion = Amazon.RegionEndpoint.GetBySystemName(smsConfig["Region"] ?? "eu-north-1");
+
+builder.Services.AddSingleton<IAmazonSimpleEmailService>(sp =>
+    new AmazonSimpleEmailServiceClient(emailRegion));
+builder.Services.AddSingleton<IAmazonSimpleNotificationService>(sp =>
+    new AmazonSimpleNotificationServiceClient(smsRegion));
+
+// SQS client for notification queue
+var sqsRegion = Amazon.RegionEndpoint.GetBySystemName(
+    builder.Configuration["NotificationQueue:Region"] ?? "eu-north-1");
+builder.Services.AddSingleton<IAmazonSQS>(sp =>
+    new AmazonSQSClient(sqsRegion));
+
+// Telegram Bot Client
+builder.Services.AddSingleton<ITelegramBotClient>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var botToken = configuration["NotificationChannels:Telegram:BotToken"];
+    
+    if (string.IsNullOrEmpty(botToken) || botToken == "FROM_SECRETS")
+    {
+        Log.Warning("Telegram bot token not configured. Telegram features will be limited.");
+        return null!; // Return null but register as singleton - will be checked in usage
+    }
+    
+    return new TelegramBotClient(botToken);
+});
+
+// Rate limiting service (shared from Auth service)
+builder.Services.AddScoped<IRateLimitService, RateLimitService>();
+
+// Channel providers
+builder.Services.AddScoped<IChannelProvider, EmailChannelProvider>();
+builder.Services.AddScoped<IChannelProvider, SMSChannelProvider>();
+builder.Services.AddScoped<IChannelProvider, PushChannelProvider>();
+builder.Services.AddScoped<IChannelProvider, WebPushChannelProvider>();
+builder.Services.AddScoped<IChannelProvider, TelegramChannelProvider>();
+builder.Services.AddScoped<IChannelProvider, SocialMediaChannelProvider>();
+
+// Core services
+builder.Services.AddScoped<INotificationOrchestrator, NotificationOrchestrator>();
+builder.Services.AddScoped<ITemplateEngine, TemplateEngine>();
+
 // Add Background Service for EventBridge events
 builder.Services.AddHostedService<EventBridgeEventHandler>();
+
+// Add Background Service for notification queue processing
+builder.Services.AddHostedService<NotificationQueueProcessor>(sp =>
+{
+    var serviceProvider = sp;
+    var logger = sp.GetRequiredService<ILogger<NotificationQueueProcessor>>();
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var sqsClient = sp.GetRequiredService<IAmazonSQS>();
+    return new NotificationQueueProcessor(serviceProvider, logger, configuration, sqsClient);
+});
 
 // Add SignalR for real-time updates
 builder.Services.AddSignalR();
 
-builder.Services.AddHealthChecks();
+builder.Services.AddHealthChecks()
+    .AddCheck<AmesaBackend.Notification.HealthChecks.EmailChannelHealthCheck>("email_channel")
+    .AddCheck<AmesaBackend.Notification.HealthChecks.SMSChannelHealthCheck>("sms_channel")
+    .AddCheck<AmesaBackend.Notification.HealthChecks.WebPushChannelHealthCheck>("webpush_channel")
+    .AddCheck<AmesaBackend.Notification.HealthChecks.TelegramChannelHealthCheck>("telegram_channel");
 
 var app = builder.Build();
 
@@ -217,6 +289,27 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapHealthChecks("/health");
+app.MapHealthChecks("/health/notifications", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    ResponseWriter = async (context, report) =>
+    {
+        context.Response.ContentType = "application/json";
+        var result = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            status = report.Status.ToString(),
+            checks = report.Entries.Select(e => new
+            {
+                name = e.Key,
+                status = e.Value.Status.ToString(),
+                description = e.Value.Description,
+                exception = e.Value.Exception?.Message,
+                data = e.Value.Data
+            })
+        });
+        await context.Response.WriteAsync(result);
+    }
+});
+app.MapHealthChecks("/health/notifications");
 app.MapControllers();
 
 // Map SignalR hubs
