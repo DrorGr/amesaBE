@@ -34,9 +34,23 @@ namespace AmesaBackend.Notification.Services
             
             // Get queue URL and trim BOM/whitespace that might be present in secrets
             var rawQueueUrl = _configuration["NotificationQueue:SqsQueueUrl"];
-            _queueUrl = string.IsNullOrEmpty(rawQueueUrl) 
-                ? null 
-                : rawQueueUrl.Trim().TrimStart('\uFEFF', '\u200B'); // Remove UTF-8 BOM and zero-width spaces
+            if (string.IsNullOrEmpty(rawQueueUrl))
+            {
+                _queueUrl = null;
+            }
+            else
+            {
+                // Remove UTF-8 BOM and whitespace
+                var cleaned = rawQueueUrl.Trim();
+                // Remove UTF-8 BOM (single character U+FEFF)
+                cleaned = cleaned.TrimStart('\uFEFF', '\u200B');
+                // Remove UTF-8 BOM as three-character sequence (ï»¿ when interpreted as Latin-1)
+                if (cleaned.Length >= 3 && cleaned[0] == '\u00EF' && cleaned[1] == '\u00BB' && cleaned[2] == '\u00BF')
+                {
+                    cleaned = cleaned.Substring(3);
+                }
+                _queueUrl = cleaned;
+            }
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)

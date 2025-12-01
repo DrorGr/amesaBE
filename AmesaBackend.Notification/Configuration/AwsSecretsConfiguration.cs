@@ -84,7 +84,15 @@ public static class AwsSecretsConfiguration
             if (response.SecretString != null)
             {
                 // Trim BOM and whitespace that might be present in secrets
-                var cleanedSecret = response.SecretString.Trim().TrimStart('\uFEFF', '\u200B');
+                // Handle both single U+FEFF character and three-byte UTF-8 BOM sequence (EF BB BF)
+                var cleanedSecret = response.SecretString.Trim();
+                // Remove UTF-8 BOM (single character U+FEFF)
+                cleanedSecret = cleanedSecret.TrimStart('\uFEFF', '\u200B');
+                // Remove UTF-8 BOM as three-character sequence (ï»¿ when interpreted as Latin-1)
+                if (cleanedSecret.Length >= 3 && cleanedSecret[0] == '\u00EF' && cleanedSecret[1] == '\u00BB' && cleanedSecret[2] == '\u00BF')
+                {
+                    cleanedSecret = cleanedSecret.Substring(3);
+                }
                 configureAction(cleanedSecret);
                 Console.WriteLine($"Successfully loaded secret: {secretName}");
             }
