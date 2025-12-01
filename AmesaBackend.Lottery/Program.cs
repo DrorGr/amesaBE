@@ -199,6 +199,28 @@ app.UseAmesaMiddleware();
 app.UseAmesaLogging();
 app.UseResponseCaching(); // Must be before UseRouting for VaryByQueryKeys to work
 app.UseRouting();
+// #region agent log - Route matching debug middleware
+app.Use(async (context, next) =>
+{
+    var method = context.Request.Method;
+    var path = context.Request.Path;
+    var routeData = context.GetRouteData();
+    var endpoint = context.GetEndpoint();
+    
+    Log.Information("[DEBUG_ROUTING] Request received - Method: {Method}, Path: {Path}, RouteData: {RouteData}, Endpoint: {Endpoint}", 
+        method, path, routeData?.Values != null ? string.Join(", ", routeData.Values.Select(kv => $"{kv.Key}={kv.Value}")) : "null",
+        endpoint?.DisplayName ?? "null");
+    
+    await next();
+    
+    if (context.Response.StatusCode == 405)
+    {
+        Log.Warning("[DEBUG_ROUTING] 405 Method Not Allowed - Method: {Method}, Path: {Path}, RouteData: {RouteData}, Endpoint: {Endpoint}, MatchedRoute: {MatchedRoute}",
+            method, path, routeData?.Values != null ? string.Join(", ", routeData.Values.Select(kv => $"{kv.Key}={kv.Value}")) : "null",
+            endpoint?.DisplayName ?? "null", endpoint?.Metadata?.GetMetadata<Microsoft.AspNetCore.Routing.RouteEndpoint>()?.RoutePattern?.RawText ?? "null");
+    }
+});
+// #endregion
 app.UseAuthentication();
 app.UseAuthorization();
 

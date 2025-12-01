@@ -15,9 +15,12 @@ namespace AmesaBackend.Auth.Services
         private readonly AuthDbContext _context;
         private readonly IConfiguration _configuration;
         private readonly IEventPublisher _eventPublisher;
-        private readonly IJwtTokenManager _jwtTokenManager;
         private readonly IAccountLockoutService _accountLockoutService;
         private readonly IPasswordValidatorService _passwordValidator;
+        private readonly ITokenService _tokenService;
+        private readonly ISessionService _sessionService;
+        private readonly IEmailVerificationService _emailVerificationService;
+        private readonly IPasswordResetService _passwordResetService;
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly ILogger<AuthService> _logger;
 
@@ -25,18 +28,24 @@ namespace AmesaBackend.Auth.Services
             AuthDbContext context,
             IConfiguration configuration,
             IEventPublisher eventPublisher,
-            IJwtTokenManager jwtTokenManager,
             IAccountLockoutService accountLockoutService,
             IPasswordValidatorService passwordValidator,
+            ITokenService tokenService,
+            ISessionService sessionService,
+            IEmailVerificationService emailVerificationService,
+            IPasswordResetService passwordResetService,
             IHttpContextAccessor httpContextAccessor,
             ILogger<AuthService> logger)
         {
             _context = context;
             _configuration = configuration;
             _eventPublisher = eventPublisher;
-            _jwtTokenManager = jwtTokenManager;
             _accountLockoutService = accountLockoutService;
             _passwordValidator = passwordValidator;
+            _tokenService = tokenService;
+            _sessionService = sessionService;
+            _emailVerificationService = emailVerificationService;
+            _passwordResetService = passwordResetService;
             _httpContextAccessor = httpContextAccessor;
             _logger = logger;
         }
@@ -77,7 +86,7 @@ namespace AmesaBackend.Auth.Services
                     AuthProvider = Enum.TryParse<AuthProvider>(request.AuthProvider, out var provider) ? provider : AuthProvider.Email,
                     Status = UserStatus.Pending,
                     VerificationStatus = UserVerificationStatus.Unverified,
-                    EmailVerificationToken = GenerateSecureToken(),
+                    EmailVerificationToken = _tokenService.GenerateSecureToken(),
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 };
@@ -143,7 +152,7 @@ namespace AmesaBackend.Auth.Services
                 }
 
                 // Generate tokens for verified users (OAuth)
-                var tokens = await GenerateTokensAsync(user);
+                var tokens = await _tokenService.GenerateTokensAsync(user);
 
                 _logger.LogInformation("User registered successfully: {Email}", user.Email);
 
@@ -215,7 +224,7 @@ namespace AmesaBackend.Auth.Services
                 });
 
                 // Generate tokens
-                var tokens = await GenerateTokensAsync(user);
+                var tokens = await _tokenService.GenerateTokensAsync(user);
 
                 _logger.LogInformation("User logged in successfully: {Email}", user.Email);
 
@@ -259,7 +268,7 @@ namespace AmesaBackend.Auth.Services
                 {
                     _logger.LogWarning("Potential token reuse detected for user {UserId} - token was already rotated", session.UserId);
                     // Invalidate all sessions for security
-                    await InvalidateAllSessionsAsync(session.UserId!.Value);
+                    await _sessionService.InvalidateAllSessionsAsync(session.UserId!.Value);
                     throw new UnauthorizedAccessException("Security violation detected. Please log in again.");
                 }
 
@@ -268,7 +277,7 @@ namespace AmesaBackend.Auth.Services
                 session.IsRotated = true;
 
                 // Generate new tokens
-                var tokens = await GenerateTokensAsync(session.User);
+                var tokens = await _tokenService.GenerateTokensAsync(session.User);
 
                 // Create new session with rotated token - capture fresh IP/device from current request
                 var httpContext = _httpContextAccessor.HttpContext;
@@ -277,8 +286,8 @@ namespace AmesaBackend.Auth.Services
                     ?? httpContext?.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0].Trim()
                     ?? session.IpAddress ?? "unknown";
                 var userAgent = httpContext?.Request.Headers["User-Agent"].ToString() ?? session.UserAgent ?? "unknown";
-                var deviceId = httpContext?.Items["DeviceId"]?.ToString() ?? GenerateDeviceId(userAgent, ipAddress);
-                var deviceName = ExtractDeviceName(userAgent);
+                var deviceId = httpContext?.Items["DeviceId"]?.ToString() ?? _sessionService.GenerateDeviceId(userAgent, ipAddress);
+                var deviceName = _sessionService.ExtractDeviceName(userAgent);
 
                 var refreshExpiresAt = DateTime.UtcNow.AddDays(int.Parse(_configuration["JwtSettings:RefreshTokenExpiryInDays"] ?? "7"));
                 var newSession = new UserSession
@@ -300,7 +309,7 @@ namespace AmesaBackend.Auth.Services
                 _context.UserSessions.Add(newSession);
 
                 // Limit to 5 active sessions - remove oldest if exceeded
-                await EnforceSessionLimitAsync(session.UserId!.Value);
+                await _sessionService.EnforceSessionLimitAsync(session.UserId!.Value);
 
                 await _context.SaveChangesAsync();
 
@@ -345,207 +354,22 @@ namespace AmesaBackend.Auth.Services
 
         public async Task ForgotPasswordAsync(ForgotPasswordRequest request)
         {
-            try
-            {
-                var user = await _context.Users
-                    .FirstOrDefaultAsync(u => u.Email == request.Email);
-
-                if (user != null)
-                {
-                    user.PasswordResetToken = GenerateSecureToken();
-                    user.PasswordResetExpiresAt = DateTime.UtcNow.AddHours(1);
-                    await _context.SaveChangesAsync();
-
-                    await _eventPublisher.PublishAsync(new PasswordResetRequestedEvent
-                    {
-                        UserId = user.Id,
-                        Email = user.Email,
-                        ResetToken = user.PasswordResetToken
-                    });
-                }
-
-                _logger.LogInformation("Password reset requested for email: {Email}", request.Email);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error during forgot password");
-                throw;
-            }
+            await _passwordResetService.ForgotPasswordAsync(request);
         }
 
         public async Task ResetPasswordAsync(ResetPasswordRequest request)
         {
-            try
-            {
-                var user = await _context.Users
-                    .FirstOrDefaultAsync(u => u.PasswordResetToken == request.Token && 
-                                            u.PasswordResetExpiresAt > DateTime.UtcNow);
-
-                if (user == null)
-                {
-                    throw new InvalidOperationException("Invalid or expired reset token");
-                }
-
-                // Validate new password
-                var passwordValidation = await _passwordValidator.ValidatePasswordAsync(request.NewPassword, user.Id);
-                if (!passwordValidation.IsValid)
-                {
-                    throw new InvalidOperationException($"Password validation failed: {string.Join(", ", passwordValidation.Errors)}");
-                }
-
-                // Check password history
-                if (await _passwordValidator.IsPasswordInHistoryAsync(request.NewPassword, user.Id))
-                {
-                    throw new InvalidOperationException("Password was recently used. Please choose a different password");
-                }
-
-                // Use execution strategy to support retry with transactions
-                var strategy = _context.Database.CreateExecutionStrategy();
-                await strategy.ExecuteAsync(async () =>
-                {
-                    // Use transaction to ensure atomicity
-                    using var transaction = await _context.Database.BeginTransactionAsync();
-                    try
-                    {
-                        var oldPasswordHash = user.PasswordHash;
-                        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
-                        user.PasswordResetToken = null;
-                        user.PasswordResetExpiresAt = null;
-                        await _context.SaveChangesAsync();
-
-                        // Save to password history
-                        var passwordHistory = new UserPasswordHistory
-                        {
-                            Id = Guid.NewGuid(),
-                            UserId = user.Id,
-                            PasswordHash = user.PasswordHash,
-                            CreatedAt = DateTime.UtcNow
-                        };
-                        _context.Set<UserPasswordHistory>().Add(passwordHistory);
-                        await _context.SaveChangesAsync();
-
-                        await transaction.CommitAsync();
-                    }
-                    catch
-                    {
-                        await transaction.RollbackAsync();
-                        throw;
-                    }
-                });
-
-                _logger.LogInformation("Password reset successfully for user: {Email}", user.Email);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error during password reset");
-                throw;
-            }
+            await _passwordResetService.ResetPasswordAsync(request);
         }
 
         public async Task VerifyEmailAsync(VerifyEmailRequest request)
         {
-            try
-            {
-                var user = await _context.Users
-                    .FirstOrDefaultAsync(u => u.EmailVerificationToken == request.Token);
-
-                if (user == null)
-                {
-                    throw new InvalidOperationException("Invalid verification token");
-                }
-
-                user.EmailVerified = true;
-                user.EmailVerificationToken = null;
-                user.VerificationStatus = UserVerificationStatus.EmailVerified;
-                user.Status = UserStatus.Active;
-                await _context.SaveChangesAsync();
-
-                // Invalidate email verification cache
-                try
-                {
-                    var distributedCache = _httpContextAccessor.HttpContext?.RequestServices.GetService<Microsoft.Extensions.Caching.Distributed.IDistributedCache>();
-                    if (distributedCache != null)
-                    {
-                        var cacheKey = $"email_verified:{user.Id}";
-                        await distributedCache.RemoveAsync(cacheKey);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Failed to invalidate email verification cache for user {UserId}", user.Id);
-                    // Don't fail the request if cache invalidation fails
-                }
-
-                await _eventPublisher.PublishAsync(new UserEmailVerifiedEvent
-                {
-                    UserId = user.Id,
-                    Email = user.Email,
-                    FirstName = user.FirstName,
-                    LastName = user.LastName
-                });
-
-                await _eventPublisher.PublishAsync(new UserVerifiedEvent
-                {
-                    UserId = user.Id,
-                    Email = user.Email,
-                    VerificationType = "Email"
-                });
-
-                _logger.LogInformation("Email verified successfully for user: {Email}", user.Email);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error during email verification");
-                throw;
-            }
+            await _emailVerificationService.VerifyEmailAsync(request);
         }
 
         public async Task ResendVerificationEmailAsync(ResendVerificationRequest request)
         {
-            try
-            {
-                var user = await _context.Users
-                    .FirstOrDefaultAsync(u => u.Email == request.Email);
-
-                if (user == null)
-                {
-                    // Don't reveal if user exists - security best practice
-                    _logger.LogWarning("Resend verification requested for non-existent email: {Email}", request.Email);
-                    return;
-                }
-
-                if (user.EmailVerified)
-                {
-                    _logger.LogInformation("Resend verification requested for already verified email: {Email}", request.Email);
-                    return;
-                }
-
-                // Regenerate token if expired (>24 hours) or missing
-                var shouldRegenerate = string.IsNullOrEmpty(user.EmailVerificationToken) ||
-                    (user.CreatedAt < DateTime.UtcNow.AddHours(-24));
-
-                if (shouldRegenerate)
-                {
-                    user.EmailVerificationToken = GenerateSecureToken();
-                    user.UpdatedAt = DateTime.UtcNow;
-                    await _context.SaveChangesAsync();
-                }
-
-                // Publish verification email event
-                await _eventPublisher.PublishAsync(new EmailVerificationRequestedEvent
-                {
-                    UserId = user.Id,
-                    Email = user.Email,
-                    VerificationToken = user.EmailVerificationToken ?? string.Empty
-                });
-
-                _logger.LogInformation("Verification email resent for user: {Email}", user.Email);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error resending verification email");
-                throw;
-            }
+            await _emailVerificationService.ResendVerificationEmailAsync(request);
         }
 
         public async Task VerifyPhoneAsync(VerifyPhoneRequest request)
@@ -599,17 +423,7 @@ namespace AmesaBackend.Auth.Services
 
         public async Task<bool> ValidateTokenAsync(string token)
         {
-            try
-            {
-                // TODO: Implement GetClaimsFromExpiredToken method in IJwtTokenManager
-                // var claims = _jwtTokenManager.GetClaimsFromExpiredToken(token);
-                // return claims != null && claims.Any();
-                return false; // Temporary fix - always return false for expired tokens
-            }
-            catch
-            {
-                return false;
-            }
+            return await _tokenService.ValidateTokenAsync(token);
         }
 
         public async Task<UserDto> GetCurrentUserAsync(Guid userId)
@@ -740,7 +554,7 @@ namespace AmesaBackend.Auth.Services
                 }
 
                 // Generate tokens
-                var tokens = await GenerateTokensAsync(user);
+                var tokens = await _tokenService.GenerateTokensAsync(user);
 
                 var response = new AuthResponse
                 {
@@ -759,179 +573,22 @@ namespace AmesaBackend.Auth.Services
             }
         }
 
-        private async Task<(string AccessToken, string RefreshToken, DateTime ExpiresAt)> GenerateTokensAsync(User user)
-        {
-            var claims = new List<Claim>
-            {
-                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-                new Claim(ClaimTypes.Email, user.Email),
-                new Claim(ClaimTypes.Name, user.Username),
-                new Claim("firstName", user.FirstName),
-                new Claim("lastName", user.LastName)
-            };
-
-            var expiresAt = DateTime.UtcNow.AddMinutes(int.Parse(_configuration["JwtSettings:ExpiryInMinutes"] ?? "60"));
-            var accessToken = _jwtTokenManager.GenerateAccessToken(claims, expiresAt);
-
-            // Create refresh token
-            var refreshToken = GenerateSecureToken();
-            var refreshExpiresAt = DateTime.UtcNow.AddDays(int.Parse(_configuration["JwtSettings:RefreshTokenExpiryInDays"] ?? "7"));
-
-            // Extract IP and device info - use middleware values if available
-            var httpContext = _httpContextAccessor.HttpContext;
-            var ipAddress = httpContext?.Items["ClientIp"]?.ToString() 
-                ?? httpContext?.Connection.RemoteIpAddress?.ToString() 
-                ?? httpContext?.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0].Trim()
-                ?? "unknown";
-            var userAgent = httpContext?.Request.Headers["User-Agent"].ToString() ?? "unknown";
-            var deviceId = httpContext?.Items["DeviceId"]?.ToString() ?? GenerateDeviceId(userAgent, ipAddress);
-            var deviceName = ExtractDeviceName(userAgent);
-
-            // Save session
-            var session = new UserSession
-            {
-                UserId = user.Id,
-                SessionToken = refreshToken,
-                ExpiresAt = refreshExpiresAt,
-                IsActive = true,
-                IpAddress = ipAddress,
-                UserAgent = userAgent,
-                DeviceId = deviceId,
-                DeviceName = deviceName,
-                CreatedAt = DateTime.UtcNow,
-                LastActivity = DateTime.UtcNow
-            };
-
-            _context.UserSessions.Add(session);
-
-            // Limit to 5 active sessions
-            await EnforceSessionLimitAsync(user.Id);
-
-            await _context.SaveChangesAsync();
-
-            return (accessToken, refreshToken, expiresAt);
-        }
-
-        private async Task EnforceSessionLimitAsync(Guid userId)
-        {
-            // Use execution strategy to support retry with transactions
-            var strategy = _context.Database.CreateExecutionStrategy();
-            await strategy.ExecuteAsync(async () =>
-            {
-                // Use transaction to prevent race conditions when multiple requests create sessions simultaneously
-                using var transaction = await _context.Database.BeginTransactionAsync();
-                try
-                {
-                    var activeSessions = await _context.UserSessions
-                        .Where(s => s.UserId == userId && s.IsActive && s.ExpiresAt > DateTime.UtcNow)
-                        .OrderBy(s => s.CreatedAt)
-                        .ToListAsync();
-
-                    if (activeSessions.Count >= 5)
-                    {
-                        // Remove oldest sessions (keep 4 most recent)
-                        var sessionsToRemove = activeSessions.Take(activeSessions.Count - 4).ToList();
-                        foreach (var session in sessionsToRemove)
-                        {
-                            session.IsActive = false;
-                        }
-                        await _context.SaveChangesAsync();
-                    }
-                    await transaction.CommitAsync();
-                }
-                catch
-                {
-                    await transaction.RollbackAsync();
-                    throw;
-                }
-            });
-        }
-
-        private async Task InvalidateAllSessionsAsync(Guid userId)
-        {
-            var sessions = await _context.UserSessions
-                .Where(s => s.UserId == userId && s.IsActive)
-                .ToListAsync();
-
-            foreach (var session in sessions)
-            {
-                session.IsActive = false;
-            }
-
-            await _context.SaveChangesAsync();
-        }
 
         public async Task<List<UserSessionDto>> GetActiveSessionsAsync(Guid userId)
         {
-            var sessions = await _context.UserSessions
-                .Where(s => s.UserId == userId && s.IsActive && s.ExpiresAt > DateTime.UtcNow)
-                .OrderByDescending(s => s.LastActivity)
-                .ToListAsync();
-
-            return sessions.Select(s => new UserSessionDto
-            {
-                Id = s.Id,
-                DeviceName = s.DeviceName ?? "Unknown Device",
-                IpAddress = s.IpAddress ?? "Unknown",
-                LastActivity = s.LastActivity,
-                CreatedAt = s.CreatedAt,
-                ExpiresAt = s.ExpiresAt
-            }).ToList();
+            return await _sessionService.GetActiveSessionsAsync(userId);
         }
 
         public async Task LogoutFromDeviceAsync(Guid userId, string sessionToken)
         {
-            var session = await _context.UserSessions
-                .FirstOrDefaultAsync(s => s.UserId == userId && s.SessionToken == sessionToken);
-
-            if (session != null)
-            {
-                session.IsActive = false;
-                await _context.SaveChangesAsync();
-            }
+            await _sessionService.LogoutFromDeviceAsync(userId, sessionToken);
         }
 
         public async Task LogoutAllDevicesAsync(Guid userId)
         {
-            await InvalidateAllSessionsAsync(userId);
+            await _sessionService.LogoutAllDevicesAsync(userId);
         }
 
-        private string GenerateDeviceId(string userAgent, string ipAddress)
-        {
-            // Hash user agent + IP prefix for device fingerprinting
-            var ipPrefix = ipAddress.Split('.').Take(3).Aggregate((a, b) => $"{a}.{b}");
-            var input = $"{userAgent}|{ipPrefix}";
-            using var sha256 = System.Security.Cryptography.SHA256.Create();
-            var hash = sha256.ComputeHash(System.Text.Encoding.UTF8.GetBytes(input));
-            return Convert.ToBase64String(hash).Substring(0, 16);
-        }
-
-        private string ExtractDeviceName(string userAgent)
-        {
-            if (string.IsNullOrEmpty(userAgent)) return "Unknown Device";
-
-            // Simple device name extraction
-            if (userAgent.Contains("Windows", StringComparison.OrdinalIgnoreCase))
-                return "Windows Device";
-            if (userAgent.Contains("Mac", StringComparison.OrdinalIgnoreCase))
-                return "Mac Device";
-            if (userAgent.Contains("Linux", StringComparison.OrdinalIgnoreCase))
-                return "Linux Device";
-            if (userAgent.Contains("Android", StringComparison.OrdinalIgnoreCase))
-                return "Android Device";
-            if (userAgent.Contains("iPhone", StringComparison.OrdinalIgnoreCase) || userAgent.Contains("iPad", StringComparison.OrdinalIgnoreCase))
-                return "iOS Device";
-
-            return "Unknown Device";
-        }
-
-        private string GenerateSecureToken()
-        {
-            using var rng = RandomNumberGenerator.Create();
-            var bytes = new byte[32];
-            rng.GetBytes(bytes);
-            return Convert.ToBase64String(bytes);
-        }
 
         private UserDto MapToUserDto(User user)
         {

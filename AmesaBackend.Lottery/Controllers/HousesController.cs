@@ -39,6 +39,12 @@ namespace AmesaBackend.Lottery.Controllers
         [ResponseCache(Duration = 900)] // 15 minutes
         public async Task<ActionResult<ApiResponse<HouseDto>>> GetHouse(Guid id)
         {
+            // #region agent log
+            _logger.LogInformation("[DEBUG_ROUTING] HousesController.GetHouse called - Method: {Method}, Path: {Path}, Id: {Id}", 
+                HttpContext.Request.Method, 
+                HttpContext.Request.Path, 
+                id);
+            // #endregion
             try
             {
                 var house = await _context.Houses

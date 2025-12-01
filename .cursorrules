@@ -30,16 +30,17 @@ AmesaBE is the backend API for the Amesa lottery management system. Built with .
 - **Version Control**: Git with GitHub repository
 - **Package Management**: NuGet
 
-## Current Status (2025-01-XX)
+## Current Status (2025-11-30)
 - **Repository**: https://github.com/DrorGr/amesaBE
 - **Main branch**: Stable, deployed with Lottery Favorites Phase 1 ✅
 - **Admin Panel**: Blazor Server admin panel deployed to production ✅
 - **Database**: Fully seeded with comprehensive test data ✅
 - **Translations**: 4 languages supported (EN, ES, FR, PL) - 507 keys each ✅
 - **User Preferences**: Complete CRUD API implemented ✅
-- **Lottery Favorites**: Phase 1 complete, deployed to production ✅
+- **Lottery Favorites**: ✅ **FIXED** - UserPreferencesService registration issue resolved, favorites functionality restored
+- **Redis Requirements**: Auth, Lottery, and Content services now require Redis in production ✅
 - **Deployment**: ECS Fargate with Docker containers
-- **Latest**: Docker build fix for amesa-lottery-service, production deployment complete
+- **Latest**: Favorites fix deployed (UserPreferencesService DI registration), Redis requirement implementation complete
 - **Database Seeder**: Excluded from repository (in .gitignore) ✅
 
 ## Environment Configuration
@@ -406,7 +407,29 @@ Client → CloudFront /api/* → ALB → ECS Task → .NET API → Aurora Postgr
 - **Real-time Features**: Live lottery updates via SignalR
 - **Identity Verification**: KYC/AML compliance
 
-## Recent Major Work (2025-01-XX) - RECAPTCHA ENTERPRISE IMPROVEMENTS & SECURITY ENHANCEMENTS
+## Recent Major Work (2025-11-30) - FAVORITES FUNCTIONALITY FIX & REDIS REQUIREMENT IMPLEMENTATION
+- ✅ **Favorites Functionality Fixed** - Resolved missing UserPreferencesService registration in Lottery service
+  - Added using statements for `AmesaBackend.Auth.Data` and `AmesaBackend.Auth.Services`
+  - Registered `AuthDbContext` in Lottery service with same connection string and retry logic
+  - Registered `IUserPreferencesService` with `UserPreferencesService` implementation
+  - Fixes 400 Bad Request error when adding houses to favorites
+  - Root cause: Service was null due to missing DI registration, causing immediate false return
+- ✅ **JsonElement Serialization Fix** - Fixed JSON serialization issues in UserPreferencesService
+  - Added `ConvertJsonElementsToObjects()` helper method for recursive conversion
+  - Fixed `AddHouseToFavoritesAsync`, `RemoveHouseFromFavoritesAsync`, `UpdateLotteryPreferencesAsync`, and `UpdateUserPreferencesAsync`
+  - Resolves serialization failures when deserializing JSONB to Dictionary<string, object>
+- ✅ **Redis Requirement for Lottery and Content Services** - Enforced Redis connectivity in production
+  - Lottery Service: Added `requireRedis: true` in Program.cs, made `ICache` required in HousesController
+  - Content Service: Added `requireRedis: true` in Program.cs, made `ICache` required in TranslationsController
+  - ECS Task Definitions: Added `ConnectionStrings__Redis` secrets for both services
+  - Fail-open error handling: Services continue with database fallback if Redis fails at runtime
+  - Integration tests: Added Redis caching tests with InMemoryCache mock implementation
+- ✅ **Test Fixes** - Improved Redis cache integration tests
+  - Made cache verification more robust with proper error handling
+  - Fixed async timing issues in cache tests
+  - Tests now verify consistent responses (fail-open design)
+
+## Previous Major Work (2025-01-XX) - RECAPTCHA ENTERPRISE IMPROVEMENTS & SECURITY ENHANCEMENTS
 - ✅ **reCAPTCHA Enterprise Integration** - Switched from reCAPTCHA v3 to Enterprise API
 - ✅ **Google Cloud Authentication** - Service account JSON stored in AWS Secrets Manager, loaded at startup
 - ✅ **Retry Logic Implementation** - Exponential backoff (3 retries) for transient Google API errors
@@ -458,6 +481,6 @@ Client → CloudFront /api/* → ALB → ECS Task → .NET API → Aurora Postgr
 - Safety measures and validation
 
 ---
-**Last Updated**: 2025-01-XX (reCAPTCHA Enterprise Improvements)
+**Last Updated**: 2025-11-30 (Favorites Functionality Fix & Redis Requirement Implementation)
 **Note**: This file should be updated whenever API design, database schema, deployment processes, or infrastructure changes.
 
