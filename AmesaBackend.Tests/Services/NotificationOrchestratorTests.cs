@@ -73,6 +73,12 @@ namespace AmesaBackend.Tests.Services
 
             _mockCache.Setup(c => c.GetRecordAsync<Dictionary<string, object>>(It.IsAny<string>(), It.IsAny<bool>()))
                 .ReturnsAsync((Dictionary<string, object>?)null);
+            
+            // Setup rate limit service to allow sending
+            _mockRateLimitService.Setup(r => r.CheckRateLimitAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<TimeSpan>()))
+                .ReturnsAsync(true);
+            _mockRateLimitService.Setup(r => r.IncrementRateLimitAsync(It.IsAny<string>(), It.IsAny<TimeSpan>()))
+                .Returns(Task.CompletedTask);
 
             // Act
             var result = await _orchestrator.SendMultiChannelAsync(userId, request, channels);
@@ -80,6 +86,8 @@ namespace AmesaBackend.Tests.Services
             // Assert
             result.Should().NotBeNull();
             result.NotificationId.Should().NotBe(Guid.Empty);
+            // Note: Since we're not providing actual channel providers, the channel won't be processed
+            // but the notification record will still be created
         }
 
         [Fact]
