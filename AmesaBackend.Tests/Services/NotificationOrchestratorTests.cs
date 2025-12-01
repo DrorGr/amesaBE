@@ -1,3 +1,4 @@
+extern alias AuthApp;
 using Xunit;
 using Moq;
 using FluentAssertions;
@@ -8,6 +9,7 @@ using AmesaBackend.Notification.Models;
 using AmesaBackend.Shared.Caching;
 using AmesaBackend.Shared.Events;
 using AmesaBackend.Shared.Rest;
+using AuthApp::AmesaBackend.Auth.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
@@ -21,6 +23,7 @@ namespace AmesaBackend.Tests.Services
         private readonly Mock<IHttpRequest> _mockHttpRequest;
         private readonly Mock<IConfiguration> _mockConfiguration;
         private readonly Mock<ILogger<NotificationOrchestrator>> _mockLogger;
+        private readonly Mock<IRateLimitService> _mockRateLimitService;
         private readonly NotificationDbContext _context;
         private readonly NotificationOrchestrator _orchestrator;
 
@@ -36,6 +39,7 @@ namespace AmesaBackend.Tests.Services
             _mockHttpRequest = new Mock<IHttpRequest>();
             _mockConfiguration = new Mock<IConfiguration>();
             _mockLogger = new Mock<ILogger<NotificationOrchestrator>>();
+            _mockRateLimitService = new Mock<IRateLimitService>();
 
             var mockChannelProviders = new List<IChannelProvider>();
 
@@ -47,7 +51,8 @@ namespace AmesaBackend.Tests.Services
                 _mockEventPublisher.Object,
                 _mockHttpRequest.Object,
                 _mockConfiguration.Object,
-                _mockLogger.Object
+                _mockLogger.Object,
+                _mockRateLimitService.Object
             );
         }
 
@@ -66,7 +71,7 @@ namespace AmesaBackend.Tests.Services
             };
             var channels = new List<string> { "email" };
 
-            _mockCache.Setup(c => c.GetRecordAsync<Dictionary<string, object>>(It.IsAny<string>()))
+            _mockCache.Setup(c => c.GetRecordAsync<Dictionary<string, object>>(It.IsAny<string>(), It.IsAny<bool>()))
                 .ReturnsAsync((Dictionary<string, object>?)null);
 
             // Act
