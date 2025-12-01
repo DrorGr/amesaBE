@@ -5,6 +5,7 @@ using AmesaBackend.Payment.DTOs;
 using AmesaBackend.Payment.Helpers;
 
 namespace AmesaBackend.Payment.Controllers;
+// CI/CD trigger - ensure payment service rebuilds with ProductsController
 
 [ApiController]
 [Route("api/v1/[controller]")]
