@@ -31,9 +31,17 @@ namespace AmesaBackend.Notification.HealthChecks
 
                 return HealthCheckResult.Healthy("SMS channel (AWS SNS) is operational");
             }
+            catch (Amazon.SimpleNotificationService.Model.AuthorizationErrorException)
+            {
+                // Permission errors should be Degraded, not Unhealthy
+                // This prevents IAM permission issues from causing health check failures
+                return HealthCheckResult.Degraded("SMS channel (AWS SNS) - IAM permissions not configured");
+            }
             catch (Exception ex)
             {
-                return HealthCheckResult.Unhealthy("SMS channel (AWS SNS) is unavailable", ex);
+                // Other errors (network, service unavailable) are Degraded, not Unhealthy
+                // This prevents transient issues from causing health check failures
+                return HealthCheckResult.Degraded($"SMS channel (AWS SNS) is unavailable: {ex.Message}");
             }
         }
     }

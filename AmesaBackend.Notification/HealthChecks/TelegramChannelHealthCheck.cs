@@ -44,7 +44,9 @@ namespace AmesaBackend.Notification.HealthChecks
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Telegram health check failed");
-                return HealthCheckResult.Unhealthy("Telegram channel is unavailable", ex);
+                // Return Degraded instead of Unhealthy to prevent health check failures
+                // Telegram API issues shouldn't cause service to be marked unhealthy
+                return HealthCheckResult.Degraded($"Telegram channel is unavailable: {ex.Message}");
             }
         }
     }
