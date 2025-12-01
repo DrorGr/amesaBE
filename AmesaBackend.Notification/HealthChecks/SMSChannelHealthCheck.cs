@@ -2,7 +2,6 @@ using Amazon.SimpleNotificationService;
 using Amazon.SimpleNotificationService.Model;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Configuration;
-using Serilog;
 
 namespace AmesaBackend.Notification.HealthChecks
 {
@@ -23,9 +22,6 @@ namespace AmesaBackend.Notification.HealthChecks
             HealthCheckContext context,
             CancellationToken cancellationToken = default)
         {
-            // #region agent log
-            Log.Warning("[DEBUG] SMSChannelHealthCheck entry - SHOULD NOT RUN on /health - sessionId=debug-session runId=run1 hypothesisId=A location=SMSChannelHealthCheck.cs:25 checkName={CheckName}", context.Registration.Name);
-            // #endregion
             try
             {
                 // Check SNS service health by getting platform applications (lightweight check)
