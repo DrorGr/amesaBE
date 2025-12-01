@@ -31,7 +31,12 @@ namespace AmesaBackend.Notification.Services
             _configuration = configuration;
             _sqsClient = sqsClient ?? new AmazonSQSClient(Amazon.RegionEndpoint.GetBySystemName(
                 _configuration["NotificationChannels:Email:Region"] ?? "eu-north-1"));
-            _queueUrl = _configuration["NotificationQueue:SqsQueueUrl"];
+            
+            // Get queue URL and trim BOM/whitespace that might be present in secrets
+            var rawQueueUrl = _configuration["NotificationQueue:SqsQueueUrl"];
+            _queueUrl = string.IsNullOrEmpty(rawQueueUrl) 
+                ? null 
+                : rawQueueUrl.Trim().TrimStart('\uFEFF', '\u200B'); // Remove UTF-8 BOM and zero-width spaces
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)

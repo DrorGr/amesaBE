@@ -83,7 +83,9 @@ public static class AwsSecretsConfiguration
             
             if (response.SecretString != null)
             {
-                configureAction(response.SecretString);
+                // Trim BOM and whitespace that might be present in secrets
+                var cleanedSecret = response.SecretString.Trim().TrimStart('\uFEFF', '\u200B');
+                configureAction(cleanedSecret);
                 Console.WriteLine($"Successfully loaded secret: {secretName}");
             }
         }
