@@ -334,6 +334,17 @@ public class PaymentIntegrationTests : IDisposable
             UpdatedAt = DateTime.UtcNow
         };
         _dbContext.Products.Add(product);
+        
+        // Add ProductLink so handler can find the house link
+        var productLink = new ProductLink
+        {
+            Id = Guid.NewGuid(),
+            ProductId = productId,
+            LinkedEntityType = "house",
+            LinkedEntityId = houseId,
+            CreatedAt = DateTime.UtcNow
+        };
+        _dbContext.ProductLinks.Add(productLink);
         await _dbContext.SaveChangesAsync();
 
         var mockResponse = new AmesaBackend.Shared.Contracts.ApiResponse<object>
