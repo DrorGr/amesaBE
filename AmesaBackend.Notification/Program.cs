@@ -309,7 +309,6 @@ app.MapHealthChecks("/health/notifications", new Microsoft.AspNetCore.Diagnostic
         await context.Response.WriteAsync(result);
     }
 });
-app.MapHealthChecks("/health/notifications");
 app.MapControllers();
 
 // Map SignalR hubs
