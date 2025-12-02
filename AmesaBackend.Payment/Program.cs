@@ -5,6 +5,7 @@ using AmesaBackend.Payment.Configuration;
 using AmesaBackend.Payment.Middleware;
 using AmesaBackend.Shared.Extensions;
 using AmesaBackend.Shared.Middleware.Extensions;
+using AmesaBackend.Auth.Services;
 using Serilog;
 using Npgsql;
 using ProductHandlers = AmesaBackend.Payment.Services.ProductHandlers;
@@ -56,6 +57,9 @@ builder.Services.AddDbContext<PaymentDbContext>(options =>
 
 // Add shared services with Redis required for rate limiting
 builder.Services.AddAmesaBackendShared(builder.Configuration, builder.Environment, requireRedis: true);
+
+// Add Rate Limit Service (required by PaymentRateLimitService)
+builder.Services.AddScoped<IRateLimitService, RateLimitService>();
 
 // Add Services
 builder.Services.AddScoped<IPaymentService, PaymentService>();
