@@ -44,7 +44,11 @@ namespace AmesaBackend.Configuration
                     SecretId = secretId
                 };
 
-                var response = client.GetSecretValueAsync(request).GetAwaiter().GetResult();
+                // ConfigureAwait(false) prevents deadlock when called from synchronous context
+                var response = client.GetSecretValueAsync(request)
+                    .ConfigureAwait(false)
+                    .GetAwaiter()
+                    .GetResult();
 
                 if (string.IsNullOrWhiteSpace(response.SecretString))
                 {

@@ -48,8 +48,14 @@ public class LotteryTicketProductHandler : IProductHandler
         // Validate with Lottery service via HTTP
         try
         {
-            var lotteryServiceUrl = Environment.GetEnvironmentVariable("LOTTERY_SERVICE_URL") 
-                ?? "http://localhost:5001";
+            var lotteryServiceUrl = Environment.GetEnvironmentVariable("LOTTERY_SERVICE_URL");
+            if (string.IsNullOrEmpty(lotteryServiceUrl))
+            {
+                _logger.LogError("LOTTERY_SERVICE_URL environment variable is required but not configured");
+                throw new InvalidOperationException(
+                    "LOTTERY_SERVICE_URL environment variable is required. " +
+                    "Please configure it in ECS task definition.");
+            }
             
             var validationRequest = new
             {
@@ -58,16 +64,48 @@ public class LotteryTicketProductHandler : IProductHandler
                 UserId = userId
             };
 
-            var response = await _httpRequest.PostRequest<AmesaBackend.Shared.Contracts.ApiResponse<object>>(
+            var response = await _httpRequest.PostRequest<AmesaBackend.Shared.Contracts.ApiResponse<ValidateTicketsResponse>>(
                 $"{lotteryServiceUrl}/api/v1/houses/{houseId}/tickets/validate",
                 validationRequest);
 
             if (response == null || response.IsError)
             {
+                var errorMessages = new List<string>();
+                
+                // Extract specific validation errors if available
+                if (response?.ResponseException != null)
+                {
+                    errorMessages.Add(response.ResponseException.ExceptionMessage ?? "Validation failed");
+                    if (!string.IsNullOrEmpty(response.ResponseException.ReferenceErrorCode))
+                    {
+                        errorMessages.Add($"Error Code: {response.ResponseException.ReferenceErrorCode}");
+                    }
+                }
+                else if (response?.Data != null && !response.Data.IsValid)
+                {
+                    // Response has validation result with specific errors
+                    errorMessages.AddRange(response.Data.Errors);
+                }
+                
+                if (errorMessages.Count == 0)
+                {
+                    errorMessages.Add("Failed to validate ticket purchase with lottery service");
+                }
+                
                 return new ProductValidationResult
                 {
                     IsValid = false,
-                    Errors = new List<string> { "Failed to validate ticket purchase with lottery service" }
+                    Errors = errorMessages
+                };
+            }
+
+            // Check validation result data
+            if (response.Data != null && !response.Data.IsValid)
+            {
+                return new ProductValidationResult
+                {
+                    IsValid = false,
+                    Errors = response.Data.Errors
                 };
             }
 
@@ -110,8 +148,14 @@ public class LotteryTicketProductHandler : IProductHandler
         // Call Lottery service to create tickets via HTTP
         try
         {
-            var lotteryServiceUrl = Environment.GetEnvironmentVariable("LOTTERY_SERVICE_URL") 
-                ?? "http://localhost:5001";
+            var lotteryServiceUrl = Environment.GetEnvironmentVariable("LOTTERY_SERVICE_URL");
+            if (string.IsNullOrEmpty(lotteryServiceUrl))
+            {
+                _logger.LogError("LOTTERY_SERVICE_URL environment variable is required but not configured");
+                throw new InvalidOperationException(
+                    "LOTTERY_SERVICE_URL environment variable is required. " +
+                    "Please configure it in ECS task definition.");
+            }
             
             var createTicketsRequest = new
             {
@@ -145,6 +189,25 @@ public class LotteryTicketProductHandler : IProductHandler
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error creating lottery tickets for transaction {TransactionId}", transactionId);
+            
+            // Attempt to refund payment if ticket creation failed
+            try
+            {
+                _logger.LogWarning("Ticket creation failed for transaction {TransactionId}. Attempting refund.", transactionId);
+                
+                // Note: Refund would require IPaymentRefundService or similar
+                // For now, log the refund requirement - actual refund should be handled by payment service
+                // or a separate refund service/endpoint
+                
+                // TODO: Implement refund call once refund endpoint is available
+                // This should call a refund service that calls the payment service's refund endpoint
+                _logger.LogWarning("Refund required for transaction {TransactionId} but refund endpoint not yet implemented", transactionId);
+            }
+            catch (Exception refundEx)
+            {
+                _logger.LogError(refundEx, "Failed to initiate refund for transaction {TransactionId} after ticket creation failure", transactionId);
+            }
+            
             throw;
         }
     }
@@ -164,6 +227,14 @@ public class LotteryTicketProductHandler : IProductHandler
     {
         public List<string> TicketNumbers { get; set; } = new();
         public int TicketsPurchased { get; set; }
+    }
+
+    private class ValidateTicketsResponse
+    {
+        public bool IsValid { get; set; }
+        public List<string> Errors { get; set; } = new();
+        public decimal TotalCost { get; set; }
+        public bool CanEnter { get; set; }
     }
 }
 

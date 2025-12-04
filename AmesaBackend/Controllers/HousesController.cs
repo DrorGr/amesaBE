@@ -5,6 +5,7 @@ using AmesaBackend.Data;
 using AmesaBackend.DTOs;
 using AmesaBackend.Models;
 using System.Security.Claims;
+using AmesaBackend.Shared.Helpers;
 
 namespace AmesaBackend.Controllers
 {
@@ -368,7 +369,14 @@ namespace AmesaBackend.Controllers
         {
             try
             {
-                var userId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "");
+                if (!ControllerHelpers.TryGetUserId(User, out var userId))
+                {
+                    return Unauthorized(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "Authentication required"
+                    });
+                }
 
                 var house = await _context.Houses.FindAsync(id);
                 if (house == null)

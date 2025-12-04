@@ -34,22 +34,22 @@ namespace AmesaBackend.Tests.TestHelpers
             return Task.FromResult<string?>(null);
         }
 
-        public Task<T?> GetRecordAsync<T>(string cacheKey, bool isGlobal = false)
+        public async Task<T?> GetRecordAsync<T>(string cacheKey, bool isGlobal = false)
         {
-            var value = GetRecordAsync(cacheKey, isGlobal).Result;
+            var value = await GetRecordAsync(cacheKey, isGlobal);
             if (string.IsNullOrEmpty(value))
             {
-                return Task.FromResult<T?>(default);
+                return default;
             }
 
             try
             {
                 var result = JsonSerializer.Deserialize<T>(value);
-                return Task.FromResult(result);
+                return result;
             }
             catch
             {
-                return Task.FromResult<T?>(default);
+                return default;
             }
         }
 
@@ -83,16 +83,15 @@ namespace AmesaBackend.Tests.TestHelpers
 
         public T? GetRecord<T>(string cacheKey, bool isGlobal = false)
         {
-            return GetRecordAsync<T>(cacheKey, isGlobal).Result;
+            // Note: This synchronous method should only be used in test contexts where async is not possible
+            // Use Task.Run to avoid deadlocks in async contexts
+            return Task.Run(async () => await GetRecordAsync<T>(cacheKey, isGlobal)).Result;
         }
 
-        public Task BatchSet<T>(Dictionary<string, T> data, bool isGlobal = false)
+        public async Task BatchSet<T>(Dictionary<string, T> data, bool isGlobal = false)
         {
-            foreach (var kvp in data)
-            {
-                SetRecordAsync(kvp.Key, kvp.Value, isGlobal: isGlobal).Wait();
-            }
-            return Task.CompletedTask;
+            var tasks = data.Select(kvp => SetRecordAsync(kvp.Key, kvp.Value, isGlobal: isGlobal));
+            await Task.WhenAll(tasks);
         }
 
         public Task<long> RemoveByControllerName(string controllerName)

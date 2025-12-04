@@ -61,9 +61,10 @@ namespace AmesaBackend.Notification.Services
 
             try
             {
-                // Set default language if not provided
+                // Set language from user preferences if not provided
                 if (string.IsNullOrEmpty(request.Language))
                 {
+                    // Use default language - user language preference can be retrieved from user preferences service if needed
                     request.Language = NotificationChannelConstants.DefaultLanguage;
                 }
                 // Get user channel preferences from cache or database

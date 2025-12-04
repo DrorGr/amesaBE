@@ -76,7 +76,11 @@ public static class PaymentSecretsConfiguration
                 SecretId = secretName
             };
 
-            var response = client.GetSecretValueAsync(request).GetAwaiter().GetResult();
+            // ConfigureAwait(false) prevents deadlock when called from synchronous context
+            var response = client.GetSecretValueAsync(request)
+                .ConfigureAwait(false)
+                .GetAwaiter()
+                .GetResult();
             
             if (response.SecretString != null)
             {

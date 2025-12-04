@@ -22,7 +22,7 @@ namespace AmesaBackend.Lottery.Services
         /// <summary>
         /// Get user's watchlist items with full details
         /// </summary>
-        Task<List<WatchlistItemDto>> GetUserWatchlistItemsAsync(Guid userId);
+        Task<List<WatchlistItemDto>> GetUserWatchlistItemsAsync(Guid userId, int? page = null, int? limit = null);
 
         /// <summary>
         /// Check if house is in user's watchlist

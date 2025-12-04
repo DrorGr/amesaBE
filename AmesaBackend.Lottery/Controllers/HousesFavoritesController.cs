@@ -32,14 +32,14 @@ namespace AmesaBackend.Lottery.Controllers
         /// </summary>
         [HttpGet("favorites")]
         [Authorize]
-        public async Task<ActionResult<ApiResponse<List<HouseDto>>>> GetFavoriteHouses()
+        public async Task<ActionResult<AmesaBackend.Lottery.DTOs.ApiResponse<List<HouseDto>>>> GetFavoriteHouses()
         {
             try
             {
                 var userId = GetCurrentUserId();
                 if (userId == null)
                 {
-                    return Unauthorized(new ApiResponse<List<HouseDto>>
+                    return Unauthorized(new AmesaBackend.Lottery.DTOs.ApiResponse<List<HouseDto>>
                     {
                         Success = false,
                         Message = "User not authenticated"
@@ -48,7 +48,7 @@ namespace AmesaBackend.Lottery.Controllers
 
                 var favoriteHouses = await _lotteryService.GetUserFavoriteHousesAsync(userId.Value);
 
-                return Ok(new ApiResponse<List<HouseDto>>
+                return Ok(new AmesaBackend.Lottery.DTOs.ApiResponse<List<HouseDto>>
                 {
                     Success = true,
                     Data = favoriteHouses,
@@ -58,7 +58,7 @@ namespace AmesaBackend.Lottery.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error retrieving favorite houses");
-                return StatusCode(500, new ApiResponse<List<HouseDto>>
+                return StatusCode(500, new AmesaBackend.Lottery.DTOs.ApiResponse<List<HouseDto>>
                 {
                     Success = false,
                     Error = new ErrorResponse
@@ -75,7 +75,7 @@ namespace AmesaBackend.Lottery.Controllers
         /// </summary>
         [HttpPost("{id}/favorite")]
         [Authorize]
-        public async Task<ActionResult<ApiResponse<FavoriteHouseResponse>>> AddToFavorites(Guid id)
+        public async Task<ActionResult<AmesaBackend.Lottery.DTOs.ApiResponse<FavoriteHouseResponse>>> AddToFavorites(Guid id)
         {
             // #region agent log
             var currentUserId = GetCurrentUserId();
@@ -92,7 +92,7 @@ namespace AmesaBackend.Lottery.Controllers
                     // #region agent log
                     _logger.LogWarning("[DEBUG] HousesFavoritesController.AddToFavorites:unauthorized houseId={HouseId} userIdIsNull=true", id);
                     // #endregion
-                    return Unauthorized(new ApiResponse<FavoriteHouseResponse>
+                    return Unauthorized(new AmesaBackend.Lottery.DTOs.ApiResponse<FavoriteHouseResponse>
                     {
                         Success = false,
                         Message = "User not authenticated"
@@ -112,7 +112,7 @@ namespace AmesaBackend.Lottery.Controllers
                     // #region agent log
                     _logger.LogWarning("[DEBUG] HousesFavoritesController.AddToFavorites:service-returned-false houseId={HouseId} userId={UserId} - returning BadRequest", id, userId.Value);
                     // #endregion
-                    return BadRequest(new ApiResponse<FavoriteHouseResponse>
+                    return BadRequest(new AmesaBackend.Lottery.DTOs.ApiResponse<FavoriteHouseResponse>
                     {
                         Success = false,
                         Message = "Failed to add house to favorites. House may not exist or already be in favorites."
@@ -122,7 +122,7 @@ namespace AmesaBackend.Lottery.Controllers
                 // #region agent log
                 _logger.LogInformation("[DEBUG] HousesFavoritesController.AddToFavorites:success houseId={HouseId} userId={UserId} - returning Ok", id, userId.Value);
                 // #endregion
-                return Ok(new ApiResponse<FavoriteHouseResponse>
+                return Ok(new AmesaBackend.Lottery.DTOs.ApiResponse<FavoriteHouseResponse>
                 {
                     Success = true,
                     Data = new FavoriteHouseResponse
@@ -139,7 +139,7 @@ namespace AmesaBackend.Lottery.Controllers
                 _logger.LogError(ex, "[DEBUG] HousesFavoritesController.AddToFavorites:exception houseId={HouseId} exceptionType={Type} message={Message} stackTrace={StackTrace}", id, ex.GetType().Name, ex.Message, ex.StackTrace?.Substring(0, Math.Min(1000, ex.StackTrace?.Length ?? 0)));
                 // #endregion
                 _logger.LogError(ex, "Error adding house {HouseId} to favorites", id);
-                return StatusCode(500, new ApiResponse<FavoriteHouseResponse>
+                return StatusCode(500, new AmesaBackend.Lottery.DTOs.ApiResponse<FavoriteHouseResponse>
                 {
                     Success = false,
                     Error = new ErrorResponse
@@ -156,14 +156,14 @@ namespace AmesaBackend.Lottery.Controllers
         /// </summary>
         [HttpDelete("{id}/favorite")]
         [Authorize]
-        public async Task<ActionResult<ApiResponse<FavoriteHouseResponse>>> RemoveFromFavorites(Guid id)
+        public async Task<ActionResult<AmesaBackend.Lottery.DTOs.ApiResponse<FavoriteHouseResponse>>> RemoveFromFavorites(Guid id)
         {
             try
             {
                 var userId = GetCurrentUserId();
                 if (userId == null)
                 {
-                    return Unauthorized(new ApiResponse<FavoriteHouseResponse>
+                    return Unauthorized(new AmesaBackend.Lottery.DTOs.ApiResponse<FavoriteHouseResponse>
                     {
                         Success = false,
                         Message = "User not authenticated"
@@ -174,14 +174,14 @@ namespace AmesaBackend.Lottery.Controllers
 
                 if (!success)
                 {
-                    return BadRequest(new ApiResponse<FavoriteHouseResponse>
+                    return BadRequest(new AmesaBackend.Lottery.DTOs.ApiResponse<FavoriteHouseResponse>
                     {
                         Success = false,
                         Message = "Failed to remove house from favorites. House may not be in favorites."
                     });
                 }
 
-                return Ok(new ApiResponse<FavoriteHouseResponse>
+                return Ok(new AmesaBackend.Lottery.DTOs.ApiResponse<FavoriteHouseResponse>
                 {
                     Success = true,
                     Data = new FavoriteHouseResponse
@@ -195,7 +195,7 @@ namespace AmesaBackend.Lottery.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error removing house {HouseId} from favorites", id);
-                return StatusCode(500, new ApiResponse<FavoriteHouseResponse>
+                return StatusCode(500, new AmesaBackend.Lottery.DTOs.ApiResponse<FavoriteHouseResponse>
                 {
                     Success = false,
                     Error = new ErrorResponse
@@ -208,5 +208,9 @@ namespace AmesaBackend.Lottery.Controllers
         }
     }
 }
+
+
+
+
 
 

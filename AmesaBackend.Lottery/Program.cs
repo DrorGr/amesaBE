@@ -5,13 +5,16 @@ using System.Text;
 using System.Threading.Tasks;
 using AmesaBackend.Lottery.Data;
 using AmesaBackend.Lottery.Services;
+using AmesaBackend.Lottery.Services.Processors;
 using AmesaBackend.Lottery.Hubs;
 using AmesaBackend.Shared.Extensions;
 using AmesaBackend.Shared.Middleware.Extensions;
 using AmesaBackend.Auth.Data;
 using AmesaBackend.Auth.Services;
+using Amazon.SQS;
 using Serilog;
 using Npgsql;
+using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -171,13 +174,46 @@ builder.Services.AddAuthentication(options =>
 // Register UserPreferencesService for favorites functionality
 builder.Services.AddScoped<IUserPreferencesService, UserPreferencesService>();
 builder.Services.AddScoped<ILotteryService, LotteryService>();
-// TODO: HouseCacheService registration - part of cost optimization refactoring
-// builder.Services.AddScoped<IHouseCacheService, HouseCacheService>();
 builder.Services.AddScoped<IFileService, FileService>();
 builder.Services.AddScoped<AmesaBackend.Shared.Configuration.IConfigurationService, AmesaBackend.Lottery.Services.ConfigurationService>();
 
-// Add Background Service for lottery draws
+// Reservation system services
+builder.Services.AddScoped<IRedisInventoryManager, RedisInventoryManager>();
+builder.Services.AddScoped<ITicketReservationService, TicketReservationService>();
+builder.Services.AddScoped<IReservationProcessor, ReservationProcessor>();
+builder.Services.AddScoped<IPaymentProcessor, PaymentProcessor>();
+builder.Services.AddScoped<ITicketCreatorProcessor, TicketCreatorProcessor>();
+
+// Register IRateLimitService from Auth service (optional)
+var rateLimitServiceType = typeof(IRateLimitService);
+if (rateLimitServiceType != null)
+{
+    builder.Services.AddScoped(typeof(IRateLimitService), typeof(RateLimitService));
+}
+
+// Register HttpClient for payment service with timeout configuration
+builder.Services.AddHttpClient<IPaymentProcessor, PaymentProcessor>(client =>
+{
+    var paymentServiceUrl = builder.Configuration["PaymentService:BaseUrl"] 
+        ?? "http://amesa-backend-alb-509078867.eu-north-1.elb.amazonaws.com/api/v1";
+    client.BaseAddress = new Uri(paymentServiceUrl);
+    client.Timeout = TimeSpan.FromSeconds(30); // 30 second timeout for payment requests
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
+
+// Register SQS client
+builder.Services.AddSingleton<IAmazonSQS>(sp =>
+{
+    var region = builder.Configuration["AWS:Region"] ?? "eu-north-1";
+    return new AmazonSQSClient(Amazon.RegionEndpoint.GetBySystemName(region));
+});
+
+// Add Background Services
 builder.Services.AddHostedService<LotteryDrawService>();
+builder.Services.AddHostedService<TicketQueueProcessorService>();
+builder.Services.AddHostedService<ReservationCleanupService>();
+builder.Services.AddHostedService<InventorySyncService>();
+builder.Services.AddHostedService<LotteryCountdownService>();
 
 // Add SignalR for real-time updates
 builder.Services.AddSignalR();
@@ -222,6 +258,9 @@ app.Use(async (context, next) =>
 });
 // #endregion
 app.UseAuthentication();
+
+// Service-to-service authentication middleware
+app.UseMiddleware<AmesaBackend.Shared.Middleware.ServiceToServiceAuthMiddleware>();
 app.UseAuthorization();
 
 app.MapHealthChecks("/health");

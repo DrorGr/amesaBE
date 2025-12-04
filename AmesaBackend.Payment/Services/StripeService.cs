@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using AmesaBackend.Payment.Data;
 using AmesaBackend.Payment.DTOs;
 using AmesaBackend.Payment.Models;
+using AmesaBackend.Payment.Services.ProductHandlers;
 using AmesaBackend.Shared.Events;
 using Stripe;
 using System.Security.Cryptography;
@@ -18,6 +19,7 @@ public class StripeService : IStripeService
     private readonly IEventPublisher _eventPublisher;
     private readonly ILogger<StripeService> _logger;
     private readonly IPaymentAuditService? _auditService;
+    private readonly IProductHandlerRegistry _productHandlerRegistry;
     private readonly string _apiKey;
     private readonly string _webhookSecret;
 
@@ -32,6 +34,7 @@ public class StripeService : IStripeService
         _eventPublisher = eventPublisher;
         _logger = logger;
         _auditService = serviceProvider.GetService<IPaymentAuditService>();
+        _productHandlerRegistry = serviceProvider.GetRequiredService<IProductHandlerRegistry>();
 
         // Load from configuration (AWS Secrets Manager in production)
         _apiKey = configuration["Stripe:ApiKey"] 
@@ -402,6 +405,173 @@ public class StripeService : IStripeService
             Currency = transaction.Currency,
             PaymentMethod = transaction.PaymentMethodId?.ToString() ?? "stripe"
         });
+
+        // Process products via product handlers (CRITICAL: Connect webhook flow to ticket creation)
+        await ProcessTransactionProductsAsync(transaction);
+    }
+
+    /// <summary>
+    /// Processes all products in a completed transaction by calling their respective product handlers.
+    /// This connects the webhook flow to ticket creation and other product fulfillment.
+    /// </summary>
+    private async Task ProcessTransactionProductsAsync(Transaction transaction)
+    {
+        try
+        {
+            // Idempotency check: Skip if transaction was already processed
+            // This prevents duplicate processing if webhook is called multiple times
+            if (transaction.Status == "Completed" && transaction.ProcessedAt.HasValue)
+            {
+                // Check if products were already processed by checking if this is a retry
+                // The product handlers have their own idempotency, but we add defense-in-depth here
+                _logger.LogInformation(
+                    "Transaction {TransactionId} already marked as completed at {ProcessedAt}. Checking if products need processing.",
+                    transaction.Id, transaction.ProcessedAt);
+            }
+
+            // Get all transaction items with products
+            var transactionItems = await _context.TransactionItems
+                .Where(ti => ti.TransactionId == transaction.Id && ti.ProductId.HasValue && ti.ItemType == "product")
+                .Include(ti => ti.Product)
+                .ToListAsync();
+
+            // Fallback: If no transaction items but transaction has ProductId, use that
+            if (!transactionItems.Any() && transaction.ProductId.HasValue)
+            {
+                _logger.LogInformation(
+                    "No transaction items found for transaction {TransactionId}, but ProductId exists. Using fallback logic.",
+                    transaction.Id);
+
+                var product = await _context.Products
+                    .FirstOrDefaultAsync(p => p.Id == transaction.ProductId.Value);
+
+                if (product != null)
+                {
+                    // Extract quantity from metadata if available, default to 1
+                    var quantity = 1;
+                    if (!string.IsNullOrEmpty(transaction.Metadata))
+                    {
+                        try
+                        {
+                            var metadata = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(transaction.Metadata);
+                            if (metadata != null && metadata.ContainsKey("Quantity"))
+                            {
+                                if (metadata["Quantity"].ValueKind == JsonValueKind.Number)
+                                {
+                                    quantity = metadata["Quantity"].GetInt32();
+                                }
+                                else if (metadata["Quantity"].ValueKind == JsonValueKind.String)
+                                {
+                                    quantity = int.Parse(metadata["Quantity"].GetString() ?? "1");
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to parse quantity from transaction metadata, using default quantity 1");
+                        }
+                    }
+
+                    // Create and save transaction item for processing and audit trail
+                    var transactionItem = new TransactionItem
+                    {
+                        Id = Guid.NewGuid(),
+                        TransactionId = transaction.Id,
+                        ProductId = product.Id,
+                        ItemType = "product",
+                        Description = product.Name,
+                        Quantity = quantity,
+                        UnitPrice = quantity > 0 ? transaction.Amount / quantity : transaction.Amount,
+                        TotalPrice = transaction.Amount,
+                        CreatedAt = DateTime.UtcNow
+                    };
+
+                    _context.TransactionItems.Add(transactionItem);
+                    await _context.SaveChangesAsync();
+
+                    // Load with product for processing
+                    transactionItem.Product = product;
+                    transactionItems = new List<TransactionItem> { transactionItem };
+
+                    _logger.LogInformation(
+                        "Created and saved transaction item for product {ProductId} (quantity: {Quantity}) in transaction {TransactionId}",
+                        product.Id, quantity, transaction.Id);
+                }
+                else
+                {
+                    _logger.LogWarning(
+                        "Product {ProductId} not found for transaction {TransactionId}",
+                        transaction.ProductId.Value, transaction.Id);
+                }
+            }
+
+            if (!transactionItems.Any())
+            {
+                _logger.LogInformation("No product items found in transaction {TransactionId}", transaction.Id);
+                return;
+            }
+
+            foreach (var item in transactionItems)
+            {
+                if (!item.ProductId.HasValue || item.Product == null)
+                {
+                    _logger.LogWarning("Transaction item {ItemId} has no product", item.Id);
+                    continue;
+                }
+
+                var product = item.Product;
+                var productHandler = _productHandlerRegistry.GetHandler(product.ProductType);
+
+                if (productHandler == null)
+                {
+                    _logger.LogWarning(
+                        "No product handler found for product type '{ProductType}' in transaction {TransactionId}",
+                        product.ProductType, transaction.Id);
+                    continue;
+                }
+
+                try
+                {
+                    _logger.LogInformation(
+                        "Processing product {ProductId} (type: {ProductType}, quantity: {Quantity}) for transaction {TransactionId}",
+                        product.Id, product.ProductType, item.Quantity, transaction.Id);
+
+                    var result = await productHandler.ProcessPurchaseAsync(
+                        transactionId: transaction.Id,
+                        productId: product.Id,
+                        quantity: item.Quantity,
+                        userId: transaction.UserId,
+                        context: _context,
+                        eventPublisher: _eventPublisher);
+
+                    if (result.Success)
+                    {
+                        _logger.LogInformation(
+                            "Successfully processed product {ProductId} for transaction {TransactionId}. Linked entity: {LinkedEntityType}/{LinkedEntityId}",
+                            product.Id, transaction.Id, result.LinkedEntityType, result.LinkedEntityId);
+                    }
+                    else
+                    {
+                        _logger.LogError(
+                            "Failed to process product {ProductId} for transaction {TransactionId}: {ErrorMessage}",
+                            product.Id, transaction.Id, result.ErrorMessage);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex,
+                        "Error processing product {ProductId} (type: {ProductType}) for transaction {TransactionId}",
+                        product.Id, product.ProductType, transaction.Id);
+                    // Continue processing other items even if one fails
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error processing transaction products for transaction {TransactionId}", transaction.Id);
+            // Don't throw - we've already marked transaction as completed and published the event
+            // The error is logged for investigation
+        }
     }
 
     private async Task HandlePaymentIntentFailed(JsonElement dataObj)

@@ -32,14 +32,14 @@ namespace AmesaBackend.Lottery.Controllers
         /// </summary>
         [HttpGet("recommendations")]
         [Authorize]
-        public async Task<ActionResult<ApiResponse<List<RecommendedHouseDto>>>> GetRecommendedHouses([FromQuery] int limit = 10)
+        public async Task<ActionResult<AmesaBackend.Lottery.DTOs.ApiResponse<List<RecommendedHouseDto>>>> GetRecommendedHouses([FromQuery] int limit = 10)
         {
             try
             {
                 var userId = GetCurrentUserId();
                 if (userId == null)
                 {
-                    return Unauthorized(new ApiResponse<List<RecommendedHouseDto>>
+                    return Unauthorized(new AmesaBackend.Lottery.DTOs.ApiResponse<List<RecommendedHouseDto>>
                     {
                         Success = false,
                         Message = "User not authenticated"
@@ -87,7 +87,7 @@ namespace AmesaBackend.Lottery.Controllers
                     Reason = index == 0 ? "Based on your favorites" : "Similar to your preferences"
                 }).ToList();
 
-                return Ok(new ApiResponse<List<RecommendedHouseDto>>
+                return Ok(new AmesaBackend.Lottery.DTOs.ApiResponse<List<RecommendedHouseDto>>
                 {
                     Success = true,
                     Data = recommendedDtos,
@@ -97,7 +97,7 @@ namespace AmesaBackend.Lottery.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error retrieving recommended houses");
-                return StatusCode(500, new ApiResponse<List<RecommendedHouseDto>>
+                return StatusCode(500, new AmesaBackend.Lottery.DTOs.ApiResponse<List<RecommendedHouseDto>>
                 {
                     Success = false,
                     Error = new ErrorResponse
@@ -110,5 +110,9 @@ namespace AmesaBackend.Lottery.Controllers
         }
     }
 }
+
+
+
+
 
 

@@ -59,85 +59,108 @@ namespace AmesaBackend.Shared.Middleware.ErrorHandling
                 _logger.LogError(error, "SessionId: {Id}, Request Body: {RequestBody}", sessionId, requestBody);
 
                 context.Response.ContentType = "application/json";
-                ApiError apiError = null!;
-
-                var newResponse = new ApiResponse<object>
-                {
-                    Version = GetApiVersion(),
-                    Message = error.Message,
-                    Data = null!,
-                    Code = context.Response.StatusCode,
-                    IsError = true,
-                    ResponseException = null
-                };
+                StandardErrorResponse? errorResponse = null;
+                int statusCode = (int)HttpStatusCode.InternalServerError;
+                string errorCode = "INTERNAL_ERROR";
+                string errorMessage = "An error occurred while processing your request.";
 
                 switch (error)
                 {
                     case ApiException ex:
-
+                        statusCode = ex.StatusCode;
                         if (ex.IsModelValidationError)
                         {
-                            newResponse.Message = "Bad Input";
-                            apiError = new ApiError(ResponseMessageEnum.ValidationError.GetDescription(), ex.Errors ?? Enumerable.Empty<ValidationError>())
+                            errorCode = "VALIDATION_ERROR";
+                            errorMessage = ResponseMessageEnum.ValidationError.GetDescription();
+                            errorResponse = new StandardErrorResponse
                             {
-                                ReferenceErrorCode = ex.ReferenceErrorCode,
-                                ReferenceDocumentLink = ex.ReferenceDocumentLink,
+                                Code = errorCode,
+                                Message = errorMessage,
+                                Details = ex.Errors?.Select(e => new { Field = e.Field, Message = e.Message }) ?? Enumerable.Empty<object>()
                             };
                         }
                         else
-                            apiError = new ApiError(ex.Message);
-                        context.Response.StatusCode = ex.StatusCode;
+                        {
+                            errorCode = ex.ReferenceErrorCode ?? "API_ERROR";
+                            errorMessage = ex.Message;
+                            errorResponse = new StandardErrorResponse
+                            {
+                                Code = errorCode,
+                                Message = errorMessage,
+                                Details = _restExceptionDetails ? ex.StackTrace : null
+                            };
+                        }
                         break;
                     case CustomFaultException e:
                         using (var scope = _provider.CreateScope())
                         {
                             var localizer = scope.ServiceProvider.GetService<IStringLocalizer>();
-
                             string localizedErrorDescription = localizer?[$"{e.StatusCode}"] ?? e.Message;
-                            apiError = new ApiError(e.StatusCode.ToString())
+                            statusCode = (int)HttpStatusCode.InternalServerError;
+                            errorCode = e.StatusCode.ToString();
+                            errorMessage = localizedErrorDescription;
+                            errorResponse = new StandardErrorResponse
                             {
-                                ExceptionMessage = e.Message,
-                                Details = $"{(int)e.StatusCode}: {localizedErrorDescription}"
+                                Code = errorCode,
+                                Message = errorMessage,
+                                Details = _restExceptionDetails ? e.Message : null
                             };
-                            context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
                         }
                         break;
                     case UnauthorizedAccessException:
-
-                        apiError = new ApiError(ResponseMessageEnum.UnAuthorized.GetDescription());
-                        context.Response.StatusCode = (int)HttpStatusCode.Forbidden;
-
+                        statusCode = (int)HttpStatusCode.Forbidden;
+                        errorCode = "AUTHENTICATION_ERROR";
+                        errorMessage = ResponseMessageEnum.UnAuthorized.GetDescription();
+                        errorResponse = new StandardErrorResponse
+                        {
+                            Code = errorCode,
+                            Message = errorMessage
+                        };
                         break;
                     case KeyNotFoundException:
-                        context.Response.StatusCode = (int)HttpStatusCode.NotFound;
-                        apiError = new ApiError(error.Message);
+                        statusCode = (int)HttpStatusCode.NotFound;
+                        errorCode = "NOT_FOUND";
+                        errorMessage = error.Message;
+                        errorResponse = new StandardErrorResponse
+                        {
+                            Code = errorCode,
+                            Message = errorMessage
+                        };
                         break;
                     case DbException e:
-                        context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
-                        apiError = new ApiError("DbException error")
+                        statusCode = (int)HttpStatusCode.InternalServerError;
+                        errorCode = "DATABASE_ERROR";
+                        errorMessage = "A database error occurred.";
+                        errorResponse = new StandardErrorResponse
                         {
-                            ExceptionMessage = e.Message
+                            Code = errorCode,
+                            Message = errorMessage,
+                            Details = _restExceptionDetails ? e.Message : null
                         };
-
                         break;
-
                     default:
-                        context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
-                        apiError = new ApiError(error.Message);
+                        statusCode = (int)HttpStatusCode.InternalServerError;
+                        errorCode = "INTERNAL_ERROR";
+                        errorMessage = _restExceptionDetails ? error.Message : "An internal server error occurred.";
+                        errorResponse = new StandardErrorResponse
+                        {
+                            Code = errorCode,
+                            Message = errorMessage,
+                            Details = _restExceptionDetails ? error.StackTrace : null
+                        };
                         break;
+                }
 
-                }
-                //add flag for environment               
-                if (!_restExceptionDetails)
+                var newResponse = new StandardApiResponse<object>
                 {
-                    apiError = new ApiError("All details show in log information")
-                    {
-                        ExceptionMessage = null
-                    };
-                }
-                
-                newResponse.ResponseException = apiError;
-                newResponse.Code = context.Response.StatusCode;
+                    Success = false,
+                    Data = null,
+                    Message = errorMessage,
+                    Error = errorResponse,
+                    Timestamp = DateTime.UtcNow
+                };
+
+                context.Response.StatusCode = statusCode;
                 var result = JsonConvert.SerializeObject(newResponse, JSONSettings());
                 await context.Response.WriteAsync(result);
             }

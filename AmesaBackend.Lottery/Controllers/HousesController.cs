@@ -7,6 +7,7 @@ using AmesaBackend.Lottery.Models;
 using AmesaBackend.Lottery.Services;
 using AmesaBackend.Shared.Events;
 using AmesaBackend.Shared.Caching;
+using AmesaBackend.Shared.Helpers;
 using System.Security.Claims;
 
 namespace AmesaBackend.Lottery.Controllers
@@ -20,24 +21,30 @@ namespace AmesaBackend.Lottery.Controllers
         private readonly ILogger<HousesController> _logger;
         private readonly ILotteryService _lotteryService;
         private readonly ICache _cache;
+        private readonly ITicketReservationService? _reservationService;
+        private readonly IRedisInventoryManager? _inventoryManager;
 
         public HousesController(
             LotteryDbContext context, 
             IEventPublisher eventPublisher, 
             ILogger<HousesController> logger,
             ILotteryService lotteryService,
-            ICache cache)
+            ICache cache,
+            ITicketReservationService? reservationService = null,
+            IRedisInventoryManager? inventoryManager = null)
         {
             _context = context;
             _eventPublisher = eventPublisher;
             _logger = logger;
             _lotteryService = lotteryService;
             _cache = cache ?? throw new ArgumentNullException(nameof(cache));
+            _reservationService = reservationService;
+            _inventoryManager = inventoryManager;
         }
 
         [HttpGet("{id}")]
         [ResponseCache(Duration = 900)] // 15 minutes
-        public async Task<ActionResult<ApiResponse<HouseDto>>> GetHouse(Guid id)
+        public async Task<ActionResult<AmesaBackend.Lottery.DTOs.ApiResponse<HouseDto>>> GetHouse(Guid id)
         {
             // #region agent log
             _logger.LogInformation("[DEBUG_ROUTING] HousesController.GetHouse called - Method: {Method}, Path: {Path}, Id: {Id}", 
@@ -54,7 +61,7 @@ namespace AmesaBackend.Lottery.Controllers
 
                 if (house == null)
                 {
-                    return NotFound(new ApiResponse<HouseDto>
+                    return NotFound(new AmesaBackend.Lottery.DTOs.ApiResponse<HouseDto>
                     {
                         Success = false,
                         Message = "House not found"
@@ -124,7 +131,7 @@ namespace AmesaBackend.Lottery.Controllers
                     CreatedAt = house.CreatedAt
                 };
 
-                return Ok(new ApiResponse<HouseDto>
+                return Ok(new AmesaBackend.Lottery.DTOs.ApiResponse<HouseDto>
                 {
                     Success = true,
                     Data = houseDto
@@ -133,7 +140,7 @@ namespace AmesaBackend.Lottery.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error retrieving house {HouseId}", id);
-                return StatusCode(500, new ApiResponse<HouseDto>
+                return StatusCode(500, new AmesaBackend.Lottery.DTOs.ApiResponse<HouseDto>
                 {
                     Success = false,
                     Error = new ErrorResponse
@@ -147,7 +154,7 @@ namespace AmesaBackend.Lottery.Controllers
 
         [HttpPost]
         [Authorize]
-        public async Task<ActionResult<ApiResponse<HouseDto>>> CreateHouse([FromBody] CreateHouseRequest request)
+        public async Task<ActionResult<AmesaBackend.Lottery.DTOs.ApiResponse<HouseDto>>> CreateHouse([FromBody] CreateHouseRequest request)
         {
             try
             {
@@ -179,15 +186,35 @@ namespace AmesaBackend.Lottery.Controllers
                 };
 
                 _context.Houses.Add(house);
-                await _context.SaveChangesAsync();
-
-                await _eventPublisher.PublishAsync(new HouseCreatedEvent
+                
+                // Use transaction to ensure atomicity
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+                try
                 {
-                    HouseId = house.Id,
-                    Title = house.Title,
-                    Price = house.Price,
-                    CreatedByUserId = house.CreatedBy ?? Guid.Empty
-                });
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+
+                // Publish event after transaction commits (non-critical, don't fail if it fails)
+                try
+                {
+                    await _eventPublisher.PublishAsync(new HouseCreatedEvent
+                    {
+                        HouseId = house.Id,
+                        Title = house.Title,
+                        Price = house.Price,
+                        CreatedByUserId = house.CreatedBy ?? Guid.Empty
+                    });
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to publish HouseCreatedEvent for house {HouseId}", house.Id);
+                }
 
                 // Invalidate house list caches
                 try
@@ -235,7 +262,7 @@ namespace AmesaBackend.Lottery.Controllers
                     CreatedAt = house.CreatedAt
                 };
 
-                return Ok(new ApiResponse<HouseDto>
+                return Ok(new AmesaBackend.Lottery.DTOs.ApiResponse<HouseDto>
                 {
                     Success = true,
                     Data = houseDto,
@@ -245,7 +272,7 @@ namespace AmesaBackend.Lottery.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error creating house");
-                return StatusCode(500, new ApiResponse<HouseDto>
+                return StatusCode(500, new AmesaBackend.Lottery.DTOs.ApiResponse<HouseDto>
                 {
                     Success = false,
                     Error = new ErrorResponse
@@ -259,7 +286,7 @@ namespace AmesaBackend.Lottery.Controllers
 
         [HttpPut("{id}")]
         [Authorize]
-        public async Task<ActionResult<ApiResponse<HouseDto>>> UpdateHouse(Guid id, [FromBody] UpdateHouseRequest request)
+        public async Task<ActionResult<AmesaBackend.Lottery.DTOs.ApiResponse<HouseDto>>> UpdateHouse(Guid id, [FromBody] UpdateHouseRequest request)
         {
             try
             {
@@ -267,7 +294,7 @@ namespace AmesaBackend.Lottery.Controllers
 
                 if (house == null)
                 {
-                    return NotFound(new ApiResponse<HouseDto>
+                    return NotFound(new AmesaBackend.Lottery.DTOs.ApiResponse<HouseDto>
                     {
                         Success = false,
                         Message = "House not found"
@@ -330,7 +357,7 @@ namespace AmesaBackend.Lottery.Controllers
                     // Validate max_participants > 0 if set
                     if (request.MaxParticipants.Value <= 0)
                     {
-                        return BadRequest(new ApiResponse<HouseDto>
+                        return BadRequest(new AmesaBackend.Lottery.DTOs.ApiResponse<HouseDto>
                         {
                             Success = false,
                             Message = "MaxParticipants must be greater than 0",
@@ -346,7 +373,7 @@ namespace AmesaBackend.Lottery.Controllers
                     var currentCount = await _lotteryService.GetParticipantCountAsync(id);
                     if (request.MaxParticipants.Value < currentCount)
                     {
-                        return BadRequest(new ApiResponse<HouseDto>
+                        return BadRequest(new AmesaBackend.Lottery.DTOs.ApiResponse<HouseDto>
                         {
                             Success = false,
                             Message = $"Cannot set max_participants ({request.MaxParticipants.Value}) less than current participants ({currentCount})",
@@ -363,14 +390,33 @@ namespace AmesaBackend.Lottery.Controllers
 
                 house.UpdatedAt = DateTime.UtcNow;
 
-                await _context.SaveChangesAsync();
-
-                await _eventPublisher.PublishAsync(new HouseUpdatedEvent
+                // Use transaction to ensure atomicity
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+                try
                 {
-                    HouseId = house.Id,
-                    Title = house.Title,
-                    Price = house.Price
-                });
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+
+                // Publish event after transaction commits (non-critical, don't fail if it fails)
+                try
+                {
+                    await _eventPublisher.PublishAsync(new HouseUpdatedEvent
+                    {
+                        HouseId = house.Id,
+                        Title = house.Title,
+                        Price = house.Price
+                    });
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to publish HouseUpdatedEvent for house {HouseId}", house.Id);
+                }
 
                 var ticketsSold = await _context.LotteryTickets
                     .CountAsync(t => t.HouseId == id && t.Status == "Active");
@@ -437,7 +483,7 @@ namespace AmesaBackend.Lottery.Controllers
                     _logger.LogWarning(ex, "Error invalidating house caches (non-critical)");
                 }
 
-                return Ok(new ApiResponse<HouseDto>
+                return Ok(new AmesaBackend.Lottery.DTOs.ApiResponse<HouseDto>
                 {
                     Success = true,
                     Data = houseDto,
@@ -447,7 +493,7 @@ namespace AmesaBackend.Lottery.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error updating house {HouseId}", id);
-                return StatusCode(500, new ApiResponse<HouseDto>
+                return StatusCode(500, new AmesaBackend.Lottery.DTOs.ApiResponse<HouseDto>
                 {
                     Success = false,
                     Error = new ErrorResponse
@@ -461,7 +507,7 @@ namespace AmesaBackend.Lottery.Controllers
 
         [HttpDelete("{id}")]
         [Authorize]
-        public async Task<ActionResult<ApiResponse<object>>> DeleteHouse(Guid id)
+        public async Task<ActionResult<AmesaBackend.Lottery.DTOs.ApiResponse<object>>> DeleteHouse(Guid id)
         {
             try
             {
@@ -469,7 +515,7 @@ namespace AmesaBackend.Lottery.Controllers
 
                 if (house == null)
                 {
-                    return NotFound(new ApiResponse<object>
+                    return NotFound(new AmesaBackend.Lottery.DTOs.ApiResponse<object>
                     {
                         Success = false,
                         Message = "House not found"
@@ -477,9 +523,21 @@ namespace AmesaBackend.Lottery.Controllers
                 }
 
                 house.DeletedAt = DateTime.UtcNow;
-                await _context.SaveChangesAsync();
+                
+                // Use transaction to ensure atomicity
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
 
-                // Invalidate house list caches
+                // Invalidate house list caches (non-critical, don't fail if it fails)
                 try
                 {
                     await _cache.DeleteByRegex("houses_*");
@@ -492,7 +550,7 @@ namespace AmesaBackend.Lottery.Controllers
                     _logger.LogWarning(ex, "Error invalidating house caches (non-critical)");
                 }
 
-                return Ok(new ApiResponse<object>
+                return Ok(new AmesaBackend.Lottery.DTOs.ApiResponse<object>
                 {
                     Success = true,
                     Message = "House deleted successfully"
@@ -501,7 +559,499 @@ namespace AmesaBackend.Lottery.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error deleting house {HouseId}", id);
-                return StatusCode(500, new ApiResponse<object>
+                return StatusCode(500, new AmesaBackend.Lottery.DTOs.ApiResponse<object>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "INTERNAL_ERROR",
+                        Message = ex.Message
+                    }
+                });
+            }
+        }
+
+        [HttpGet("{id}/inventory")]
+        public async Task<ActionResult<AmesaBackend.Lottery.DTOs.ApiResponse<InventoryStatus>>> GetInventory(Guid id)
+        {
+            // Prevent caching - inventory must be real-time
+            Response.Headers.Add("Cache-Control", "no-cache, no-store, must-revalidate");
+            Response.Headers.Add("Pragma", "no-cache");
+            Response.Headers.Add("Expires", "0");
+            
+            try
+            {
+                if (_inventoryManager == null)
+                {
+                    return StatusCode(503, new AmesaBackend.Lottery.DTOs.ApiResponse<InventoryStatus>
+                    {
+                        Success = false,
+                        Message = "Inventory service not available"
+                    });
+                }
+
+                var inventory = await _inventoryManager.GetInventoryStatusAsync(id);
+                
+                return Ok(new AmesaBackend.Lottery.DTOs.ApiResponse<InventoryStatus>
+                {
+                    Success = true,
+                    Data = inventory
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting inventory for house {HouseId}", id);
+                return StatusCode(500, new AmesaBackend.Lottery.DTOs.ApiResponse<InventoryStatus>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "INTERNAL_ERROR",
+                        Message = ex.Message
+                    }
+                });
+            }
+        }
+
+        [HttpPost("{id}/tickets/reserve")]
+        [Authorize]
+        public async Task<ActionResult<AmesaBackend.Lottery.DTOs.ApiResponse<ReservationDto>>> ReserveTickets(
+            Guid id,
+            [FromBody] CreateReservationRequest request)
+        {
+            try
+            {
+                if (_reservationService == null)
+                {
+                    return StatusCode(503, new AmesaBackend.Lottery.DTOs.ApiResponse<ReservationDto>
+                    {
+                        Success = false,
+                        Message = "Reservation service not available"
+                    });
+                }
+
+                if (!ControllerHelpers.TryGetUserId(User, out var userId))
+                {
+                    return Unauthorized(new AmesaBackend.Lottery.DTOs.ApiResponse<ReservationDto>
+                    {
+                        Success = false,
+                        Message = "Authentication required"
+                    });
+                }
+                
+                var reservation = await _reservationService.CreateReservationAsync(request, id, userId);
+
+                return Ok(new AmesaBackend.Lottery.DTOs.ApiResponse<ReservationDto>
+                {
+                    Success = true,
+                    Data = reservation
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new AmesaBackend.Lottery.DTOs.ApiResponse<ReservationDto>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "INVALID_OPERATION",
+                        Message = ex.Message
+                    }
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new AmesaBackend.Lottery.DTOs.ApiResponse<ReservationDto>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "UNAUTHORIZED",
+                        Message = ex.Message
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error reserving tickets for house {HouseId}", id);
+                return StatusCode(500, new AmesaBackend.Lottery.DTOs.ApiResponse<ReservationDto>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "INTERNAL_ERROR",
+                        Message = "An error occurred creating your reservation. Please try again."
+                    }
+                });
+            }
+        }
+
+        /// <summary>
+        /// Validate ticket purchase before payment (called by Payment service)
+        /// POST /api/v1/houses/{id}/tickets/validate
+        /// </summary>
+        [HttpPost("{id}/tickets/validate")]
+        [AllowAnonymous]  // Service-to-service endpoint - authenticated via ServiceToServiceAuthMiddleware
+        public async Task<ActionResult<AmesaBackend.Lottery.DTOs.ApiResponse<ValidateTicketsResponse>>> ValidateTickets(
+            Guid id,
+            [FromBody] ValidateTicketsRequest request)
+        {
+            try
+            {
+                // Ensure houseId in path matches request
+                if (request.HouseId != id)
+                {
+                    return BadRequest(new AmesaBackend.Lottery.DTOs.ApiResponse<ValidateTicketsResponse>
+                    {
+                        Success = false,
+                        Message = "House ID in path does not match request body"
+                    });
+                }
+
+                var result = await _lotteryService.ValidateTicketsAsync(request);
+
+                return Ok(new AmesaBackend.Lottery.DTOs.ApiResponse<ValidateTicketsResponse>
+                {
+                    Success = true,
+                    Data = result
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error validating tickets for house {HouseId}", id);
+                return StatusCode(500, new AmesaBackend.Lottery.DTOs.ApiResponse<ValidateTicketsResponse>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "INTERNAL_ERROR",
+                        Message = ex.Message
+                    }
+                });
+            }
+        }
+
+        /// <summary>
+        /// Create tickets from payment transaction (called by Payment service after payment success)
+        /// POST /api/v1/houses/{id}/tickets/create-from-payment
+        /// </summary>
+        [HttpPost("{id}/tickets/create-from-payment")]
+        [AllowAnonymous]  // Service-to-service endpoint - authenticated via ServiceToServiceAuthMiddleware
+        public async Task<ActionResult<AmesaBackend.Lottery.DTOs.ApiResponse<CreateTicketsFromPaymentResponse>>> CreateTicketsFromPayment(
+            Guid id,
+            [FromBody] CreateTicketsFromPaymentRequest request)
+        {
+            try
+            {
+                // Ensure houseId in path matches request
+                if (request.HouseId != id)
+                {
+                    return BadRequest(new AmesaBackend.Lottery.DTOs.ApiResponse<CreateTicketsFromPaymentResponse>
+                    {
+                        Success = false,
+                        Message = "House ID in path does not match request body"
+                    });
+                }
+
+                var result = await _lotteryService.CreateTicketsFromPaymentAsync(request);
+
+                // Publish event for real-time updates
+                await _eventPublisher.PublishAsync(new TicketPurchasedEvent
+                {
+                    UserId = request.UserId,
+                    HouseId = request.HouseId,
+                    TicketCount = result.TicketsPurchased,
+                    TicketNumbers = result.TicketNumbers
+                });
+
+                return Ok(new AmesaBackend.Lottery.DTOs.ApiResponse<CreateTicketsFromPaymentResponse>
+                {
+                    Success = true,
+                    Data = result
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogWarning(ex, "Invalid operation creating tickets from payment for house {HouseId}", id);
+                return BadRequest(new AmesaBackend.Lottery.DTOs.ApiResponse<CreateTicketsFromPaymentResponse>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "INVALID_OPERATION",
+                        Message = ex.Message
+                    }
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                _logger.LogWarning(ex, "Authorization error creating tickets from payment for house {HouseId}", id);
+                return Unauthorized(new AmesaBackend.Lottery.DTOs.ApiResponse<CreateTicketsFromPaymentResponse>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "UNAUTHORIZED",
+                        Message = ex.Message
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error creating tickets from payment for house {HouseId}", id);
+                return StatusCode(500, new AmesaBackend.Lottery.DTOs.ApiResponse<CreateTicketsFromPaymentResponse>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "INTERNAL_ERROR",
+                        Message = ex.Message
+                    }
+                });
+            }
+        }
+
+        /// <summary>
+        /// Purchase tickets for a house (standard purchase endpoint)
+        /// POST /api/v1/houses/{id}/tickets/purchase
+        /// </summary>
+        [HttpPost("{id}/tickets/purchase")]
+        [Authorize]
+        public async Task<ActionResult<AmesaBackend.Lottery.DTOs.ApiResponse<PurchaseTicketsResponse>>> PurchaseTickets(
+            Guid id,
+            [FromBody] PurchaseTicketsRequest request)
+        {
+            string? reservationToken = null;
+            
+            try
+            {
+                // Get user ID from claims
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (userIdClaim == null || !Guid.TryParse(userIdClaim, out var userId))
+                {
+                    return Unauthorized(new AmesaBackend.Lottery.DTOs.ApiResponse<PurchaseTicketsResponse>
+                    {
+                        Success = false,
+                        Message = "User not authenticated"
+                    });
+                }
+
+                // Get house (read-only check - use AsNoTracking for performance)
+                var house = await _context.Houses
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(h => h.Id == id);
+                if (house == null)
+                {
+                    return NotFound(new AmesaBackend.Lottery.DTOs.ApiResponse<PurchaseTicketsResponse>
+                    {
+                        Success = false,
+                        Message = "House not found"
+                    });
+                }
+
+                // Check ID verification requirement
+                await _lotteryService.CheckVerificationRequirementAsync(userId);
+
+                // Check participant cap
+                var canEnter = await _lotteryService.CanUserEnterLotteryAsync(userId, id);
+                if (!canEnter)
+                {
+                    return BadRequest(new AmesaBackend.Lottery.DTOs.ApiResponse<PurchaseTicketsResponse>
+                    {
+                        Success = false,
+                        Message = "Participant cap reached. Cannot enter this lottery.",
+                        Error = new ErrorResponse
+                        {
+                            Code = "PARTICIPANT_CAP_REACHED",
+                            Message = "The maximum number of participants for this lottery has been reached."
+                        }
+                    });
+                }
+
+                // NEW: Check inventory availability and reserve tickets
+                if (_inventoryManager != null)
+                {
+                    var inventory = await _inventoryManager.GetInventoryStatusAsync(id);
+                    
+                    if (inventory.AvailableTickets < request.Quantity)
+                    {
+                        return BadRequest(new AmesaBackend.Lottery.DTOs.ApiResponse<PurchaseTicketsResponse>
+                        {
+                            Success = false,
+                            Message = $"Insufficient tickets available. Only {inventory.AvailableTickets} tickets remaining.",
+                            Error = new ErrorResponse
+                            {
+                                Code = "INSUFFICIENT_TICKETS",
+                                Message = $"Only {inventory.AvailableTickets} tickets available, but {request.Quantity} requested."
+                            }
+                        });
+                    }
+                    
+                    // Reserve tickets with temporary hold
+                    reservationToken = Guid.NewGuid().ToString();
+                    var reserved = await _inventoryManager.ReserveInventoryAsync(id, request.Quantity, reservationToken);
+                    
+                    if (!reserved)
+                    {
+                        return BadRequest(new AmesaBackend.Lottery.DTOs.ApiResponse<PurchaseTicketsResponse>
+                        {
+                            Success = false,
+                            Message = "Failed to reserve tickets. Please try again.",
+                            Error = new ErrorResponse
+                            {
+                                Code = "RESERVATION_FAILED",
+                                Message = "Could not reserve tickets. They may have been purchased by another user."
+                            }
+                        });
+                    }
+                    
+                    _logger.LogInformation(
+                        "Reserved {Quantity} tickets for house {HouseId} with reservation token {ReservationToken}",
+                        request.Quantity, id, reservationToken);
+                }
+
+                // Calculate total cost
+                var totalCost = house.TicketPrice * request.Quantity;
+
+                // Process payment via Payment service
+                var paymentResult = await _lotteryService.ProcessLotteryPaymentAsync(userId, id, request.Quantity, request.PaymentMethodId);
+                
+                if (!paymentResult.Success)
+                {
+                    // Release reservation on payment failure
+                    if (reservationToken != null && _inventoryManager != null)
+                    {
+                        try
+                        {
+                            await _inventoryManager.ReleaseInventoryAsync(id, request.Quantity);
+                            _logger.LogInformation(
+                                "Released reservation {ReservationToken} for house {HouseId} due to payment failure",
+                                reservationToken, id);
+                        }
+                        catch (Exception releaseEx)
+                        {
+                            _logger.LogError(releaseEx, 
+                                "Failed to release reservation {ReservationToken} for house {HouseId} after payment failure",
+                                reservationToken, id);
+                        }
+                    }
+                    
+                    return BadRequest(new AmesaBackend.Lottery.DTOs.ApiResponse<PurchaseTicketsResponse>
+                    {
+                        Success = false,
+                        Message = paymentResult.ErrorMessage ?? "Payment processing failed",
+                        Error = new ErrorResponse
+                        {
+                            Code = "PAYMENT_FAILED",
+                            Message = paymentResult.ErrorMessage ?? "Payment processing failed"
+                        }
+                    });
+                }
+
+                // Create tickets after successful payment
+                var createTicketsRequest = new CreateTicketsFromPaymentRequest
+                {
+                    HouseId = id,
+                    Quantity = request.Quantity,
+                    PaymentId = paymentResult.TransactionId,
+                    UserId = userId,
+                    ReservationToken = reservationToken // Pass reservation token for confirmation
+                };
+
+                var ticketsResult = await _lotteryService.CreateTicketsFromPaymentAsync(createTicketsRequest);
+
+                // NEW: Confirm reservation after successful ticket creation
+                // Note: Reservation will expire automatically, but we can release it immediately
+                // since tickets are now created and inventory will be synced by InventorySyncService
+                if (reservationToken != null && _inventoryManager != null)
+                {
+                    try
+                    {
+                        // Release reservation since tickets are now created
+                        // The inventory count will be updated by InventorySyncService
+                        await _inventoryManager.ReleaseInventoryAsync(id, request.Quantity);
+                        _logger.LogInformation(
+                            "Released reservation {ReservationToken} for house {HouseId} after successful ticket creation",
+                            reservationToken, id);
+                    }
+                    catch (Exception releaseEx)
+                    {
+                        // Log but don't fail - tickets are already created
+                        _logger.LogWarning(releaseEx, 
+                            "Failed to release reservation {ReservationToken} for house {HouseId} after ticket creation (non-critical)",
+                            reservationToken, id);
+                    }
+                }
+
+                // Publish event for real-time updates
+                await _eventPublisher.PublishAsync(new TicketPurchasedEvent
+                {
+                    UserId = userId,
+                    HouseId = id,
+                    TicketCount = ticketsResult.TicketsPurchased,
+                    TicketNumbers = ticketsResult.TicketNumbers
+                });
+
+                // Invalidate house cache
+                try
+                {
+                    await _cache.RemoveRecordAsync($"house_{id}");
+                    await _cache.RemoveRecordAsync("houses_list");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to invalidate cache for house {HouseId}", id);
+                }
+
+                // Return response
+                var response = new PurchaseTicketsResponse
+                {
+                    TicketsPurchased = ticketsResult.TicketsPurchased,
+                    TotalCost = totalCost,
+                    TicketNumbers = ticketsResult.TicketNumbers,
+                    TransactionId = paymentResult.TransactionId.ToString(),
+                    PaymentId = paymentResult.TransactionId
+                };
+
+                return Ok(new AmesaBackend.Lottery.DTOs.ApiResponse<PurchaseTicketsResponse>
+                {
+                    Success = true,
+                    Data = response,
+                    Message = "Tickets purchased successfully"
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                _logger.LogWarning(ex, "Verification check failed for ticket purchase");
+                return Unauthorized(new AmesaBackend.Lottery.DTOs.ApiResponse<PurchaseTicketsResponse>
+                {
+                    Success = false,
+                    Message = ex.Message,
+                    Error = new ErrorResponse { Code = "ID_VERIFICATION_REQUIRED", Message = ex.Message }
+                });
+            }
+            catch (Exception ex)
+            {
+                // Release reservation on any exception
+                if (reservationToken != null && _inventoryManager != null)
+                {
+                    try
+                    {
+                        await _inventoryManager.ReleaseInventoryAsync(id, request.Quantity);
+                        _logger.LogInformation(
+                            "Released reservation {ReservationToken} for house {HouseId} due to exception",
+                            reservationToken, id);
+                    }
+                    catch (Exception releaseEx)
+                    {
+                        _logger.LogError(releaseEx, 
+                            "Failed to release reservation {ReservationToken} for house {HouseId} after exception",
+                            reservationToken, id);
+                    }
+                }
+                
+                _logger.LogError(ex, "Error purchasing tickets for house {HouseId}", id);
+                return StatusCode(500, new AmesaBackend.Lottery.DTOs.ApiResponse<PurchaseTicketsResponse>
                 {
                     Success = false,
                     Error = new ErrorResponse

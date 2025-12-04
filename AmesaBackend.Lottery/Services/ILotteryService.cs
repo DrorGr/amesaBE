@@ -26,7 +26,25 @@ namespace AmesaBackend.Lottery.Services
         // Participant cap methods
         Task<bool> IsParticipantCapReachedAsync(Guid houseId);
         Task<int> GetParticipantCountAsync(Guid houseId);
-        Task<bool> CanUserEnterLotteryAsync(Guid userId, Guid houseId);
+        Task<bool> CanUserEnterLotteryAsync(Guid userId, Guid houseId, bool useTransaction = true);
         Task<LotteryParticipantStatsDto> GetParticipantStatsAsync(Guid houseId);
+        
+        // Payment integration methods (called by Payment service)
+        Task<CreateTicketsFromPaymentResponse> CreateTicketsFromPaymentAsync(CreateTicketsFromPaymentRequest request);
+        Task<ValidateTicketsResponse> ValidateTicketsAsync(ValidateTicketsRequest request);
+        
+        // Payment processing for Quick Entry
+        Task<PaymentProcessResult> ProcessLotteryPaymentAsync(Guid userId, Guid houseId, int ticketCount, Guid paymentMethodId);
+    }
+
+    /// <summary>
+    /// Result of payment processing
+    /// </summary>
+    public class PaymentProcessResult
+    {
+        public bool Success { get; set; }
+        public Guid TransactionId { get; set; }
+        public string? ProviderTransactionId { get; set; }
+        public string? ErrorMessage { get; set; }
     }
 }

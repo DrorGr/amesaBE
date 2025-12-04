@@ -2,7 +2,7 @@ namespace AmesaBackend.Analytics.Services
 {
     public interface IAnalyticsService
     {
-        Task<object> GetDashboardAnalyticsAsync(Guid userId);
+        Task<object> GetDashboardAnalyticsAsync(Guid userId, int? page = null, int? limit = null);
         Task<object> GetLotteryStatsAsync(Guid? houseId);
         Task LogActivityAsync(Guid? userId, Guid? sessionId, string action, string? resourceType = null, Guid? resourceId = null, object? details = null);
     }

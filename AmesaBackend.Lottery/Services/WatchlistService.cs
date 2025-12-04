@@ -2,20 +2,23 @@ using Microsoft.EntityFrameworkCore;
 using AmesaBackend.Lottery.Data;
 using AmesaBackend.Lottery.DTOs;
 using AmesaBackend.Lottery.Models;
-using System.Data.Common;
+using AmesaBackend.Auth.Data;
 
 namespace AmesaBackend.Lottery.Services
 {
     public class WatchlistService : IWatchlistService
     {
         private readonly LotteryDbContext _context;
+        private readonly AuthDbContext? _authContext;
         private readonly ILogger<WatchlistService> _logger;
 
         public WatchlistService(
             LotteryDbContext context,
-            ILogger<WatchlistService> logger)
+            ILogger<WatchlistService> logger,
+            AuthDbContext? authContext = null)
         {
             _context = context;
+            _authContext = authContext;
             _logger = logger;
         }
 
@@ -191,16 +194,26 @@ namespace AmesaBackend.Lottery.Services
             }
         }
 
-        public async Task<List<WatchlistItemDto>> GetUserWatchlistItemsAsync(Guid userId)
+        public async Task<List<WatchlistItemDto>> GetUserWatchlistItemsAsync(Guid userId, int? page = null, int? limit = null)
         {
             try
             {
-                var watchlistItems = await _context.UserWatchlist
+                IQueryable<Models.UserWatchlist> query = _context.UserWatchlist
                     .Include(w => w.House)
                         .ThenInclude(h => h.Images.OrderBy(img => img.DisplayOrder))
                     .Where(w => w.UserId == userId)
-                    .OrderByDescending(w => w.CreatedAt)
-                    .ToListAsync();
+                    .OrderByDescending(w => w.CreatedAt);
+
+                // Apply pagination if parameters provided
+                if (page.HasValue && limit.HasValue && page.Value > 0 && limit.Value > 0)
+                {
+                    var validLimit = Math.Min(limit.Value, 100); // Max 100 items per page
+                    query = query
+                        .Skip((page.Value - 1) * validLimit)
+                        .Take(validLimit);
+                }
+
+                var watchlistItems = await query.ToListAsync();
 
                 return watchlistItems.Select(w => new WatchlistItemDto
                 {
@@ -219,39 +232,28 @@ namespace AmesaBackend.Lottery.Services
         }
 
         /// <summary>
-        /// Validate user exists in amesa_auth.users (cross-schema validation)
+        /// Validate user exists in amesa_auth.users using EF Core (type-safe, no raw SQL)
         /// </summary>
         private async Task<bool> ValidateUserExistsAsync(Guid userId)
         {
-            var connection = _context.Database.GetDbConnection();
-            var wasOpen = connection.State == System.Data.ConnectionState.Open;
-            if (!wasOpen)
+            // Use EF Core with AuthDbContext instead of raw SQL for type safety and security
+            if (_authContext == null)
             {
-                await connection.OpenAsync();
+                _logger.LogWarning("AuthDbContext not available, skipping user validation for {UserId}", userId);
+                return true; // Fail-open: allow if AuthDbContext not injected
             }
 
             try
             {
-                using var command = connection.CreateCommand();
-                var param = command.CreateParameter();
-                param.ParameterName = "@userId";
-                param.Value = userId;
-                command.Parameters.Add(param);
-                command.CommandText = @"
-                    SELECT 1 
-                    FROM amesa_auth.users 
-                    WHERE id = @userId AND deleted_at IS NULL 
-                    LIMIT 1";
-
-                var result = await command.ExecuteScalarAsync();
-                return result != null;
+                var userExists = await _authContext.Users
+                    .AnyAsync(u => u.Id == userId && u.DeletedAt == null);
+                
+                return userExists;
             }
-            finally
+            catch (Exception ex)
             {
-                if (!wasOpen)
-                {
-                    await connection.CloseAsync();
-                }
+                _logger.LogError(ex, "Error validating user existence for {UserId}", userId);
+                return false;
             }
         }
 

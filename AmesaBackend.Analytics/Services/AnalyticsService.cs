@@ -16,7 +16,7 @@ namespace AmesaBackend.Analytics.Services
             _logger = logger;
         }
 
-        public async Task<object> GetDashboardAnalyticsAsync(Guid userId)
+        public async Task<object> GetDashboardAnalyticsAsync(Guid userId, int? page = null, int? limit = null)
         {
             var sessions = await _context.UserSessions
                 .Where(s => s.UserId == userId)
@@ -26,10 +26,38 @@ namespace AmesaBackend.Analytics.Services
                 .Where(a => a.UserId == userId)
                 .CountAsync();
 
-            var recentActivities = await _context.UserActivityLogs
+            // Pagination defaults and limits
+            const int defaultPage = 1;
+            const int defaultLimit = 10;
+            const int maxLimit = 100;
+            
+            var currentPage = page ?? defaultPage;
+            var pageSize = limit ?? defaultLimit;
+            
+            // Enforce max page size for performance
+            if (pageSize > maxLimit)
+            {
+                pageSize = maxLimit;
+            }
+            
+            if (currentPage < 1)
+            {
+                currentPage = defaultPage;
+            }
+            
+            var skip = (currentPage - 1) * pageSize;
+
+            // Read-only query - use AsNoTracking for performance
+            var recentActivitiesQuery = _context.UserActivityLogs
+                .AsNoTracking()
                 .Where(a => a.UserId == userId)
-                .OrderByDescending(a => a.CreatedAt)
-                .Take(10)
+                .OrderByDescending(a => a.CreatedAt);
+
+            var totalActivitiesCount = await recentActivitiesQuery.CountAsync();
+
+            var recentActivities = await recentActivitiesQuery
+                .Skip(skip)
+                .Take(pageSize)
                 .Select(a => new
                 {
                     a.Action,
@@ -42,7 +70,16 @@ namespace AmesaBackend.Analytics.Services
             {
                 TotalSessions = sessions,
                 TotalActivities = activities,
-                RecentActivities = recentActivities
+                RecentActivities = recentActivities,
+                Pagination = new
+                {
+                    Page = currentPage,
+                    PageSize = pageSize,
+                    TotalItems = totalActivitiesCount,
+                    TotalPages = (int)Math.Ceiling(totalActivitiesCount / (double)pageSize),
+                    HasNextPage = (currentPage * pageSize) < totalActivitiesCount,
+                    HasPreviousPage = currentPage > 1
+                }
             };
         }
 

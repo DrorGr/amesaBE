@@ -4,6 +4,7 @@ using AmesaBackend.Auth.DTOs;
 using AmesaBackend.Auth.Services;
 using System.Security.Claims;
 using Microsoft.Extensions.DependencyInjection;
+using AmesaBackend.Shared.Helpers;
 
 namespace AmesaBackend.Auth.Controllers
 {
@@ -453,7 +454,18 @@ namespace AmesaBackend.Auth.Controllers
         {
             try
             {
-                var userId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "");
+                if (!ControllerHelpers.TryGetUserId(User, out var userId))
+                {
+                    return Unauthorized(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Error = new ErrorResponse
+                        {
+                            Code = "UNAUTHORIZED",
+                            Message = "Authentication required"
+                        }
+                    });
+                }
                 var user = await _authService.GetCurrentUserAsync(userId);
                 return Ok(new ApiResponse<UserDto>
                 {
@@ -482,7 +494,18 @@ namespace AmesaBackend.Auth.Controllers
         {
             try
             {
-                var userId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "");
+                if (!ControllerHelpers.TryGetUserId(User, out var userId))
+                {
+                    return Unauthorized(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Error = new ErrorResponse
+                        {
+                            Code = "UNAUTHORIZED",
+                            Message = "Authentication required"
+                        }
+                    });
+                }
                 var userService = HttpContext.RequestServices.GetRequiredService<IUserService>();
                 var updatedUser = await userService.UpdateUserProfileAsync(userId, request);
                 return Ok(new ApiResponse<UserDto>
@@ -550,7 +573,18 @@ namespace AmesaBackend.Auth.Controllers
         {
             try
             {
-                var userId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "");
+                if (!ControllerHelpers.TryGetUserId(User, out var userId))
+                {
+                    return Unauthorized(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Error = new ErrorResponse
+                        {
+                            Code = "UNAUTHORIZED",
+                            Message = "Authentication required"
+                        }
+                    });
+                }
                 var sessions = await _authService.GetActiveSessionsAsync(userId);
                 return Ok(new ApiResponse<List<UserSessionDto>>
                 {
@@ -580,7 +614,18 @@ namespace AmesaBackend.Auth.Controllers
         {
             try
             {
-                var userId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "");
+                if (!ControllerHelpers.TryGetUserId(User, out var userId))
+                {
+                    return Unauthorized(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Error = new ErrorResponse
+                        {
+                            Code = "UNAUTHORIZED",
+                            Message = "Authentication required"
+                        }
+                    });
+                }
                 await _authService.LogoutFromDeviceAsync(userId, sessionToken);
                 return Ok(new ApiResponse<object>
                 {
@@ -609,7 +654,18 @@ namespace AmesaBackend.Auth.Controllers
         {
             try
             {
-                var userId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "");
+                if (!ControllerHelpers.TryGetUserId(User, out var userId))
+                {
+                    return Unauthorized(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Error = new ErrorResponse
+                        {
+                            Code = "UNAUTHORIZED",
+                            Message = "Authentication required"
+                        }
+                    });
+                }
                 await _authService.LogoutAllDevicesAsync(userId);
                 return Ok(new ApiResponse<object>
                 {

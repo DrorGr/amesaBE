@@ -19,60 +19,60 @@ namespace AmesaBackend.Lottery.Controllers
         }
 
         [HttpGet]
-        public async Task<ActionResult<ApiResponse<List<LotteryDrawDto>>>> GetDraws()
+        public async Task<ActionResult<AmesaBackend.Lottery.DTOs.ApiResponse<List<LotteryDrawDto>>>> GetDraws()
         {
             try
             {
                 var draws = await _lotteryService.GetDrawsAsync();
-                return Ok(new ApiResponse<List<LotteryDrawDto>> { Success = true, Data = draws });
+                return Ok(new AmesaBackend.Lottery.DTOs.ApiResponse<List<LotteryDrawDto>> { Success = true, Data = draws });
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting draws");
-                return StatusCode(500, new ApiResponse<List<LotteryDrawDto>> { Success = false, Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = ex.Message } });
+                return StatusCode(500, new AmesaBackend.Lottery.DTOs.ApiResponse<List<LotteryDrawDto>> { Success = false, Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = ex.Message } });
             }
         }
 
         [HttpGet("{id}")]
-        public async Task<ActionResult<ApiResponse<LotteryDrawDto>>> GetDraw(Guid id)
+        public async Task<ActionResult<AmesaBackend.Lottery.DTOs.ApiResponse<LotteryDrawDto>>> GetDraw(Guid id)
         {
             try
             {
                 var draw = await _lotteryService.GetDrawAsync(id);
-                return Ok(new ApiResponse<LotteryDrawDto> { Success = true, Data = draw });
+                return Ok(new AmesaBackend.Lottery.DTOs.ApiResponse<LotteryDrawDto> { Success = true, Data = draw });
             }
             catch (KeyNotFoundException ex)
             {
-                return NotFound(new ApiResponse<LotteryDrawDto> { Success = false, Message = ex.Message });
+                return NotFound(new AmesaBackend.Lottery.DTOs.ApiResponse<LotteryDrawDto> { Success = false, Message = ex.Message });
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting draw");
-                return StatusCode(500, new ApiResponse<LotteryDrawDto> { Success = false, Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = ex.Message } });
+                return StatusCode(500, new AmesaBackend.Lottery.DTOs.ApiResponse<LotteryDrawDto> { Success = false, Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = ex.Message } });
             }
         }
 
         [HttpPost("{id}/conduct")]
-        [Authorize]
-        public async Task<ActionResult<ApiResponse<object>>> ConductDraw(Guid id, [FromBody] ConductDrawRequest request)
+        [Authorize(Roles = "Admin")]
+        public async Task<ActionResult<AmesaBackend.Lottery.DTOs.ApiResponse<object>>> ConductDraw(Guid id, [FromBody] ConductDrawRequest request)
         {
             try
             {
                 await _lotteryService.ConductDrawAsync(id, request);
-                return Ok(new ApiResponse<object> { Success = true, Message = "Draw conducted successfully" });
+                return Ok(new AmesaBackend.Lottery.DTOs.ApiResponse<object> { Success = true, Message = "Draw conducted successfully" });
             }
             catch (KeyNotFoundException ex)
             {
-                return NotFound(new ApiResponse<object> { Success = false, Message = ex.Message });
+                return NotFound(new AmesaBackend.Lottery.DTOs.ApiResponse<object> { Success = false, Message = ex.Message });
             }
             catch (InvalidOperationException ex)
             {
-                return BadRequest(new ApiResponse<object> { Success = false, Message = ex.Message });
+                return BadRequest(new AmesaBackend.Lottery.DTOs.ApiResponse<object> { Success = false, Message = ex.Message });
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error conducting draw");
-                return StatusCode(500, new ApiResponse<object> { Success = false, Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = ex.Message } });
+                return StatusCode(500, new AmesaBackend.Lottery.DTOs.ApiResponse<object> { Success = false, Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = ex.Message } });
             }
         }
     }

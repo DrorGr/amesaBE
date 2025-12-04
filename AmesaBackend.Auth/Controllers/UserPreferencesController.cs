@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using AmesaBackend.Auth.Data;
 using AmesaBackend.Auth.DTOs;
 using AmesaBackend.Auth.Models;
+using AmesaBackend.Auth.Services;
 using System.Security.Claims;
 using System.Text.Json;
 using Npgsql;
@@ -17,13 +18,16 @@ namespace AmesaBackend.Auth.Controllers
     {
         private readonly AuthDbContext _context;
         private readonly ILogger<PreferencesController> _logger;
+        private readonly INotificationPreferencesSyncService? _notificationSyncService;
 
         public PreferencesController(
             AuthDbContext context,
-            ILogger<PreferencesController> logger)
+            ILogger<PreferencesController> logger,
+            INotificationPreferencesSyncService? notificationSyncService = null)
         {
             _context = context;
             _logger = logger;
+            _notificationSyncService = notificationSyncService;
         }
 
         /// <summary>
@@ -228,6 +232,23 @@ namespace AmesaBackend.Auth.Controllers
                     _logger.LogInformation("[DEBUG] UpdatePreferences:after-SaveChangesAsync success");
                     // #endregion
 
+                    // Sync notification preferences to Notification service (if service is available)
+                    if (_notificationSyncService != null)
+                    {
+                        try
+                        {
+                            await _notificationSyncService.SyncNotificationPreferencesAsync(
+                                userId.Value, preferencesJson);
+                        }
+                        catch (Exception syncEx)
+                        {
+                            // Log but don't fail the request - preferences are saved in Auth service
+                            _logger.LogWarning(syncEx,
+                                "Failed to sync notification preferences for user {UserId}. Preferences saved in Auth service.",
+                                userId);
+                        }
+                    }
+
                     _logger.LogInformation("Created new user preferences for user {UserId}", userId);
 
                     return Ok(new ApiResponse<UserPreferencesDto>
@@ -278,6 +299,23 @@ namespace AmesaBackend.Auth.Controllers
                     // #region agent log
                     _logger.LogInformation("[DEBUG] UpdatePreferences:after-SaveChangesAsync-update success");
                     // #endregion
+
+                    // Sync notification preferences to Notification service (if service is available)
+                    if (_notificationSyncService != null)
+                    {
+                        try
+                        {
+                            await _notificationSyncService.SyncNotificationPreferencesAsync(
+                                userId.Value, preferencesJson);
+                        }
+                        catch (Exception syncEx)
+                        {
+                            // Log but don't fail the request - preferences are saved in Auth service
+                            _logger.LogWarning(syncEx,
+                                "Failed to sync notification preferences for user {UserId}. Preferences saved in Auth service.",
+                                userId);
+                        }
+                    }
 
                     _logger.LogInformation("Updated user preferences for user {UserId}", userId);
 

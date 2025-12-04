@@ -82,8 +82,11 @@ namespace AmesaBackend.Notification.Services
                     await _cache.SetRecordAsync(cacheKey, templateContent, TimeSpan.FromHours(1));
                 }
 
-                // Perform variable substitution
-                var rendered = SubstituteVariables(templateContent, variables);
+                // Format variables by locale before substitution
+                var formattedVariables = FormatVariablesByLocale(variables, language);
+
+                // Perform variable substitution with formatted variables
+                var rendered = SubstituteVariables(templateContent, formattedVariables);
 
                 return rendered;
             }
@@ -92,6 +95,63 @@ namespace AmesaBackend.Notification.Services
                 _logger.LogError(ex, "Error rendering template {TemplateName}", templateName);
                 return string.Empty;
             }
+        }
+
+        /// <summary>
+        /// Format variables by locale (dates, numbers, currency)
+        /// </summary>
+        private Dictionary<string, object> FormatVariablesByLocale(Dictionary<string, object> variables, string language)
+        {
+            var formatted = new Dictionary<string, object>(variables);
+            var locale = GetLocaleFromLanguage(language);
+            var culture = new System.Globalization.CultureInfo(locale);
+
+            foreach (var kvp in variables)
+            {
+                if (kvp.Value is DateTime dateTime)
+                {
+                    formatted[kvp.Key] = dateTime.ToString("d", culture);
+                }
+                else if (kvp.Value is decimal decimalValue)
+                {
+                    // Check if it's a currency field
+                    if (kvp.Key.Contains("amount", StringComparison.OrdinalIgnoreCase) ||
+                        kvp.Key.Contains("price", StringComparison.OrdinalIgnoreCase) ||
+                        kvp.Key.Contains("cost", StringComparison.OrdinalIgnoreCase))
+                    {
+                        formatted[kvp.Key] = decimalValue.ToString("C", culture);
+                    }
+                    else
+                    {
+                        formatted[kvp.Key] = decimalValue.ToString("N", culture);
+                    }
+                }
+                else if (kvp.Value is double doubleValue)
+                {
+                    formatted[kvp.Key] = doubleValue.ToString("N", culture);
+                }
+                else if (kvp.Value is int intValue)
+                {
+                    formatted[kvp.Key] = intValue.ToString("N0", culture);
+                }
+            }
+
+            return formatted;
+        }
+
+        /// <summary>
+        /// Get locale code from language code
+        /// </summary>
+        private string GetLocaleFromLanguage(string language)
+        {
+            return language.ToLower() switch
+            {
+                "en" => "en-US",
+                "es" => "es-ES",
+                "fr" => "fr-FR",
+                "pl" => "pl-PL",
+                _ => "en-US"
+            };
         }
 
         private string SubstituteVariables(string template, Dictionary<string, object>? variables)

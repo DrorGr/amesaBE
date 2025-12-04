@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using AmesaBackend.DTOs;
 using AmesaBackend.Services;
 using System.Security.Claims;
+using AmesaBackend.Shared.Helpers;
 
 namespace AmesaBackend.Controllers
 {
@@ -348,7 +349,14 @@ namespace AmesaBackend.Controllers
         {
             try
             {
-                var userId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "");
+                if (!ControllerHelpers.TryGetUserId(User, out var userId))
+                {
+                    return Unauthorized(new ApiResponse<UserDto>
+                    {
+                        Success = false,
+                        Message = "Authentication required"
+                    });
+                }
                 var user = await _authService.GetCurrentUserAsync(userId);
                 return Ok(new ApiResponse<UserDto>
                 {

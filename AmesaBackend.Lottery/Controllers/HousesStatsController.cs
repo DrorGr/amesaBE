@@ -31,13 +31,13 @@ namespace AmesaBackend.Lottery.Controllers
         /// GET /api/v1/houses/{id}/participants
         /// </summary>
         [HttpGet("{id}/participants")]
-        public async Task<ActionResult<ApiResponse<LotteryParticipantStatsDto>>> GetParticipantStats(Guid id)
+        public async Task<ActionResult<AmesaBackend.Lottery.DTOs.ApiResponse<LotteryParticipantStatsDto>>> GetParticipantStats(Guid id)
         {
             try
             {
                 var stats = await _lotteryService.GetParticipantStatsAsync(id);
 
-                return Ok(new ApiResponse<LotteryParticipantStatsDto>
+                return Ok(new AmesaBackend.Lottery.DTOs.ApiResponse<LotteryParticipantStatsDto>
                 {
                     Success = true,
                     Data = stats
@@ -45,7 +45,7 @@ namespace AmesaBackend.Lottery.Controllers
             }
             catch (KeyNotFoundException ex)
             {
-                return NotFound(new ApiResponse<LotteryParticipantStatsDto>
+                return NotFound(new AmesaBackend.Lottery.DTOs.ApiResponse<LotteryParticipantStatsDto>
                 {
                     Success = false,
                     Message = ex.Message
@@ -54,7 +54,7 @@ namespace AmesaBackend.Lottery.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error retrieving participant stats for house {HouseId}", id);
-                return StatusCode(500, new ApiResponse<LotteryParticipantStatsDto>
+                return StatusCode(500, new AmesaBackend.Lottery.DTOs.ApiResponse<LotteryParticipantStatsDto>
                 {
                     Success = false,
                     Error = new ErrorResponse
@@ -72,14 +72,14 @@ namespace AmesaBackend.Lottery.Controllers
         /// </summary>
         [HttpGet("{id}/can-enter")]
         [Authorize]
-        public async Task<ActionResult<ApiResponse<CanEnterLotteryResponse>>> CanEnterLottery(Guid id)
+        public async Task<ActionResult<AmesaBackend.Lottery.DTOs.ApiResponse<CanEnterLotteryResponse>>> CanEnterLottery(Guid id)
         {
             try
             {
                 var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (userIdClaim == null || !Guid.TryParse(userIdClaim, out var userId))
                 {
-                    return Unauthorized(new ApiResponse<CanEnterLotteryResponse>
+                    return Unauthorized(new AmesaBackend.Lottery.DTOs.ApiResponse<CanEnterLotteryResponse>
                     {
                         Success = false,
                         Message = "User not authenticated"
@@ -101,7 +101,7 @@ namespace AmesaBackend.Lottery.Controllers
                     Reason = canEnter ? null : "PARTICIPANT_CAP_REACHED"
                 };
 
-                return Ok(new ApiResponse<CanEnterLotteryResponse>
+                return Ok(new AmesaBackend.Lottery.DTOs.ApiResponse<CanEnterLotteryResponse>
                 {
                     Success = true,
                     Data = response
@@ -110,7 +110,7 @@ namespace AmesaBackend.Lottery.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error checking if user can enter lottery for house {HouseId}", id);
-                return StatusCode(500, new ApiResponse<CanEnterLotteryResponse>
+                return StatusCode(500, new AmesaBackend.Lottery.DTOs.ApiResponse<CanEnterLotteryResponse>
                 {
                     Success = false,
                     Error = new ErrorResponse
@@ -123,5 +123,9 @@ namespace AmesaBackend.Lottery.Controllers
         }
     }
 }
+
+
+
+
 
 

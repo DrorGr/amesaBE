@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Microsoft.AspNetCore.Hosting;
 
 namespace AmesaBackend.LotteryResults.Services
 {
@@ -8,26 +9,56 @@ namespace AmesaBackend.LotteryResults.Services
     {
         private readonly IConfiguration _configuration;
         private readonly ILogger<QRCodeService> _logger;
+        private readonly IWebHostEnvironment _environment;
         private readonly string _secretKey;
 
-        public QRCodeService(IConfiguration configuration, ILogger<QRCodeService> logger)
+        public QRCodeService(IConfiguration configuration, ILogger<QRCodeService> logger, IWebHostEnvironment environment)
         {
             _configuration = configuration;
             _logger = logger;
-            _secretKey = _configuration["QRCode:SecretKey"] ?? "your-qr-code-secret-key-change-this-in-production";
+            _environment = environment;
+            
+            // Fail-fast if secret key not configured (security-critical)
+            var secretKeyConfig = _configuration["QRCode:SecretKey"];
+            if (string.IsNullOrEmpty(secretKeyConfig))
+            {
+                _logger.LogError("QRCode:SecretKey configuration is required but not set");
+                throw new InvalidOperationException(
+                    "QRCode:SecretKey is required. Please configure it in AWS Secrets Manager " +
+                    "or appsettings.json. This is a security-critical configuration.");
+            }
+            _secretKey = secretKeyConfig;
         }
 
         public async Task<string> GenerateQRCodeDataAsync(Guid lotteryResultId, string winnerTicketNumber, int prizePosition)
         {
             try
             {
+                // Get FrontendUrl - required in production, allow localhost in development only
+                var frontendUrl = _configuration["FrontendUrl"];
+                if (string.IsNullOrEmpty(frontendUrl))
+                {
+                    if (_environment.IsDevelopment())
+                    {
+                        _logger.LogWarning("FrontendUrl not configured, using localhost for development");
+                        frontendUrl = "http://localhost:4200";
+                    }
+                    else
+                    {
+                        _logger.LogError("FrontendUrl is required in production but not configured");
+                        throw new InvalidOperationException(
+                            "FrontendUrl is required in production. Please configure it in " +
+                            "environment variables or appsettings.json.");
+                    }
+                }
+
                 var qrData = new QRCodeData
                 {
                     LotteryResultId = lotteryResultId,
                     WinnerTicketNumber = winnerTicketNumber,
                     PrizePosition = prizePosition,
                     Timestamp = DateTime.UtcNow,
-                    AppUrl = _configuration["FrontendUrl"] ?? "http://localhost:4200"
+                    AppUrl = frontendUrl
                 };
 
                 var jsonData = JsonSerializer.Serialize(qrData);

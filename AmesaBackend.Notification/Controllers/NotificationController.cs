@@ -451,6 +451,84 @@ namespace AmesaBackend.Notification.Controllers
                 });
             }
         }
+
+        /// <summary>
+        /// Internal endpoint for syncing notification preferences from Auth service
+        /// Accepts userId in request body for service-to-service communication
+        /// </summary>
+        [HttpPut("preferences/channels/sync")]
+        public async Task<ActionResult<ApiResponse<object>>> SyncChannelPreferences([FromBody] SyncChannelPreferencesRequest request)
+        {
+            try
+            {
+                // Validate request
+                if (request == null || request.UserId == Guid.Empty)
+                {
+                    return BadRequest(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "UserId is required"
+                    });
+                }
+
+                // Process each channel preference
+                foreach (var channelPref in request.ChannelPreferences)
+                {
+                    var preference = await _context.UserChannelPreferences
+                        .FirstOrDefaultAsync(p => p.UserId == request.UserId && p.Channel == channelPref.Channel);
+
+                    if (preference == null)
+                    {
+                        preference = new UserChannelPreference
+                        {
+                            Id = Guid.NewGuid(),
+                            UserId = request.UserId,
+                            Channel = channelPref.Channel,
+                            Enabled = channelPref.Enabled ?? true,
+                            NotificationTypes = channelPref.NotificationTypes != null 
+                                ? System.Text.Json.JsonSerializer.Serialize(channelPref.NotificationTypes) 
+                                : null,
+                            QuietHoursStart = channelPref.QuietHoursStart,
+                            QuietHoursEnd = channelPref.QuietHoursEnd,
+                            CreatedAt = DateTime.UtcNow,
+                            UpdatedAt = DateTime.UtcNow
+                        };
+                        _context.UserChannelPreferences.Add(preference);
+                    }
+                    else
+                    {
+                        if (channelPref.Enabled.HasValue)
+                            preference.Enabled = channelPref.Enabled.Value;
+                        if (channelPref.NotificationTypes != null)
+                            preference.NotificationTypes = System.Text.Json.JsonSerializer.Serialize(channelPref.NotificationTypes);
+                        if (channelPref.QuietHoursStart.HasValue)
+                            preference.QuietHoursStart = channelPref.QuietHoursStart;
+                        if (channelPref.QuietHoursEnd.HasValue)
+                            preference.QuietHoursEnd = channelPref.QuietHoursEnd;
+                        preference.UpdatedAt = DateTime.UtcNow;
+                    }
+                }
+
+                await _context.SaveChangesAsync();
+
+                _logger.LogInformation("Synced notification preferences for user {UserId} from Auth service", request.UserId);
+
+                return Ok(new ApiResponse<object>
+                {
+                    Success = true,
+                    Message = "Channel preferences synced successfully"
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error syncing channel preferences");
+                return StatusCode(500, new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Failed to sync channel preferences"
+                });
+            }
+        }
     }
 
     public class ResendNotificationRequest

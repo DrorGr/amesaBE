@@ -28,23 +28,25 @@ namespace AmesaBackend.Lottery.Controllers
         /// GET /api/v1/watchlist
         /// </summary>
         [HttpGet]
-        public async Task<ActionResult<ApiResponse<List<WatchlistItemDto>>>> GetWatchlist()
+        public async Task<ActionResult<AmesaBackend.Lottery.DTOs.ApiResponse<List<WatchlistItemDto>>>> GetWatchlist(
+            [FromQuery] int? page = null,
+            [FromQuery] int? limit = null)
         {
             try
             {
                 var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (userIdClaim == null || !Guid.TryParse(userIdClaim, out var userId))
                 {
-                    return Unauthorized(new ApiResponse<List<WatchlistItemDto>>
+                    return Unauthorized(new AmesaBackend.Lottery.DTOs.ApiResponse<List<WatchlistItemDto>>
                     {
                         Success = false,
                         Message = "User not authenticated"
                     });
                 }
 
-                var watchlistItems = await _watchlistService.GetUserWatchlistItemsAsync(userId);
+                var watchlistItems = await _watchlistService.GetUserWatchlistItemsAsync(userId, page, limit);
 
-                return Ok(new ApiResponse<List<WatchlistItemDto>>
+                return Ok(new AmesaBackend.Lottery.DTOs.ApiResponse<List<WatchlistItemDto>>
                 {
                     Success = true,
                     Data = watchlistItems
@@ -53,7 +55,7 @@ namespace AmesaBackend.Lottery.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error retrieving watchlist");
-                return StatusCode(500, new ApiResponse<List<WatchlistItemDto>>
+                return StatusCode(500, new AmesaBackend.Lottery.DTOs.ApiResponse<List<WatchlistItemDto>>
                 {
                     Success = false,
                     Error = new ErrorResponse
@@ -70,7 +72,7 @@ namespace AmesaBackend.Lottery.Controllers
         /// POST /api/v1/watchlist/{id}
         /// </summary>
         [HttpPost("{id}")]
-        public async Task<ActionResult<ApiResponse<WatchlistItemDto>>> AddToWatchlist(
+        public async Task<ActionResult<AmesaBackend.Lottery.DTOs.ApiResponse<WatchlistItemDto>>> AddToWatchlist(
             Guid id, 
             [FromBody] AddToWatchlistRequest? request = null)
         {
@@ -79,7 +81,7 @@ namespace AmesaBackend.Lottery.Controllers
                 var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (userIdClaim == null || !Guid.TryParse(userIdClaim, out var userId))
                 {
-                    return Unauthorized(new ApiResponse<WatchlistItemDto>
+                    return Unauthorized(new AmesaBackend.Lottery.DTOs.ApiResponse<WatchlistItemDto>
                     {
                         Success = false,
                         Message = "User not authenticated"
@@ -111,7 +113,7 @@ namespace AmesaBackend.Lottery.Controllers
                     };
                 }
 
-                return Ok(new ApiResponse<WatchlistItemDto>
+                return Ok(new AmesaBackend.Lottery.DTOs.ApiResponse<WatchlistItemDto>
                 {
                     Success = true,
                     Data = watchlistItem,
@@ -120,7 +122,7 @@ namespace AmesaBackend.Lottery.Controllers
             }
             catch (KeyNotFoundException ex)
             {
-                return NotFound(new ApiResponse<WatchlistItemDto>
+                return NotFound(new AmesaBackend.Lottery.DTOs.ApiResponse<WatchlistItemDto>
                 {
                     Success = false,
                     Message = ex.Message
@@ -128,7 +130,7 @@ namespace AmesaBackend.Lottery.Controllers
             }
             catch (InvalidOperationException ex)
             {
-                return Conflict(new ApiResponse<WatchlistItemDto>
+                return Conflict(new AmesaBackend.Lottery.DTOs.ApiResponse<WatchlistItemDto>
                 {
                     Success = false,
                     Message = ex.Message,
@@ -142,7 +144,7 @@ namespace AmesaBackend.Lottery.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error adding house {HouseId} to watchlist", id);
-                return StatusCode(500, new ApiResponse<WatchlistItemDto>
+                return StatusCode(500, new AmesaBackend.Lottery.DTOs.ApiResponse<WatchlistItemDto>
                 {
                     Success = false,
                     Error = new ErrorResponse
@@ -159,14 +161,14 @@ namespace AmesaBackend.Lottery.Controllers
         /// DELETE /api/v1/watchlist/{id}
         /// </summary>
         [HttpDelete("{id}")]
-        public async Task<ActionResult<ApiResponse<object>>> RemoveFromWatchlist(Guid id)
+        public async Task<ActionResult<AmesaBackend.Lottery.DTOs.ApiResponse<object>>> RemoveFromWatchlist(Guid id)
         {
             try
             {
                 var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (userIdClaim == null || !Guid.TryParse(userIdClaim, out var userId))
                 {
-                    return Unauthorized(new ApiResponse<object>
+                    return Unauthorized(new AmesaBackend.Lottery.DTOs.ApiResponse<object>
                     {
                         Success = false,
                         Message = "User not authenticated"
@@ -175,7 +177,7 @@ namespace AmesaBackend.Lottery.Controllers
 
                 await _watchlistService.RemoveFromWatchlistAsync(userId, id);
 
-                return Ok(new ApiResponse<object>
+                return Ok(new AmesaBackend.Lottery.DTOs.ApiResponse<object>
                 {
                     Success = true,
                     Message = "House removed from watchlist"
@@ -183,7 +185,7 @@ namespace AmesaBackend.Lottery.Controllers
             }
             catch (KeyNotFoundException ex)
             {
-                return NotFound(new ApiResponse<object>
+                return NotFound(new AmesaBackend.Lottery.DTOs.ApiResponse<object>
                 {
                     Success = false,
                     Message = ex.Message,
@@ -197,7 +199,7 @@ namespace AmesaBackend.Lottery.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error removing house {HouseId} from watchlist", id);
-                return StatusCode(500, new ApiResponse<object>
+                return StatusCode(500, new AmesaBackend.Lottery.DTOs.ApiResponse<object>
                 {
                     Success = false,
                     Error = new ErrorResponse
@@ -214,7 +216,7 @@ namespace AmesaBackend.Lottery.Controllers
         /// PUT /api/v1/watchlist/{id}/notification
         /// </summary>
         [HttpPut("{id}/notification")]
-        public async Task<ActionResult<ApiResponse<object>>> ToggleNotification(
+        public async Task<ActionResult<AmesaBackend.Lottery.DTOs.ApiResponse<object>>> ToggleNotification(
             Guid id,
             [FromBody] ToggleNotificationRequest request)
         {
@@ -223,7 +225,7 @@ namespace AmesaBackend.Lottery.Controllers
                 var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (userIdClaim == null || !Guid.TryParse(userIdClaim, out var userId))
                 {
-                    return Unauthorized(new ApiResponse<object>
+                    return Unauthorized(new AmesaBackend.Lottery.DTOs.ApiResponse<object>
                     {
                         Success = false,
                         Message = "User not authenticated"
@@ -232,7 +234,7 @@ namespace AmesaBackend.Lottery.Controllers
 
                 await _watchlistService.ToggleNotificationAsync(userId, id, request.Enabled);
 
-                return Ok(new ApiResponse<object>
+                return Ok(new AmesaBackend.Lottery.DTOs.ApiResponse<object>
                 {
                     Success = true,
                     Message = $"Notifications {(request.Enabled ? "enabled" : "disabled")} for watchlist item"
@@ -240,7 +242,7 @@ namespace AmesaBackend.Lottery.Controllers
             }
             catch (KeyNotFoundException ex)
             {
-                return NotFound(new ApiResponse<object>
+                return NotFound(new AmesaBackend.Lottery.DTOs.ApiResponse<object>
                 {
                     Success = false,
                     Message = ex.Message,
@@ -254,7 +256,7 @@ namespace AmesaBackend.Lottery.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error toggling notification for house {HouseId} in watchlist", id);
-                return StatusCode(500, new ApiResponse<object>
+                return StatusCode(500, new AmesaBackend.Lottery.DTOs.ApiResponse<object>
                 {
                     Success = false,
                     Error = new ErrorResponse
@@ -271,14 +273,14 @@ namespace AmesaBackend.Lottery.Controllers
         /// GET /api/v1/watchlist/count
         /// </summary>
         [HttpGet("count")]
-        public async Task<ActionResult<ApiResponse<int>>> GetWatchlistCount()
+        public async Task<ActionResult<AmesaBackend.Lottery.DTOs.ApiResponse<int>>> GetWatchlistCount()
         {
             try
             {
                 var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (userIdClaim == null || !Guid.TryParse(userIdClaim, out var userId))
                 {
-                    return Unauthorized(new ApiResponse<int>
+                    return Unauthorized(new AmesaBackend.Lottery.DTOs.ApiResponse<int>
                     {
                         Success = false,
                         Message = "User not authenticated"
@@ -287,7 +289,7 @@ namespace AmesaBackend.Lottery.Controllers
 
                 var count = await _watchlistService.GetWatchlistCountAsync(userId);
 
-                return Ok(new ApiResponse<int>
+                return Ok(new AmesaBackend.Lottery.DTOs.ApiResponse<int>
                 {
                     Success = true,
                     Data = count
@@ -296,7 +298,7 @@ namespace AmesaBackend.Lottery.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting watchlist count");
-                return StatusCode(500, new ApiResponse<int>
+                return StatusCode(500, new AmesaBackend.Lottery.DTOs.ApiResponse<int>
                 {
                     Success = false,
                     Error = new ErrorResponse

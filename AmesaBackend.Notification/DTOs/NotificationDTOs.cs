@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace AmesaBackend.Notification.DTOs
 {
     public class NotificationDto
@@ -16,12 +18,25 @@ namespace AmesaBackend.Notification.DTOs
 
     public class SendNotificationRequest
     {
+        [Required]
         public Guid UserId { get; set; }
+        
+        [Required]
+        [StringLength(50)]
         public string Type { get; set; } = string.Empty;
+        
+        [Required]
+        [StringLength(255)]
         public string Title { get; set; } = string.Empty;
+        
+        [Required]
+        [StringLength(1000)]
         public string Message { get; set; } = string.Empty;
+        
         public List<string> Channels { get; set; } = new();
         public Dictionary<string, object>? Data { get; set; }
+        
+        [StringLength(100)]
         public string? TemplateName { get; set; }
         public Dictionary<string, object>? TemplateVariables { get; set; }
     }
@@ -56,6 +71,26 @@ namespace AmesaBackend.Notification.DTOs
 
     public class UpdateChannelPreferencesRequest
     {
+        [Required]
+        [StringLength(50)]
+        public string Channel { get; set; } = string.Empty;
+        public bool? Enabled { get; set; }
+        public List<string>? NotificationTypes { get; set; }
+        public TimeSpan? QuietHoursStart { get; set; }
+        public TimeSpan? QuietHoursEnd { get; set; }
+    }
+
+    public class SyncChannelPreferencesRequest
+    {
+        [Required]
+        public Guid UserId { get; set; }
+        public List<ChannelPreferenceSyncItem> ChannelPreferences { get; set; } = new();
+    }
+
+    public class ChannelPreferenceSyncItem
+    {
+        [Required]
+        [StringLength(50)]
         public string Channel { get; set; } = string.Empty;
         public bool? Enabled { get; set; }
         public List<string>? NotificationTypes { get; set; }
@@ -74,9 +109,19 @@ namespace AmesaBackend.Notification.DTOs
 
     public class SubscribePushRequest
     {
+        [Required]
+        [StringLength(500)]
         public string Endpoint { get; set; } = string.Empty;
+        
+        [Required]
+        [StringLength(100)]
         public string P256dhKey { get; set; } = string.Empty;
+        
+        [Required]
+        [StringLength(100)]
         public string AuthKey { get; set; } = string.Empty;
+        
+        [StringLength(500)]
         public string? UserAgent { get; set; }
         public Dictionary<string, object>? DeviceInfo { get; set; }
     }
@@ -93,6 +138,8 @@ namespace AmesaBackend.Notification.DTOs
 
     public class TelegramLinkRequest
     {
+        [Required]
+        [StringLength(50)]
         public string VerificationCode { get; set; } = string.Empty;
     }
 
@@ -141,14 +188,32 @@ namespace AmesaBackend.Notification.DTOs
 
     public class NotificationRequest
     {
+        [Required]
         public Guid UserId { get; set; }
+        
+        [Required]
+        [StringLength(50)]
         public string Channel { get; set; } = string.Empty;
+        
+        [Required]
+        [StringLength(50)]
         public string Type { get; set; } = string.Empty;
+        
+        [Required]
+        [StringLength(255)]
         public string Title { get; set; } = string.Empty;
+        
+        [Required]
+        [StringLength(1000)]
         public string Message { get; set; } = string.Empty;
+        
         public Dictionary<string, object>? Data { get; set; }
+        
+        [StringLength(100)]
         public string? TemplateName { get; set; }
         public Dictionary<string, object>? TemplateVariables { get; set; }
+        
+        [StringLength(10)]
         public string Language { get; set; } = "en";
     }
 
@@ -159,6 +224,8 @@ namespace AmesaBackend.Notification.DTOs
 
     public class UnsubscribePushRequest
     {
+        [Required]
+        [StringLength(500)]
         public string Endpoint { get; set; } = string.Empty;
     }
 }

@@ -43,12 +43,17 @@ namespace AmesaBackend.Shared.Extensions
         public static Guid GetUserId(this ClaimsPrincipal claimsPrincipal)
         {
             var userId = claimsPrincipal.FindFirst(ClaimTypes.NameIdentifier);
-            if (userId == null)
+            if (userId == null || string.IsNullOrEmpty(userId.Value))
             {
                 throw new ApplicationException("User id claim is not found!");
             }
 
-            return Guid.Parse(userId.Value);
+            if (!Guid.TryParse(userId.Value, out var parsedUserId))
+            {
+                throw new ApplicationException("User id claim contains invalid GUID format!");
+            }
+
+            return parsedUserId;
         }
 
         /// <summary>

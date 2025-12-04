@@ -302,14 +302,18 @@ namespace AmesaBackend.Content.Controllers
                 _context.Translations.Add(translation);
                 await _context.SaveChangesAsync();
 
-                await _eventPublisher.PublishAsync(new TranslationUpdatedEvent
+                // Invalidate cache for the specific language
+                try
                 {
-                    Key = translation.Key,
-                    Language = translation.LanguageCode,
-                    Value = translation.Value
-                });
+                    await _cache.RemoveRecordAsync($"translations_{translation.LanguageCode}");
+                }
+                catch (Exception cacheEx)
+                {
+                    // Log cache error but don't fail the request (fail-open design)
+                    _logger.LogWarning(cacheEx, "Error invalidating translation cache for language {LanguageCode}", translation.LanguageCode);
+                }
 
-                // Publish event
+                // Publish event (only once - duplicate removed)
                 await _eventPublisher.PublishAsync(new TranslationUpdatedEvent
                 {
                     Key = translation.Key,
@@ -380,6 +384,17 @@ namespace AmesaBackend.Content.Controllers
 
                 await _context.SaveChangesAsync();
 
+                // Invalidate cache for the specific language
+                try
+                {
+                    await _cache.RemoveRecordAsync($"translations_{languageCode}");
+                }
+                catch (Exception cacheEx)
+                {
+                    // Log cache error but don't fail the request (fail-open design)
+                    _logger.LogWarning(cacheEx, "Error invalidating translation cache for language {LanguageCode}", languageCode);
+                }
+
                 await _eventPublisher.PublishAsync(new TranslationUpdatedEvent
                 {
                     Key = translation.Key,
@@ -438,6 +453,17 @@ namespace AmesaBackend.Content.Controllers
 
                 _context.Translations.Remove(translation);
                 await _context.SaveChangesAsync();
+
+                // Invalidate cache for the specific language
+                try
+                {
+                    await _cache.RemoveRecordAsync($"translations_{languageCode}");
+                }
+                catch (Exception cacheEx)
+                {
+                    // Log cache error but don't fail the request (fail-open design)
+                    _logger.LogWarning(cacheEx, "Error invalidating translation cache for language {LanguageCode}", languageCode);
+                }
 
                 return Ok(new ApiResponse<object>
                 {

@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 using AmesaBackend.LotteryResults.Data;
 using AmesaBackend.LotteryResults.DTOs;
 using AmesaBackend.LotteryResults.Models;
@@ -76,13 +78,14 @@ namespace AmesaBackend.LotteryResults.Controllers
                 foreach (var result in results)
                 {
                     // In a real implementation, you'd fetch house and winner info from Lottery and Auth services
+                    // Note: WinnerUserId is excluded from public responses for privacy
                     resultDtos.Add(new LotteryResultDto
                     {
                         Id = result.Id,
                         LotteryId = result.LotteryId,
                         DrawId = result.DrawId,
                         WinnerTicketNumber = result.WinnerTicketNumber,
-                        WinnerUserId = result.WinnerUserId,
+                        // WinnerUserId removed from public response for privacy
                         PrizePosition = result.PrizePosition,
                         PrizeType = result.PrizeType,
                         PrizeValue = result.PrizeValue,
@@ -147,13 +150,14 @@ namespace AmesaBackend.LotteryResults.Controllers
                     });
                 }
 
+                // Note: WinnerUserId excluded from public response for privacy
                 var resultDto = new LotteryResultDto
                 {
                     Id = result.Id,
                     LotteryId = result.LotteryId,
                     DrawId = result.DrawId,
                     WinnerTicketNumber = result.WinnerTicketNumber,
-                    WinnerUserId = result.WinnerUserId,
+                    // WinnerUserId removed from public response for privacy
                     PrizePosition = result.PrizePosition,
                     PrizeType = result.PrizeType,
                     PrizeValue = result.PrizeValue,
@@ -188,11 +192,20 @@ namespace AmesaBackend.LotteryResults.Controllers
         }
 
         [HttpPost("validate-qr")]
-        public async Task<ActionResult<ApiResponse<QRCodeValidationDto>>> ValidateQRCode([FromBody] string qrCodeData)
+        public async Task<ActionResult<ApiResponse<QRCodeValidationDto>>> ValidateQRCode([FromBody] ValidateQRCodeRequest request)
         {
             try
             {
-                var validationResult = await _qrCodeService.DecodeQRCodeAsync(qrCodeData);
+                if (request == null || string.IsNullOrEmpty(request.QRCodeData))
+                {
+                    return BadRequest(new ApiResponse<QRCodeValidationDto>
+                    {
+                        Success = false,
+                        Message = "QR code data is required"
+                    });
+                }
+
+                var validationResult = await _qrCodeService.DecodeQRCodeAsync(request.QRCodeData);
                 
                 if (!validationResult.IsValid)
                 {
@@ -259,10 +272,22 @@ namespace AmesaBackend.LotteryResults.Controllers
         }
 
         [HttpPost("claim")]
+        [Authorize]
         public async Task<ActionResult<ApiResponse<LotteryResultDto>>> ClaimPrize([FromBody] ClaimPrizeRequest request)
         {
             try
             {
+                // Get current user ID from claims
+                var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                if (userIdClaim == null || !Guid.TryParse(userIdClaim, out var currentUserId))
+                {
+                    return Unauthorized(new ApiResponse<LotteryResultDto>
+                    {
+                        Success = false,
+                        Message = "User not authenticated"
+                    });
+                }
+
                 var lotteryResult = await _context.LotteryResults
                     .FirstOrDefaultAsync(lr => lr.Id == request.ResultId);
 
@@ -272,6 +297,16 @@ namespace AmesaBackend.LotteryResults.Controllers
                     {
                         Success = false,
                         Message = "Lottery result not found"
+                    });
+                }
+
+                // Verify user is the winner
+                if (lotteryResult.WinnerUserId != currentUserId)
+                {
+                    return Unauthorized(new ApiResponse<LotteryResultDto>
+                    {
+                        Success = false,
+                        Message = "You are not authorized to claim this prize. Only the winner can claim their prize."
                     });
                 }
 

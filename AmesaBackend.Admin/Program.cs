@@ -49,6 +49,10 @@ app.UseAmesaLogging();
 
 app.UseRouting();
 
+// Add authentication and authorization middleware
+app.UseAuthentication();
+app.UseAuthorization();
+
 app.MapRazorPages();
 app.MapBlazorHub();
 app.MapFallbackToPage("/_Host");

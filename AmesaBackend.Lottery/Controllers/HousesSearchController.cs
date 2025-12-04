@@ -27,7 +27,7 @@ namespace AmesaBackend.Lottery.Controllers
 
         [HttpGet]
         [ResponseCache(Duration = 1800, VaryByQueryKeys = new[] { "page", "limit", "status", "minPrice", "maxPrice", "location", "bedrooms", "bathrooms" })]
-        public async Task<ActionResult<ApiResponse<PagedResponse<HouseDto>>>> GetHouses(
+        public async Task<ActionResult<AmesaBackend.Lottery.DTOs.ApiResponse<PagedResponse<HouseDto>>>> GetHouses(
             [FromQuery] int page = 1,
             [FromQuery] int limit = 20,
             [FromQuery] string? status = null,
@@ -55,7 +55,7 @@ namespace AmesaBackend.Lottery.Controllers
                     if (cachedResponse != null)
                     {
                         _logger.LogDebug("Houses list retrieved from cache for key: {CacheKey}", cacheKey);
-                        return Ok(new ApiResponse<PagedResponse<HouseDto>>
+                        return Ok(new AmesaBackend.Lottery.DTOs.ApiResponse<PagedResponse<HouseDto>>
                         {
                             Success = true,
                             Data = cachedResponse,
@@ -215,7 +215,7 @@ namespace AmesaBackend.Lottery.Controllers
                     _logger.LogWarning(cacheEx, "Error caching houses list, request still successful");
                 }
 
-                return Ok(new ApiResponse<PagedResponse<HouseDto>>
+                return Ok(new AmesaBackend.Lottery.DTOs.ApiResponse<PagedResponse<HouseDto>>
                 {
                     Success = true,
                     Data = pagedResponse,
@@ -226,7 +226,7 @@ namespace AmesaBackend.Lottery.Controllers
             {
                 _logger.LogError(ex, "Error fetching houses: {Message}", ex.Message);
                 _logger.LogError(ex, "Error retrieving houses");
-                return StatusCode(500, new ApiResponse<PagedResponse<HouseDto>>
+                return StatusCode(500, new AmesaBackend.Lottery.DTOs.ApiResponse<PagedResponse<HouseDto>>
                 {
                     Success = false,
                     Error = new ErrorResponse

@@ -84,11 +84,10 @@ namespace AmesaBackend.Shared.Events
     // Ticket Events
     public class TicketPurchasedEvent : DomainEvent
     {
-        public Guid TicketId { get; set; }
-        public Guid HouseId { get; set; }
         public Guid UserId { get; set; }
-        public int TicketNumber { get; set; }
-        public decimal Price { get; set; }
+        public Guid HouseId { get; set; }
+        public int TicketCount { get; set; }
+        public List<string> TicketNumbers { get; set; } = new();
     }
 
     // Lottery Draw Events
@@ -107,6 +106,11 @@ namespace AmesaBackend.Shared.Events
         public Guid WinnerTicketId { get; set; }
         public Guid WinnerUserId { get; set; }
         public int WinningTicketNumber { get; set; }
+        
+        // Prize information (optional - included when available)
+        public string? HouseTitle { get; set; }
+        public decimal? PrizeValue { get; set; }
+        public string? PrizeDescription { get; set; }
     }
 
     // Payment Events

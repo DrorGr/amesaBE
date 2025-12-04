@@ -3,7 +3,8 @@ using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
 using AmesaBackend.Payment.Services;
 using AmesaBackend.Payment.DTOs;
-using AmesaBackend.Payment.Helpers;
+using AmesaBackend.Shared.Helpers;
+using PaymentHelpers = AmesaBackend.Payment.Helpers;
 
 namespace AmesaBackend.Payment.Controllers
 {
@@ -32,7 +33,14 @@ namespace AmesaBackend.Payment.Controllers
         {
             try
             {
-                var userId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "");
+                if (!AmesaBackend.Shared.Helpers.ControllerHelpers.TryGetUserId(User, out var userId))
+                {
+                    return Unauthorized(new ApiResponse<List<PaymentMethodDto>> 
+                    { 
+                        Success = false, 
+                        Message = "Authentication required" 
+                    });
+                }
                 var methods = await _paymentService.GetPaymentMethodsAsync(userId);
                 return Ok(new ApiResponse<List<PaymentMethodDto>> { Success = true, Data = methods });
             }
@@ -48,7 +56,14 @@ namespace AmesaBackend.Payment.Controllers
         {
             try
             {
-                var userId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "");
+                if (!AmesaBackend.Shared.Helpers.ControllerHelpers.TryGetUserId(User, out var userId))
+                {
+                    return Unauthorized(new ApiResponse<PaymentMethodDto> 
+                    { 
+                        Success = false, 
+                        Message = "Authentication required" 
+                    });
+                }
                 var method = await _paymentService.AddPaymentMethodAsync(userId, request);
                 return Ok(new ApiResponse<PaymentMethodDto> { Success = true, Data = method, Message = "Payment method added successfully" });
             }
@@ -64,7 +79,14 @@ namespace AmesaBackend.Payment.Controllers
         {
             try
             {
-                var userId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "");
+                if (!AmesaBackend.Shared.Helpers.ControllerHelpers.TryGetUserId(User, out var userId))
+                {
+                    return Unauthorized(new ApiResponse<PaymentMethodDto> 
+                    { 
+                        Success = false, 
+                        Message = "Authentication required" 
+                    });
+                }
                 var method = await _paymentService.UpdatePaymentMethodAsync(userId, id, request);
                 return Ok(new ApiResponse<PaymentMethodDto> { Success = true, Data = method, Message = "Payment method updated successfully" });
             }
@@ -84,7 +106,14 @@ namespace AmesaBackend.Payment.Controllers
         {
             try
             {
-                var userId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "");
+                if (!AmesaBackend.Shared.Helpers.ControllerHelpers.TryGetUserId(User, out var userId))
+                {
+                    return Unauthorized(new ApiResponse<object> 
+                    { 
+                        Success = false, 
+                        Message = "Authentication required" 
+                    });
+                }
                 await _paymentService.DeletePaymentMethodAsync(userId, id);
                 return Ok(new ApiResponse<object> { Success = true, Message = "Payment method deleted successfully" });
             }
@@ -104,7 +133,14 @@ namespace AmesaBackend.Payment.Controllers
         {
             try
             {
-                var userId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "");
+                if (!AmesaBackend.Shared.Helpers.ControllerHelpers.TryGetUserId(User, out var userId))
+                {
+                    return Unauthorized(new ApiResponse<List<TransactionDto>> 
+                    { 
+                        Success = false, 
+                        Message = "Authentication required" 
+                    });
+                }
                 var transactions = await _paymentService.GetTransactionsAsync(userId);
                 return Ok(new ApiResponse<List<TransactionDto>> { Success = true, Data = transactions });
             }
@@ -120,9 +156,9 @@ namespace AmesaBackend.Payment.Controllers
         {
             try
             {
-                if (!ControllerHelpers.TryGetUserId(User, out var userId))
+                if (!AmesaBackend.Shared.Helpers.ControllerHelpers.TryGetUserId(User, out var userId))
                 {
-                    return ControllerHelpers.UnauthorizedResponse<TransactionDto>();
+                    return PaymentHelpers.ControllerHelpers.UnauthorizedResponse<TransactionDto>();
                 }
 
                 var transaction = await _paymentService.GetTransactionAsync(id, userId);
@@ -144,7 +180,14 @@ namespace AmesaBackend.Payment.Controllers
         {
             try
             {
-                var userId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "");
+                if (!AmesaBackend.Shared.Helpers.ControllerHelpers.TryGetUserId(User, out var userId))
+                {
+                    return Unauthorized(new ApiResponse<PaymentResponse> 
+                    { 
+                        Success = false, 
+                        Message = "Authentication required" 
+                    });
+                }
                 var response = await _paymentService.ProcessPaymentAsync(userId, request);
                 return Ok(new ApiResponse<PaymentResponse> { Success = true, Data = response });
             }

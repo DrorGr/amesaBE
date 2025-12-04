@@ -15,6 +15,7 @@ namespace AmesaBackend.Lottery.Data
         public DbSet<LotteryDraw> LotteryDraws { get; set; }
         public DbSet<UserWatchlist> UserWatchlist { get; set; }
         public DbSet<LotteryParticipants> LotteryParticipants { get; set; }
+        public DbSet<TicketReservation> TicketReservations { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -76,6 +77,19 @@ namespace AmesaBackend.Lottery.Data
             {
                 entity.ToView("lottery_participants", "amesa_lottery");
                 entity.HasNoKey(); // View has no primary key
+            });
+
+            modelBuilder.Entity<TicketReservation>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.ReservationToken).IsRequired().HasMaxLength(255);
+                entity.Property(e => e.Status).IsRequired().HasMaxLength(50);
+                entity.Property(e => e.TotalPrice).HasColumnType("decimal(10,2)");
+                entity.HasIndex(e => new { e.HouseId, e.Status });
+                entity.HasIndex(e => new { e.UserId, e.Status });
+                entity.HasIndex(e => e.ExpiresAt).HasFilter($"[Status] = 'pending'");
+                entity.HasIndex(e => e.ReservationToken).IsUnique();
+                entity.HasOne(e => e.House).WithMany().HasForeignKey(e => e.HouseId).OnDelete(DeleteBehavior.Cascade);
             });
         }
     }

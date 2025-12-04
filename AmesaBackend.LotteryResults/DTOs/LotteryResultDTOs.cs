@@ -85,6 +85,12 @@ namespace AmesaBackend.LotteryResults.DTOs
         public string? DeliveryNotes { get; set; }
     }
 
+    public class ValidateQRCodeRequest
+    {
+        [Required]
+        public string QRCodeData { get; set; } = string.Empty;
+    }
+
     public class CreatePrizeDeliveryRequest
     {
         [Required]

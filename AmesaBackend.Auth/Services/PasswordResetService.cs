@@ -13,6 +13,7 @@ public class PasswordResetService : IPasswordResetService
     private readonly IEventPublisher _eventPublisher;
     private readonly IPasswordValidatorService _passwordValidator;
     private readonly ITokenService _tokenService;
+    private readonly ISessionService _sessionService;
     private readonly ILogger<PasswordResetService> _logger;
 
     public PasswordResetService(
@@ -20,12 +21,14 @@ public class PasswordResetService : IPasswordResetService
         IEventPublisher eventPublisher,
         IPasswordValidatorService passwordValidator,
         ITokenService tokenService,
+        ISessionService sessionService,
         ILogger<PasswordResetService> logger)
     {
         _context = context;
         _eventPublisher = eventPublisher;
         _passwordValidator = passwordValidator;
         _tokenService = tokenService;
+        _sessionService = sessionService;
         _logger = logger;
     }
 
@@ -119,7 +122,10 @@ public class PasswordResetService : IPasswordResetService
                 }
             });
 
-            _logger.LogInformation("Password reset successfully for user: {Email}", user.Email);
+            // Invalidate all sessions for security (force re-login after password reset)
+            await _sessionService.InvalidateAllSessionsAsync(user.Id);
+
+            _logger.LogInformation("Password reset successfully for user: {Email}. All sessions invalidated.", user.Email);
         }
         catch (Exception ex)
         {
@@ -128,5 +134,7 @@ public class PasswordResetService : IPasswordResetService
         }
     }
 }
+
+
 
 

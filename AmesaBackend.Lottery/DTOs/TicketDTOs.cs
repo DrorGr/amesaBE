@@ -63,5 +63,94 @@ namespace AmesaBackend.Lottery.DTOs
         public decimal RecommendationScore { get; set; }
         public string Reason { get; set; } = string.Empty;
     }
+
+    /// <summary>
+    /// Request to create tickets from payment transaction
+    /// Used by Payment service after payment success
+    /// </summary>
+    public class CreateTicketsFromPaymentRequest
+    {
+        [Required]
+        public Guid HouseId { get; set; }
+
+        [Required]
+        [Range(1, 100)]
+        public int Quantity { get; set; }
+
+        [Required]
+        public Guid PaymentId { get; set; }  // Payment transaction ID
+
+        [Required]
+        public Guid UserId { get; set; }
+        
+        /// <summary>
+        /// Optional reservation token for inventory confirmation
+        /// Used to confirm inventory reservation after successful ticket creation
+        /// </summary>
+        public string? ReservationToken { get; set; }
+    }
+
+    /// <summary>
+    /// Response when tickets are created from payment
+    /// </summary>
+    public class CreateTicketsFromPaymentResponse
+    {
+        public List<string> TicketNumbers { get; set; } = new();
+        public int TicketsPurchased { get; set; }
+    }
+
+    /// <summary>
+    /// Request to validate ticket purchase before payment
+    /// Used by Payment service to validate purchase before processing payment
+    /// </summary>
+    public class ValidateTicketsRequest
+    {
+        [Required]
+        public Guid HouseId { get; set; }
+
+        [Required]
+        [Range(1, 100)]
+        public int Quantity { get; set; }
+
+        [Required]
+        public Guid UserId { get; set; }
+    }
+
+    /// <summary>
+    /// Response from ticket validation
+    /// </summary>
+    public class ValidateTicketsResponse
+    {
+        public bool IsValid { get; set; }
+        public List<string> Errors { get; set; } = new();
+        public decimal TotalCost { get; set; }
+        public bool CanEnter { get; set; }  // Participant cap check
+    }
+
+    /// <summary>
+    /// Request to purchase tickets for a house
+    /// POST /api/v1/houses/{id}/tickets/purchase
+    /// </summary>
+    public class PurchaseTicketsRequest
+    {
+        [Required]
+        [Range(1, 100)]
+        public int Quantity { get; set; }
+        
+        [Required]
+        public Guid PaymentMethodId { get; set; }
+    }
+
+    /// <summary>
+    /// Response when tickets are purchased
+    /// </summary>
+    public class PurchaseTicketsResponse
+    {
+        public int TicketsPurchased { get; set; }
+        public decimal TotalCost { get; set; }
+        public List<string> TicketNumbers { get; set; } = new();
+        public string TransactionId { get; set; } = string.Empty;
+        public Guid PaymentId { get; set; }
+    }
 }
 

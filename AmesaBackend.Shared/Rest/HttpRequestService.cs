@@ -121,6 +121,22 @@ namespace AmesaBackend.Shared.Rest
         private void TryAddHttpClientHeaders(System.Net.Http.HttpClient httpClient, string sentToken,
             List<KeyValuePair<string, string>>? headers = null)
         {
+            // Add service API key for service-to-service calls
+            try
+            {
+                var serviceApiKey = _configuration["ServiceAuth:ApiKey"] 
+                    ?? Environment.GetEnvironmentVariable("SERVICE_AUTH_API_KEY");
+                
+                if (!string.IsNullOrEmpty(serviceApiKey))
+                {
+                    httpClient.DefaultRequestHeaders.TryAddWithoutValidation("X-Service-Api-Key", serviceApiKey);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error adding service API key header: {Message}", ex.Message);
+            }
+
             try
             {
                 string token = (sentToken == string.Empty ? GetTokenFromHttpContextAccessor() : sentToken);

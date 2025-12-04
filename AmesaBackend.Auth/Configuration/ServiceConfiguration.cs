@@ -98,6 +98,21 @@ public static class ServiceConfiguration
         // Add Memory Cache
         services.AddMemoryCache();
 
+        // Add HttpClient for Notification service sync
+        services.AddHttpClient<INotificationPreferencesSyncService, NotificationPreferencesSyncService>()
+            .ConfigureHttpClient((sp, client) =>
+            {
+                var config = sp.GetRequiredService<IConfiguration>();
+                var baseUrl = config["NotificationService:BaseUrl"] 
+                    ?? Environment.GetEnvironmentVariable("NOTIFICATION_SERVICE_URL")
+                    ?? "http://amesa-backend-alb-509078867.eu-north-1.elb.amazonaws.com";
+                client.BaseAddress = new Uri(baseUrl);
+                client.Timeout = TimeSpan.FromSeconds(10);
+            });
+
+        // Register Notification Preferences Sync Service
+        services.AddScoped<INotificationPreferencesSyncService, NotificationPreferencesSyncService>();
+
         // Add Health Checks
         services.AddHealthChecks();
 

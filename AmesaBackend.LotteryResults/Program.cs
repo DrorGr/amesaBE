@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using AmesaBackend.LotteryResults.Data;
 using AmesaBackend.LotteryResults.Services;
+using AmesaBackend.LotteryResults.Handlers;
 using AmesaBackend.Shared.Extensions;
 using AmesaBackend.Shared.Middleware.Extensions;
 using Serilog;
@@ -51,6 +52,10 @@ builder.Services.AddAmesaBackendShared(builder.Configuration, builder.Environmen
 
 // Add Services
 builder.Services.AddScoped<IQRCodeService, QRCodeService>();
+builder.Services.AddScoped<ILotteryResultsService, LotteryResultsService>();
+
+// Add Background Service for EventBridge events
+builder.Services.AddHostedService<LotteryDrawWinnerEventHandler>();
 
 builder.Services.AddHealthChecks();
 

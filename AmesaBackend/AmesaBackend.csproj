@@ -50,6 +50,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Reference to Shared project -->
+    <ProjectReference Include="..\AmesaBackend.Shared\AmesaBackend.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Exclude DatabaseSeeder from build - it's in separate AmesaBackend.DatabaseSeeder project -->
     <Compile Remove="Data\DatabaseSeeder.cs" />
     <!-- Mark as None to ensure it's not included in any build -->

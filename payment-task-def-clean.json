@@ -1,0 +1,88 @@
+﻿{
+    "containerDefinitions":  [
+                                 {
+                                     "name":  "amesa-payment-service-container",
+                                     "image":  "129394705401.dkr.ecr.eu-north-1.amazonaws.com/amesa-payment-service:latest",
+                                     "cpu":  0,
+                                     "portMappings":  [
+                                                          {
+                                                              "containerPort":  8080,
+                                                              "hostPort":  8080,
+                                                              "protocol":  "tcp"
+                                                          }
+                                                      ],
+                                     "essential":  true,
+                                     "environment":  [
+                                                         {
+                                                             "name":  "ASPNETCORE_ENVIRONMENT",
+                                                             "value":  "Production"
+                                                         },
+                                                         {
+                                                             "name":  "ASPNETCORE_URLS",
+                                                             "value":  "http://+:8080"
+                                                         }
+                                                     ],
+                                     "mountPoints":  [
+
+                                                     ],
+                                     "volumesFrom":  [
+
+                                                     ],
+                                     "secrets":  [
+                                                     {
+                                                         "name":  "ConnectionStrings__DefaultConnection",
+                                                         "valueFrom":  "/amesa/prod/ConnectionStrings/Payment"
+                                                     },
+                                                     {
+                                                         "name":  "ConnectionStrings__Redis",
+                                                         "valueFrom":  "/amesa/prod/ConnectionStrings/Redis"
+                                                     },
+                                                     {
+                                                         "name":  "SERVICE_AUTH_API_KEY",
+                                                         "valueFrom":  "/amesa/prod/ServiceAuth/ApiKey"
+                                                     }
+                                                 ],
+                                     "logConfiguration":  {
+                                                              "logDriver":  "awslogs",
+                                                              "options":  {
+                                                                              "awslogs-group":  "/ecs/amesa-payment-service",
+                                                                              "awslogs-region":  "eu-north-1",
+                                                                              "awslogs-stream-prefix":  "ecs"
+                                                                          }
+                                                          },
+                                     "healthCheck":  {
+                                                         "command":  [
+                                                                         "CMD-SHELL",
+                                                                         "curl -f http://localhost:8080/health || exit 1"
+                                                                     ],
+                                                         "interval":  30,
+                                                         "timeout":  5,
+                                                         "retries":  3,
+                                                         "startPeriod":  60
+                                                     },
+                                     "systemControls":  [
+
+                                                        ]
+                                 }
+                             ],
+    "family":  "amesa-payment-service",
+    "taskRoleArn":  "arn:aws:iam::129394705401:role/ecsTaskExecutionRole",
+    "executionRoleArn":  "arn:aws:iam::129394705401:role/ecsTaskExecutionRole",
+    "networkMode":  "awsvpc",
+    "volumes":  [
+
+                ],
+    "placementConstraints":  [
+
+                             ],
+    "compatibilities":  [
+                            "EC2",
+                            "MANAGED_INSTANCES",
+                            "FARGATE"
+                        ],
+    "requiresCompatibilities":  [
+                                    "FARGATE"
+                                ],
+    "cpu":  "256",
+    "memory":  "512"
+}

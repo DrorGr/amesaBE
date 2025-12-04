@@ -9,8 +9,8 @@ namespace AmesaBackend.Notification.Hubs
     {
         public override async Task OnConnectedAsync()
         {
-            var userId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (userId != null)
+            var userIdClaim = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (userIdClaim != null && Guid.TryParse(userIdClaim, out var userId))
             {
                 await Groups.AddToGroupAsync(Context.ConnectionId, $"notifications_{userId}");
             }
@@ -19,8 +19,8 @@ namespace AmesaBackend.Notification.Hubs
 
         public override async Task OnDisconnectedAsync(Exception? exception)
         {
-            var userId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (userId != null)
+            var userIdClaim = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (userIdClaim != null && Guid.TryParse(userIdClaim, out var userId))
             {
                 await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"notifications_{userId}");
             }
@@ -28,6 +28,8 @@ namespace AmesaBackend.Notification.Hubs
         }
     }
 }
+
+
 
 
 
