@@ -19,17 +19,20 @@ namespace AmesaBackend.Auth.Controllers
         private readonly IConfiguration _configuration;
         private readonly ILogger<OAuthController> _logger;
         private readonly IMemoryCache _memoryCache;
+        private readonly IRateLimitService _rateLimitService;
 
         public OAuthController(
             IAuthService authService,
             IConfiguration configuration,
             ILogger<OAuthController> logger,
-            IMemoryCache memoryCache)
+            IMemoryCache memoryCache,
+            IRateLimitService rateLimitService)
         {
             _authService = authService;
             _configuration = configuration;
             _logger = logger;
             _memoryCache = memoryCache;
+            _rateLimitService = rateLimitService;
         }
 
         [HttpGet("google")]
@@ -96,7 +99,27 @@ namespace AmesaBackend.Auth.Controllers
         {
             try
             {
+                // Rate limiting for OAuth callback endpoint
+                var clientIp = HttpContext.Items["ClientIp"]?.ToString() 
+                    ?? HttpContext.Connection.RemoteIpAddress?.ToString() 
+                    ?? HttpContext.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0].Trim()
+                    ?? HttpContext.Request.Headers["X-Real-Ip"].FirstOrDefault()
+                    ?? "unknown";
+                var rateLimitKey = $"oauth:google-callback:{clientIp}";
+                
+                // Increment rate limit counter
+                await _rateLimitService.IncrementRateLimitAsync(rateLimitKey, TimeSpan.FromMinutes(15));
+                var currentCount = await _rateLimitService.GetCurrentCountAsync(rateLimitKey);
+                
+                // Allow maximum 10 OAuth callback attempts per 15 minutes per IP
                 var frontendUrl = _configuration["FrontendUrl"] ?? "http://localhost:4200";
+                
+                if (currentCount > 10)
+                {
+                    _logger.LogWarning("OAuth callback rate limit exceeded for IP: {ClientIp}, Count: {Count}", clientIp, currentCount);
+                    var errorFrontendUrl = _configuration["FrontendUrl"] ?? "https://dpqbvdgnenckf.cloudfront.net";
+                    return Redirect($"{errorFrontendUrl}/auth/callback?error={Uri.EscapeDataString("Too many authentication attempts. Please try again later.")}");
+                }
 
                 // #region agent log
                 _logger.LogInformation("[DEBUG] GoogleCallback:entry hypothesisId=C,D queryString={QueryString} hasCodeParam={HasCodeParam} hasErrorParam={HasErrorParam}", 
@@ -301,9 +324,29 @@ namespace AmesaBackend.Auth.Controllers
         {
             try
             {
+                // Rate limiting for OAuth callback endpoint
+                var clientIp = HttpContext.Items["ClientIp"]?.ToString() 
+                    ?? HttpContext.Connection.RemoteIpAddress?.ToString() 
+                    ?? HttpContext.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0].Trim()
+                    ?? HttpContext.Request.Headers["X-Real-Ip"].FirstOrDefault()
+                    ?? "unknown";
+                var rateLimitKey = $"oauth:meta-callback:{clientIp}";
+                
+                // Increment rate limit counter
+                await _rateLimitService.IncrementRateLimitAsync(rateLimitKey, TimeSpan.FromMinutes(15));
+                var currentCount = await _rateLimitService.GetCurrentCountAsync(rateLimitKey);
+                
+                // Allow maximum 10 OAuth callback attempts per 15 minutes per IP
                 var frontendUrl = _configuration["FrontendUrl"] ?? 
                                  _configuration.GetSection("AllowedOrigins").Get<string[]>()?[0] ?? 
                                  "https://dpqbvdgnenckf.cloudfront.net";
+                
+                if (currentCount > 10)
+                {
+                    _logger.LogWarning("OAuth callback rate limit exceeded for IP: {ClientIp}, Count: {Count}", clientIp, currentCount);
+                    var errorFrontendUrl = _configuration["FrontendUrl"] ?? "https://dpqbvdgnenckf.cloudfront.net";
+                    return Redirect($"{errorFrontendUrl}/auth/callback?error={Uri.EscapeDataString("Too many authentication attempts. Please try again later.")}");
+                }
 
                 var result = await HttpContext.AuthenticateAsync(FacebookDefaults.AuthenticationScheme);
 
