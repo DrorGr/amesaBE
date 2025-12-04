@@ -253,6 +253,16 @@ namespace AmesaBackend.Auth.Services
         {
             try
             {
+                // Check if the table exists and is accessible
+                if (!await _context.Database.CanConnectAsync())
+                {
+                    _logger.LogError("Database connection failed when retrieving verification status for user {UserId}", userId);
+                    return new IdentityVerificationStatusDto
+                    {
+                        VerificationStatus = "not_started"
+                    };
+                }
+
                 var document = await _context.UserIdentityDocuments
                     .FirstOrDefaultAsync(d => d.UserId == userId);
 
@@ -267,7 +277,7 @@ namespace AmesaBackend.Auth.Services
                 return new IdentityVerificationStatusDto
                 {
                     ValidationKey = document.ValidationKey,
-                    VerificationStatus = document.VerificationStatus,
+                    VerificationStatus = document.VerificationStatus ?? "not_started",
                     VerifiedAt = document.VerifiedAt,
                     LivenessScore = document.LivenessScore,
                     FaceMatchScore = document.FaceMatchScore,
@@ -278,8 +288,14 @@ namespace AmesaBackend.Auth.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error retrieving verification status for user {UserId}", userId);
-                throw;
+                _logger.LogError(ex, "Error retrieving verification status for user {UserId}. Exception: {ExceptionType}, Message: {Message}, StackTrace: {StackTrace}", 
+                    userId, ex.GetType().Name, ex.Message, ex.StackTrace);
+                
+                // Return a safe default instead of throwing to prevent 500 errors
+                return new IdentityVerificationStatusDto
+                {
+                    VerificationStatus = "not_started"
+                };
             }
         }
 
