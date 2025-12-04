@@ -35,7 +35,7 @@ namespace AmesaBackend.Tests.Controllers
                 new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString())
             };
             var identity = new ClaimsIdentity(claims, "Test");
-            _controller.ControllerContext = new Microsoft.AspNetCore.Mvc.Controllers.ControllerContext
+            _controller.ControllerContext = new Microsoft.AspNetCore.Mvc.ControllerContext
             {
                 HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext
                 {
@@ -185,7 +185,9 @@ namespace AmesaBackend.Tests.Controllers
 
             _mockReservationService.Setup(s => s.GetUserReservationsAsync(
                 It.IsAny<Guid>(), 
-                It.IsAny<string>()))
+                It.IsAny<string>(), 
+                It.IsAny<int?>(), 
+                It.IsAny<int?>()))
                 .ReturnsAsync(reservations);
 
             // Act

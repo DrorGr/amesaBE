@@ -1,3 +1,4 @@
+extern alias AuthApp;
 using Xunit;
 using Moq;
 using FluentAssertions;
@@ -5,7 +6,7 @@ using AmesaBackend.Lottery.Services;
 using AmesaBackend.Lottery.Data;
 using AmesaBackend.Lottery.Models;
 using AmesaBackend.Lottery.DTOs;
-using AmesaBackend.Auth.Services;
+using AuthApp::AmesaBackend.Auth.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -82,7 +83,7 @@ namespace AmesaBackend.Tests.Services
                 IsEnded = false
             };
 
-            _mockLotteryService.Setup(s => s.CanUserEnterLotteryAsync(userId, _testHouse.Id))
+            _mockLotteryService.Setup(s => s.CanUserEnterLotteryAsync(userId, _testHouse.Id, It.IsAny<bool>()))
                 .ReturnsAsync(true);
             _mockLotteryService.Setup(s => s.CheckVerificationRequirementAsync(userId))
                 .Returns(Task.CompletedTask);

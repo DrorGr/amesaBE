@@ -212,7 +212,7 @@ namespace AmesaBackend.Tests.Services
             result.Should().BeTrue();
         }
 
-        public void Dispose()
+        private void Dispose()
         {
             _context.Database.EnsureDeleted();
             _context.Dispose();

@@ -1,3 +1,4 @@
+extern alias AuthApp;
 using Xunit;
 using FluentAssertions;
 using AmesaBackend.Lottery.Data;
@@ -8,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
 using StackExchange.Redis;
+using AuthApp::AmesaBackend.Auth.Services;
 
 namespace AmesaBackend.Tests.Integration
 {
@@ -37,7 +39,7 @@ namespace AmesaBackend.Tests.Integration
             var mockLogger = new Mock<ILogger<RedisInventoryManager>>();
             var mockReservationLogger = new Mock<ILogger<TicketReservationService>>();
             var mockLotteryService = new Mock<ILotteryService>();
-            var mockRateLimitService = new Mock<AmesaBackend.Auth.Services.IRateLimitService>();
+            var mockRateLimitService = new Mock<IRateLimitService>();
 
             _inventoryManager = new RedisInventoryManager(
                 _mockRedis.Object,
@@ -70,7 +72,7 @@ namespace AmesaBackend.Tests.Integration
             _context.SaveChanges();
 
             // Setup mocks
-            mockLotteryService.Setup(s => s.CanUserEnterLotteryAsync(It.IsAny<Guid>(), _testHouse.Id))
+            mockLotteryService.Setup(s => s.CanUserEnterLotteryAsync(It.IsAny<Guid>(), _testHouse.Id, It.IsAny<bool>()))
                 .ReturnsAsync(true);
             mockLotteryService.Setup(s => s.CheckVerificationRequirementAsync(It.IsAny<Guid>()))
                 .Returns(Task.CompletedTask);
@@ -83,6 +85,8 @@ namespace AmesaBackend.Tests.Integration
                 It.IsAny<string>(), 
                 It.IsAny<TimeSpan>()))
                 .Returns(Task.CompletedTask);
+            mockRateLimitService.Setup(r => r.GetCurrentCountAsync(It.IsAny<string>()))
+                .ReturnsAsync(0);
         }
 
         [Fact]
