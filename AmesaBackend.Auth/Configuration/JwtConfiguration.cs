@@ -82,7 +82,7 @@ public static class JwtConfiguration
                     ValidIssuer = jwtSettings["Issuer"],
                     ValidAudience = jwtSettings["Audience"],
                     IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey!)),
-                    ClockSkew = TimeSpan.Zero
+                    ClockSkew = TimeSpan.FromMinutes(5) // Allow 5 minute clock difference for reliability
                 };
 
                 options.Events = new JwtBearerEvents

@@ -90,7 +90,7 @@ if (!string.IsNullOrWhiteSpace(secretKey))
             ValidIssuer = jwtSettings["Issuer"] ?? "AmesaBackend",
             ValidAudience = jwtSettings["Audience"] ?? "AmesaFrontend",
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey!)),
-            ClockSkew = TimeSpan.Zero
+            ClockSkew = TimeSpan.FromMinutes(5) // Allow 5 minute clock difference for reliability
         };
 
         // Extract JWT token from query string for SignalR WebSocket connections

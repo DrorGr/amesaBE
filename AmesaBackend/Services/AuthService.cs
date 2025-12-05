@@ -339,7 +339,7 @@ namespace AmesaBackend.Services
                     ValidateAudience = true,
                     ValidAudience = _configuration["JwtSettings:Audience"],
                     ValidateLifetime = true,
-                    ClockSkew = TimeSpan.Zero
+                    ClockSkew = TimeSpan.FromMinutes(5) // Allow 5 minute clock difference for reliability
                 }, out SecurityToken validatedToken);
 
                 return true;

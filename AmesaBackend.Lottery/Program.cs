@@ -114,7 +114,7 @@ builder.Services.AddAuthentication(options =>
         ValidIssuer = jwtSettings["Issuer"] ?? "AmesaBackend",
         ValidAudience = jwtSettings["Audience"] ?? "AmesaFrontend",
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey!)),
-        ClockSkew = TimeSpan.Zero
+        ClockSkew = TimeSpan.FromMinutes(5) // Allow 5 minute clock difference for reliability
     };
 
     // Extract JWT token from query string for SignalR WebSocket connections
@@ -122,49 +122,57 @@ builder.Services.AddAuthentication(options =>
     {
         OnMessageReceived = context =>
         {
-            // #region agent log
             var accessToken = context.Request.Query["access_token"];
             var path = context.HttpContext.Request.Path;
-            var hasToken = !string.IsNullOrEmpty(accessToken);
-            var isWsPath = path.StartsWithSegments("/ws");
-            var queryString = context.Request.QueryString.ToString();
-            var allQueryParams = string.Join(", ", context.Request.Query.Select(q => $"{q.Key}={q.Value}"));
-            Log.Information("[DEBUG] OnMessageReceived: path={Path} hasToken={HasToken} isWsPath={IsWsPath} tokenLength={TokenLength} queryString={QueryString} allParams={AllParams}", 
-                path, hasToken, isWsPath, accessToken.ToString().Length, queryString, allQueryParams);
-            // #endregion
             
             if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/ws"))
             {
                 context.Token = accessToken;
-                // #region agent log
-                Log.Information("[DEBUG] OnMessageReceived: token set in context");
-                // #endregion
+                
+                // Only log in development for debugging
+                if (builder.Environment.IsDevelopment())
+                {
+                    Log.Debug("SignalR token extracted from query string for path: {Path}", path);
+                }
             }
-            else
+            else if (path.StartsWithSegments("/ws"))
             {
-                // #region agent log
-                Log.Warning("[DEBUG] OnMessageReceived: token NOT set - hasToken={HasToken} isWsPath={IsWsPath} path={Path}", hasToken, isWsPath, path);
-                // #endregion
+                // Log missing token only in development
+                if (builder.Environment.IsDevelopment())
+                {
+                    Log.Warning("SignalR connection attempt without token on path: {Path}", path);
+                }
             }
+            
             return Task.CompletedTask;
         },
         OnAuthenticationFailed = context =>
         {
-            // #region agent log
             var path = context.HttpContext.Request.Path;
-            var queryString = context.Request.QueryString.ToString();
-            Log.Warning("[DEBUG] OnAuthenticationFailed: path={Path} queryString={QueryString} exception={Exception}", 
-                path, queryString, context.Exception?.Message ?? "null");
-            // #endregion
+            
+            // Log authentication failures with sanitized information
+            if (builder.Environment.IsDevelopment())
+            {
+                Log.Warning("SignalR authentication failed for path: {Path}, Error: {Error}",
+                    path, context.Exception?.Message ?? "Unknown error");
+            }
+            else
+            {
+                // Production: Only log error type, not details
+                Log.Warning("SignalR authentication failed for WebSocket path");
+            }
+            
             return Task.CompletedTask;
         },
         OnChallenge = context =>
         {
-            // #region agent log
-            var path = context.HttpContext.Request.Path;
-            var queryString = context.Request.QueryString.ToString();
-            Log.Warning("[DEBUG] OnChallenge: path={Path} queryString={QueryString}", path, queryString);
-            // #endregion
+            // Minimal logging in production
+            if (builder.Environment.IsDevelopment())
+            {
+                var path = context.HttpContext.Request.Path;
+                Log.Debug("SignalR authentication challenge for path: {Path}", path);
+            }
+            
             return Task.CompletedTask;
         }
     };
@@ -235,28 +243,24 @@ app.UseAmesaMiddleware();
 app.UseAmesaLogging();
 app.UseResponseCaching(); // Must be before UseRouting for VaryByQueryKeys to work
 app.UseRouting();
-// #region agent log - Route matching debug middleware
-app.Use(async (context, next) =>
+// Debug routing middleware (development only)
+if (app.Environment.IsDevelopment())
 {
-    var method = context.Request.Method;
-    var path = context.Request.Path;
-    var routeData = context.GetRouteData();
-    var endpoint = context.GetEndpoint();
-    
-    Log.Information("[DEBUG_ROUTING] Request received - Method: {Method}, Path: {Path}, RouteData: {RouteData}, Endpoint: {Endpoint}", 
-        method, path, routeData?.Values != null ? string.Join(", ", routeData.Values.Select(kv => $"{kv.Key}={kv.Value}")) : "null",
-        endpoint?.DisplayName ?? "null");
-    
-    await next();
-    
-    if (context.Response.StatusCode == 405)
+    app.Use(async (context, next) =>
     {
-        Log.Warning("[DEBUG_ROUTING] 405 Method Not Allowed - Method: {Method}, Path: {Path}, RouteData: {RouteData}, Endpoint: {Endpoint}, MatchedRoute: {MatchedRoute}",
-            method, path, routeData?.Values != null ? string.Join(", ", routeData.Values.Select(kv => $"{kv.Key}={kv.Value}")) : "null",
-            endpoint?.DisplayName ?? "null", endpoint?.Metadata?.GetMetadata<Microsoft.AspNetCore.Routing.RouteEndpoint>()?.RoutePattern?.RawText ?? "null");
-    }
-});
-// #endregion
+        var method = context.Request.Method;
+        var path = context.Request.Path;
+        
+        Log.Debug("Request: {Method} {Path}", method, path);
+        
+        await next();
+        
+        if (context.Response.StatusCode == 405)
+        {
+            Log.Warning("405 Method Not Allowed: {Method} {Path}", method, path);
+        }
+    });
+}
 app.UseAuthentication();
 
 // Service-to-service authentication middleware
