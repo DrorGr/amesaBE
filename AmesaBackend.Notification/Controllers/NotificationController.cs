@@ -158,6 +158,155 @@ namespace AmesaBackend.Notification.Controllers
             }
         }
 
+        [HttpPut("{id}/read")]
+        [Authorize]
+        public async Task<ActionResult<ApiResponse<bool>>> MarkAsRead(Guid id)
+        {
+            try
+            {
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+                {
+                    return Unauthorized(new ApiResponse<bool>
+                    {
+                        Success = false,
+                        Message = "Invalid user authentication"
+                    });
+                }
+
+                var notification = await _context.UserNotifications
+                    .FirstOrDefaultAsync(n => n.Id == id && n.UserId == userId);
+
+                if (notification == null)
+                {
+                    return NotFound(new ApiResponse<bool>
+                    {
+                        Success = false,
+                        Message = "Notification not found"
+                    });
+                }
+
+                if (!notification.IsRead)
+                {
+                    notification.IsRead = true;
+                    notification.ReadAt = DateTime.UtcNow;
+                    await _context.SaveChangesAsync();
+                }
+
+                return Ok(new ApiResponse<bool>
+                {
+                    Success = true,
+                    Data = true,
+                    Message = "Notification marked as read"
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error marking notification {NotificationId} as read", id);
+                return StatusCode(500, new ApiResponse<bool>
+                {
+                    Success = false,
+                    Message = "Failed to mark notification as read"
+                });
+            }
+        }
+
+        [HttpPut("read-all")]
+        [Authorize]
+        public async Task<ActionResult<ApiResponse<bool>>> MarkAllAsRead()
+        {
+            try
+            {
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+                {
+                    return Unauthorized(new ApiResponse<bool>
+                    {
+                        Success = false,
+                        Message = "Invalid user authentication"
+                    });
+                }
+
+                var notifications = await _context.UserNotifications
+                    .Where(n => n.UserId == userId && !n.IsRead)
+                    .ToListAsync();
+
+                var now = DateTime.UtcNow;
+                foreach (var notification in notifications)
+                {
+                    notification.IsRead = true;
+                    notification.ReadAt = now;
+                }
+
+                await _context.SaveChangesAsync();
+
+                return Ok(new ApiResponse<bool>
+                {
+                    Success = true,
+                    Data = true,
+                    Message = $"{notifications.Count} notification(s) marked as read"
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error marking all notifications as read");
+                return StatusCode(500, new ApiResponse<bool>
+                {
+                    Success = false,
+                    Message = "Failed to mark all notifications as read"
+                });
+            }
+        }
+
+        [HttpDelete("{id}")]
+        [Authorize]
+        public async Task<ActionResult<ApiResponse<bool>>> DeleteNotification(Guid id)
+        {
+            try
+            {
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+                {
+                    return Unauthorized(new ApiResponse<bool>
+                    {
+                        Success = false,
+                        Message = "Invalid user authentication"
+                    });
+                }
+
+                var notification = await _context.UserNotifications
+                    .FirstOrDefaultAsync(n => n.Id == id && n.UserId == userId);
+
+                if (notification == null)
+                {
+                    return NotFound(new ApiResponse<bool>
+                    {
+                        Success = false,
+                        Message = "Notification not found"
+                    });
+                }
+
+                _context.UserNotifications.Remove(notification);
+                await _context.SaveChangesAsync();
+
+                return Ok(new ApiResponse<bool>
+                {
+                    Success = true,
+                    Data = true,
+                    Message = "Notification deleted successfully"
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting notification {NotificationId}", id);
+                return StatusCode(500, new ApiResponse<bool>
+                {
+                    Success = false,
+                    Message = "Failed to delete notification"
+                });
+            }
+        }
+
         [HttpPost("send-multi-channel")]
         [Authorize(Roles = "Admin")]
         public async Task<ActionResult<ApiResponse<OrchestrationResult>>> SendMultiChannelNotification([FromBody] SendNotificationRequest request)
