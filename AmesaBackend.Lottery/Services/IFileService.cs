@@ -4,6 +4,7 @@ namespace AmesaBackend.Lottery.Services
     {
         Task<string> UploadFileAsync(Stream fileStream, string fileName, string contentType);
         Task<bool> DeleteFileAsync(string filePath);
+        Task<Dictionary<string, string>> UploadImageWithSizesAsync(Stream originalImageStream, string houseId, string imageId);
     }
 }
 

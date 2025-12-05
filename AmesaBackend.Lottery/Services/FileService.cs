@@ -1,6 +1,10 @@
 using Amazon.S3;
 using Amazon.S3.Model;
 using AmesaBackend.Lottery.Services;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Processing;
+using SixLabors.ImageSharp.Formats.Webp;
+using SixLabors.ImageSharp.Formats.Jpeg;
 
 namespace AmesaBackend.Lottery.Services
 {
@@ -9,6 +13,7 @@ namespace AmesaBackend.Lottery.Services
         private readonly IAmazonS3 _s3Client;
         private readonly IConfiguration _configuration;
         private readonly ILogger<FileService> _logger;
+        private readonly string _bucketName;
 
         public FileService(
             IAmazonS3 s3Client,
@@ -18,6 +23,7 @@ namespace AmesaBackend.Lottery.Services
             _s3Client = s3Client;
             _configuration = configuration;
             _logger = logger;
+            _bucketName = _configuration["Aws:S3:ImageBucketName"] ?? _configuration["Aws:S3:BucketName"] ?? "amesa-house-images-prod";
         }
 
         public async Task<string> UploadFileAsync(Stream fileStream, string fileName, string contentType)
@@ -64,6 +70,122 @@ namespace AmesaBackend.Lottery.Services
             {
                 _logger.LogError(ex, "Error deleting file from S3");
                 return false;
+            }
+        }
+
+        public async Task<Dictionary<string, string>> UploadImageWithSizesAsync(
+            Stream originalImageStream,
+            string houseId,
+            string imageId)
+        {
+            var uploadedUrls = new Dictionary<string, string>();
+            var sizes = new Dictionary<string, (int width, int height, int quality)>
+            {
+                ["thumbnail"] = (300, 225, 80),
+                ["mobile"] = (500, 375, 85),
+                ["carousel"] = (800, 600, 85),
+                ["detail"] = (1200, 900, 90),
+                ["full"] = (1600, 1200, 90)
+            };
+
+            try
+            {
+                // Load original image
+                originalImageStream.Position = 0;
+                using var image = await Image.LoadAsync(originalImageStream);
+
+                foreach (var size in sizes)
+                {
+                    try
+                    {
+                        // Clone image for processing (ImageSharp requires cloning for mutations)
+                        using var processedImage = image.Clone();
+
+                        // Resize maintaining aspect ratio
+                        var resizeOptions = new ResizeOptions
+                        {
+                            Size = new Size(size.Value.width, size.Value.height),
+                            Mode = ResizeMode.Max, // Maintain aspect ratio
+                            Sampler = KnownResamplers.Lanczos3 // High quality resampling
+                        };
+
+                        processedImage.Mutate(x => x.Resize(resizeOptions));
+
+                        // Process WebP version
+                        var webpStream = new MemoryStream();
+                        var webpEncoder = new WebpEncoder
+                        {
+                            Quality = size.Value.quality
+                        };
+                        await processedImage.SaveAsync(webpStream, webpEncoder);
+                        webpStream.Position = 0;
+
+                        var webpKey = $"houses/{houseId}/{imageId}/{size.Key}.webp";
+                        var webpUrl = await UploadStreamToS3Async(webpStream, webpKey, "image/webp");
+                        uploadedUrls[$"{size.Key}_webp"] = webpUrl;
+
+                        // Process JPEG fallback
+                        processedImage.Mutate(x => x.Resize(resizeOptions)); // Re-resize for JPEG
+                        var jpegStream = new MemoryStream();
+                        var jpegEncoder = new JpegEncoder
+                        {
+                            Quality = size.Value.quality
+                        };
+                        await processedImage.SaveAsync(jpegStream, jpegEncoder);
+                        jpegStream.Position = 0;
+
+                        var jpegKey = $"houses/{houseId}/{imageId}/{size.Key}.jpg";
+                        var jpegUrl = await UploadStreamToS3Async(jpegStream, jpegKey, "image/jpeg");
+                        uploadedUrls[$"{size.Key}_jpg"] = jpegUrl;
+
+                        _logger.LogInformation("Uploaded {Size} images for house {HouseId}, image {ImageId}", size.Key, houseId, imageId);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Failed to process image for size {Size}", size.Key);
+                        // Continue with next size
+                    }
+                }
+
+                return uploadedUrls;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error processing image with sizes");
+                throw;
+            }
+        }
+
+        private async Task<string> UploadStreamToS3Async(Stream stream, string key, string contentType)
+        {
+            try
+            {
+                var request = new PutObjectRequest
+                {
+                    BucketName = _bucketName,
+                    Key = key,
+                    InputStream = stream,
+                    ContentType = contentType,
+                    CannedACL = S3CannedACL.PublicRead
+                };
+
+                await _s3Client.PutObjectAsync(request);
+
+                // Use CloudFront URL if configured, otherwise S3 URL
+                var cloudFrontUrl = _configuration["Aws:CloudFront:ImageDistributionUrl"];
+                if (!string.IsNullOrEmpty(cloudFrontUrl))
+                {
+                    return $"{cloudFrontUrl.TrimEnd('/')}/{key}";
+                }
+
+                var url = $"https://{_bucketName}.s3.amazonaws.com/{key}";
+                _logger.LogInformation("File uploaded to S3: {Url}", url);
+                return url;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error uploading stream to S3");
+                throw;
             }
         }
     }
