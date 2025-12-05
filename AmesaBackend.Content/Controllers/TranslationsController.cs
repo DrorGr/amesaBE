@@ -16,7 +16,9 @@ namespace AmesaBackend.Content.Controllers
         private readonly ILogger<TranslationsController> _logger;
         private readonly IEventPublisher _eventPublisher;
         private readonly ICache _cache;
-        private static readonly TimeSpan CacheExpiration = TimeSpan.FromMinutes(30);
+        // Increased cache TTL from 30 minutes to 1 hour - translations rarely change
+        // This reduces database load and improves response times
+        private static readonly TimeSpan CacheExpiration = TimeSpan.FromHours(1);
         private static readonly TimeSpan LanguagesCacheExpiration = TimeSpan.FromHours(1);
 
         public TranslationsController(
@@ -32,7 +34,7 @@ namespace AmesaBackend.Content.Controllers
         }
 
         [HttpGet("{languageCode}")]
-        [ResponseCache(Duration = 1800)] // 30 minutes
+        [ResponseCache(Duration = 3600)] // 1 hour - translations rarely change
         public async Task<ActionResult<ApiResponse<TranslationsResponseDto>>> GetTranslations(string languageCode)
         {
             try
@@ -67,9 +69,11 @@ namespace AmesaBackend.Content.Controllers
                 }
 
                 // Query database with AsNoTracking for better performance
+                // Select only needed columns to reduce data transfer and memory usage
                 var translations = await _context.Translations
                     .AsNoTracking()
                     .Where(t => t.LanguageCode == languageCode && t.IsActive)
+                    .Select(t => new { t.Key, t.Value, t.UpdatedAt })
                     .OrderBy(t => t.Key)
                     .ToListAsync();
 

@@ -259,7 +259,6 @@ namespace AmesaBackend.Auth.Services
                     _logger.LogError("Database connection failed when retrieving verification status for user {UserId}", userId);
                     return new IdentityVerificationStatusDto
                     {
-                        IsVerified = false,
                         VerificationStatus = "not_started"
                     };
                 }
@@ -271,27 +270,13 @@ namespace AmesaBackend.Auth.Services
                 {
                     return new IdentityVerificationStatusDto
                     {
-                        IsVerified = false,
                         VerificationStatus = "not_started"
                     };
                 }
 
-                // Safely handle all fields - some might be null in database
-                // Determine if verified based on status
-                var isVerified = !string.IsNullOrEmpty(document.VerificationStatus) && 
-                                 document.VerificationStatus.Equals("verified", StringComparison.OrdinalIgnoreCase);
-                
-                // Handle ValidationKey - might be Guid.Empty or null in DB
-                Guid? validationKey = null;
-                if (document.ValidationKey != Guid.Empty)
-                {
-                    validationKey = document.ValidationKey;
-                }
-                
                 return new IdentityVerificationStatusDto
                 {
-                    IsVerified = isVerified,
-                    ValidationKey = validationKey,
+                    ValidationKey = document.ValidationKey,
                     VerificationStatus = document.VerificationStatus ?? "not_started",
                     VerifiedAt = document.VerifiedAt,
                     LivenessScore = document.LivenessScore,
@@ -309,7 +294,6 @@ namespace AmesaBackend.Auth.Services
                 // Return a safe default instead of throwing to prevent 500 errors
                 return new IdentityVerificationStatusDto
                 {
-                    IsVerified = false,
                     VerificationStatus = "not_started"
                 };
             }

@@ -73,3 +73,6 @@ namespace AmesaBackend.Lottery.DTOs
 
 
 
+
+
+

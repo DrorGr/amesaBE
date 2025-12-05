@@ -33,7 +33,6 @@ namespace AmesaBackend.Auth.DTOs
 
     public class IdentityVerificationStatusDto
     {
-        public bool IsVerified { get; set; }
         public Guid? ValidationKey { get; set; }
         public string VerificationStatus { get; set; } = string.Empty;
         public DateTime? VerifiedAt { get; set; }

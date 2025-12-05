@@ -235,13 +235,27 @@ public static class AuthenticationConfiguration
                     var errorMessage = context.Failure?.Message ?? "Unknown error";
                     var errorDescription = context.Failure?.ToString() ?? "No additional details";
                     
+                    // Extract security context information
+                    var httpContext = context.HttpContext;
+                    var clientIp = httpContext.Items["ClientIp"]?.ToString() 
+                        ?? httpContext.Connection.RemoteIpAddress?.ToString() 
+                        ?? httpContext.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0].Trim()
+                        ?? httpContext.Request.Headers["X-Real-Ip"].FirstOrDefault()
+                        ?? "unknown";
+                    var userAgent = httpContext.Request.Headers["User-Agent"].FirstOrDefault() ?? "unknown";
+                    var requestPath = httpContext.Request.Path.ToString();
+                    var queryString = httpContext.Request.QueryString.ToString();
+                    
                     // #region agent log
                     var logger = context.HttpContext.RequestServices.GetService<ILogger<Program>>();
                     logger?.LogError("[DEBUG] OnRemoteFailure:entry hypothesisId=A,B,C,D,E errorMessage={ErrorMessage}", errorMessage);
                     // #endregion
                     
+                    // Enhanced logging with security context
                     Log.Error("Google OAuth remote failure: {Error}", errorMessage);
                     Log.Error("Google OAuth failure details: {Details}", errorDescription);
+                    Log.Warning("OAuth Security Event - IP: {ClientIp}, User-Agent: {UserAgent}, Path: {RequestPath}, Query: {QueryString}", 
+                        clientIp, userAgent, requestPath, queryString);
                     
                     // Log the ClientId (first 10 chars for security) to verify it's being used
                     var clientId = configuration["Authentication:Google:ClientId"];
@@ -273,12 +287,23 @@ public static class AuthenticationConfiguration
                 
                 options.Events.OnAccessDenied = context =>
                 {
+                    // Extract security context information
+                    var httpContext = context.HttpContext;
+                    var clientIp = httpContext.Items["ClientIp"]?.ToString() 
+                        ?? httpContext.Connection.RemoteIpAddress?.ToString() 
+                        ?? httpContext.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0].Trim()
+                        ?? httpContext.Request.Headers["X-Real-Ip"].FirstOrDefault()
+                        ?? "unknown";
+                    var userAgent = httpContext.Request.Headers["User-Agent"].FirstOrDefault() ?? "unknown";
+                    var requestPath = httpContext.Request.Path.ToString();
+                    
                     // #region agent log
                     var logger = context.HttpContext.RequestServices.GetService<ILogger<Program>>();
                     logger?.LogWarning("[DEBUG] OnAccessDenied:entry hypothesisId=A,B,C,D,E");
                     // #endregion
                     
-                    Log.Warning("Google OAuth access denied");
+                    Log.Warning("Google OAuth access denied - IP: {ClientIp}, User-Agent: {UserAgent}, Path: {RequestPath}", 
+                        clientIp, userAgent, requestPath);
                     var frontendUrlForError = configuration["FrontendUrl"] ?? "http://localhost:4200";
                     context.Response.Redirect($"{frontendUrlForError}/auth/callback?error={Uri.EscapeDataString("Access denied")}");
                     context.HandleResponse();
@@ -326,6 +351,54 @@ public static class AuthenticationConfiguration
                 options.CorrelationCookie.Name = ".Amesa.Meta.Correlation";
                 options.CorrelationCookie.SameSite = Microsoft.AspNetCore.Http.SameSiteMode.None;
                 options.CorrelationCookie.SecurePolicy = Microsoft.AspNetCore.Http.CookieSecurePolicy.Always;
+
+                // Enhanced failure logging with security context
+                options.Events.OnRemoteFailure = context =>
+                {
+                    var errorMessage = context.Failure?.Message ?? "Unknown error";
+                    var errorDescription = context.Failure?.ToString() ?? "No additional details";
+                    
+                    // Extract security context information
+                    var httpContext = context.HttpContext;
+                    var clientIp = httpContext.Items["ClientIp"]?.ToString() 
+                        ?? httpContext.Connection.RemoteIpAddress?.ToString() 
+                        ?? httpContext.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0].Trim()
+                        ?? httpContext.Request.Headers["X-Real-Ip"].FirstOrDefault()
+                        ?? "unknown";
+                    var userAgent = httpContext.Request.Headers["User-Agent"].FirstOrDefault() ?? "unknown";
+                    var requestPath = httpContext.Request.Path.ToString();
+                    var queryString = httpContext.Request.QueryString.ToString();
+                    
+                    Log.Error("Meta OAuth remote failure: {Error}", errorMessage);
+                    Log.Error("Meta OAuth failure details: {Details}", errorDescription);
+                    Log.Warning("OAuth Security Event (Meta) - IP: {ClientIp}, User-Agent: {UserAgent}, Path: {RequestPath}, Query: {QueryString}", 
+                        clientIp, userAgent, requestPath, queryString);
+                    
+                    var frontendUrlForError = configuration["FrontendUrl"] ?? "https://dpqbvdgnenckf.cloudfront.net";
+                    context.Response.Redirect($"{frontendUrlForError}/auth/callback?error={Uri.EscapeDataString(errorMessage)}");
+                    context.HandleResponse();
+                    return Task.CompletedTask;
+                };
+
+                options.Events.OnAccessDenied = context =>
+                {
+                    // Extract security context information
+                    var httpContext = context.HttpContext;
+                    var clientIp = httpContext.Items["ClientIp"]?.ToString() 
+                        ?? httpContext.Connection.RemoteIpAddress?.ToString() 
+                        ?? httpContext.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0].Trim()
+                        ?? httpContext.Request.Headers["X-Real-Ip"].FirstOrDefault()
+                        ?? "unknown";
+                    var userAgent = httpContext.Request.Headers["User-Agent"].FirstOrDefault() ?? "unknown";
+                    var requestPath = httpContext.Request.Path.ToString();
+                    
+                    Log.Warning("Meta OAuth access denied - IP: {ClientIp}, User-Agent: {UserAgent}, Path: {RequestPath}", 
+                        clientIp, userAgent, requestPath);
+                    var frontendUrlForError = configuration["FrontendUrl"] ?? "https://dpqbvdgnenckf.cloudfront.net";
+                    context.Response.Redirect($"{frontendUrlForError}/auth/callback?error={Uri.EscapeDataString("Access denied")}");
+                    context.HandleResponse();
+                    return Task.CompletedTask;
+                };
             });
         }
         else

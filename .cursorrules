@@ -30,7 +30,7 @@ AmesaBE is the backend API for the Amesa lottery management system. Built with .
 - **Version Control**: Git with GitHub repository
 - **Package Management**: NuGet
 
-## Current Status (2025-12-02)
+## Current Status (2025-12-05)
 - **Repository**: https://github.com/DrorGr/amesaBE
 - **Main branch**: Stable, deployed with Multi-Channel Notification System ✅
 - **Admin Panel**: Blazor Server admin panel deployed to production ✅
@@ -45,10 +45,15 @@ AmesaBE is the backend API for the Amesa lottery management system. Built with .
 - **Latest**: Multi-channel notification system deployed, ALB routing configured, service healthy
 - **Database Seeder**: Excluded from repository (in .gitignore) ✅
 - **Notification Service**: amesa-notification-service - ACTIVE, 1/1 tasks, HEALTHY ✅
-- **ALB Routing**: Priority 95 (/api/v1/notifications/*), Priority 96 (/health/notifications) ✅
+- **ALB Routing**: Priority 93 (/api/v1/notifications), Priority 95 (/api/v1/notifications/*), Priority 96 (/health/notifications) ✅
+- **Notification Endpoints**: ✅ **ADDED** - Mark as read and delete endpoints implemented (2025-12-05)
+  - `PUT /api/v1/notifications/{id}/read` - Mark notification as read
+  - `PUT /api/v1/notifications/read-all` - Mark all notifications as read
+  - `DELETE /api/v1/notifications/{id}` - Delete notification
 - **Backend Tests**: 97 passed, 0 failed, 5 skipped ✅ (test failures don't block deployment)
 - **CI/CD Workflow**: Updated to allow test failures without blocking deployment ✅
 - **Payment Service**: ✅ **STABILIZATION FIXES APPLIED** - All startup errors resolved (Stripe secrets JSON, IRateLimitService registration, Redis connection string) - Tested locally, pushed to main (2025-12-01)
+- **ECS Deployment**: ✅ **FIXED** - Missing SSM parameter `/amesa/prod/ServiceAuth/ApiKey` created, lottery service now running (2025-12-05)
 
 ## Environment Configuration
 
@@ -83,6 +88,7 @@ AmesaBE is the backend API for the Amesa lottery management system. Built with .
 - **Houses**: `/api/v1/houses/*` - Lottery properties and tickets
 - **Translations**: `/api/v1/translations/*` - Internationalization
 - **Lottery Results**: `/api/v1/lottery-results/*` - Draw results
+- **Notifications**: `/api/v1/notifications/*` - User notifications (mark as read, delete) ✅ NEW
 
 ### OAuth Endpoints
 - **Google OAuth**: 
@@ -530,6 +536,40 @@ Client → CloudFront /api/* → ALB → ECS Task → .NET API → Aurora Postgr
 - **User Creation**: `CreateOrUpdateOAuthUserAsync()` supports Google and Meta providers
 - **OAuth Callback Component**: Frontend component handles all OAuth callbacks
 - **Database Schema**: `users` table has `auth_provider` (enum) and `provider_id` (string) columns
+
+## Recent Major Work (2025-12-05) - ECS DEPLOYMENT FIX: MISSING SSM PARAMETER
+- ✅ **ECS Deployment Fix: ServiceAuth API Key Parameter Created** - Fixed lottery service deployment failure
+  - **Root Cause**: Missing SSM Parameter Store parameter `/amesa/prod/ServiceAuth/ApiKey` causing ECS task initialization failures
+  - **Error**: `ResourceInitializationError: unable to pull secrets or registry auth: invalid ssm parameters: /amesa/prod/ServiceAuth/ApiKey`
+  - **Impact**: `amesa-lottery-service` unable to start (60+ failed task attempts), service stuck in deployment loop
+  - **Solution Applied**:
+    1. Generated cryptographically secure 64-character API key using PowerShell `RandomNumberGenerator`
+    2. Created SSM Parameter Store parameter:
+       - **Name**: `/amesa/prod/ServiceAuth/ApiKey`
+       - **Type**: `SecureString` (encrypted at rest using AWS KMS default key)
+       - **Region**: `eu-north-1`
+       - **Description**: "Service-to-service authentication API key for microservices communication"
+    3. Verified parameter creation and ECS service status
+  - **Service Status After Fix**:
+    - `amesa-lottery-service`: ✅ ACTIVE, 1/1 tasks running
+    - Service can now start successfully without initialization errors
+  - **Usage**: This parameter is used by `ServiceToServiceAuthMiddleware` (`BE/AmesaBackend.Shared/Middleware/ServiceToServiceAuthMiddleware.cs`) for service-to-service authentication:
+    - Payment service → Lottery service (ticket creation from payment)
+    - Other internal microservice-to-microservice calls
+    - Middleware reads from configuration: `ServiceAuth:ApiKey` or environment variable `SERVICE_AUTH_API_KEY`
+  - **ECS Task Definitions Using This Parameter**:
+    - `amesa-lottery-service` (revision 5) - Maps to environment variable `SERVICE_AUTH_API_KEY`
+    - `amesa-payment-service` (revision 3) - Maps to environment variable `SERVICE_AUTH_API_KEY`
+  - **Security**: Parameter stored as `SecureString` (encrypted at rest), only accessible to services with proper IAM permissions via ECS task execution role
+  - **Commands Used**: 
+    ```bash
+    aws ssm put-parameter --name "/amesa/prod/ServiceAuth/ApiKey" --value "<generated-key>" --type "SecureString" --region eu-north-1 --overwrite
+    ```
+  - **Status**: ✅ Resolved - Service deployed and running successfully
+  - **Files Referenced**: 
+    - `BE/AmesaBackend.Shared/Middleware/ServiceToServiceAuthMiddleware.cs` - Uses the API key
+    - `BE/lottery-task-def.json` - References the parameter
+    - `BE/payment-task-def.json` - References the parameter
 
 ## Recent Major Work (2025-12-02) - META OAUTH INTEGRATION
 - ✅ **Meta OAuth Integration Complete** - Full Meta/Facebook OAuth authentication configured
