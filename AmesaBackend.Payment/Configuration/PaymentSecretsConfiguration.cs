@@ -27,6 +27,9 @@ public static class PaymentSecretsConfiguration
                 // Load Stripe secrets
                 LoadSecret(client, "amesa/payment/stripe-keys", (secretValue) =>
                 {
+                    // Strip any leading whitespace or BOM
+                    secretValue = secretValue.TrimStart('\uFEFF', ' ', '\t', '\r', '\n');
+                    
                     var secrets = JsonSerializer.Deserialize<Dictionary<string, string>>(secretValue);
                     if (secrets != null)
                     {
@@ -97,7 +100,14 @@ public static class PaymentSecretsConfiguration
             
             if (response.SecretString != null)
             {
-                configureAction(response.SecretString);
+                // Strip UTF-8 BOM if present (0xEF 0xBB 0xBF)
+                var secretValue = response.SecretString;
+                if (secretValue.Length > 0 && secretValue[0] == '\uFEFF')
+                {
+                    secretValue = secretValue.Substring(1);
+                }
+                
+                configureAction(secretValue);
                 Console.WriteLine($"Successfully loaded secret: {secretName}");
             }
         }
