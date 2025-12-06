@@ -71,76 +71,76 @@ namespace AmesaBackend.Payment.Models
     public class Transaction
     {
         [Key]
-        [Column("id")]
+        [Column("Id")]
         public Guid Id { get; set; }
 
         [Required]
-        [Column("user_id")]
+        [Column("UserId")]
         public Guid UserId { get; set; }
 
         [Required]
         [MaxLength(50)]
-        [Column("type")]
+        [Column("Type")]
         public string Type { get; set; } = string.Empty;
 
         [Required]
-        [Column("amount", TypeName = "decimal(15,2)")]
+        [Column("Amount", TypeName = "decimal(15,2)")]
         public decimal Amount { get; set; }
 
         [MaxLength(3)]
-        [Column("currency")]
+        [Column("Currency")]
         public string Currency { get; set; } = "USD";
 
         [Required]
         [MaxLength(50)]
-        [Column("status")]
+        [Column("Status")]
         public string Status { get; set; } = "Pending";
 
-        [Column("description")]
+        [Column("Description")]
         public string? Description { get; set; }
 
         [MaxLength(255)]
-        [Column("reference_id")]
+        [Column("ReferenceId")]
         public string? ReferenceId { get; set; }
 
-        [Column("payment_method_id")]
+        [Column("PaymentMethodId")]
         public Guid? PaymentMethodId { get; set; }
 
         [MaxLength(255)]
-        [Column("provider_transaction_id")]
+        [Column("ProviderTransactionId")]
         public string? ProviderTransactionId { get; set; }
 
-        [Column("product_id")]
+        [Column("ProductId")]
         public Guid? ProductId { get; set; }
 
         [MaxLength(255)]
-        [Column("idempotency_key")]
+        [Column("IdempotencyKey")]
         public string? IdempotencyKey { get; set; }
 
         [MaxLength(255)]
-        [Column("client_secret")]
+        [Column("ClientSecret")]
         public string? ClientSecret { get; set; }
 
         [MaxLength(45)]
-        [Column("ip_address")]
+        [Column("IpAddress")]
         public string? IpAddress { get; set; }
 
-        [Column("user_agent")]
+        [Column("UserAgent")]
         public string? UserAgent { get; set; }
 
-        [Column("provider_response", TypeName = "jsonb")]
+        [Column("ProviderResponse", TypeName = "jsonb")]
         public string? ProviderResponse { get; set; }
 
-        [Column("metadata", TypeName = "jsonb")]
+        [Column("Metadata", TypeName = "jsonb")]
         public string? Metadata { get; set; }
 
-        [Column("processed_at")]
+        [Column("ProcessedAt")]
         public DateTime? ProcessedAt { get; set; }
 
-        [Column("created_at")]
+        [Column("CreatedAt")]
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
-        [Column("updated_at")]
+        [Column("UpdatedAt")]
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
         public virtual UserPaymentMethod? PaymentMethod { get; set; }
