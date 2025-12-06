@@ -153,14 +153,19 @@ app.UseAmesaLogging();
 app.UseRouting();
 
 // Only use authentication if it was configured
-if (authenticationConfigured)
+// Check if JWT secret is available at runtime
+var jwtSecretAtRuntime = app.Configuration["JwtSettings:SecretKey"] 
+    ?? Environment.GetEnvironmentVariable("JwtSettings__SecretKey");
+    
+if (!string.IsNullOrWhiteSpace(jwtSecretAtRuntime))
 {
     app.UseAuthentication();
     app.UseAuthorization();
+    Log.Information("Authentication middleware enabled - JWT secret found");
 }
 else
 {
-    Log.Warning("Skipping UseAuthentication() and UseAuthorization() - JWT not configured");
+    Log.Warning("Skipping UseAuthentication() and UseAuthorization() - JWT secret not configured");
 }
 
 app.MapHealthChecks("/health");
