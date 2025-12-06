@@ -38,6 +38,12 @@ namespace AmesaBackend.Shared.Caching
             var configurationOptions = new ConfigurationOptions
             {
                 AbortOnConnectFail = false,
+                ConnectTimeout = 10000, // 10 seconds for initial connection (increased from default 5s)
+                SyncTimeout = 5000, // 5 seconds for synchronous operations
+                AsyncTimeout = 5000, // 5 seconds for asynchronous operations
+                ConnectRetry = 3, // Retry connection 3 times
+                ReconnectRetryPolicy = new ExponentialRetry(1000, 10000), // Exponential backoff: 1s to 10s
+                KeepAlive = 60, // Send keepalive every 60 seconds
             };
 
             for (var i = connection.Length - 1; i >= 0; i--)
