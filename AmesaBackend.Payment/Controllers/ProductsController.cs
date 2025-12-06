@@ -82,19 +82,20 @@ public class ProductsController : ControllerBase
     public async Task<ActionResult<ApiResponse<ProductDto>>> GetProductByHouseId(Guid houseId)
     {
         // #region agent log
-        try { await System.IO.File.AppendAllTextAsync(@"c:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\.cursor\debug.log", System.Text.Json.JsonSerializer.Serialize(new { id = $"log_{DateTime.UtcNow.Ticks}", timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), location = "ProductsController.cs:82", message = "GetProductByHouseId entry", data = new { houseId = houseId.ToString() }, sessionId = "debug-session", runId = "run1", hypothesisId = "A,B,C,D,E" }) + "\n"); } catch { }
+        _logger.LogInformation("[DEBUG] GetProductByHouseId entry - HouseId: {HouseId}", houseId);
         // #endregion
         
         try
         {
             // #region agent log
-            try { await System.IO.File.AppendAllTextAsync(@"c:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\.cursor\debug.log", System.Text.Json.JsonSerializer.Serialize(new { id = $"log_{DateTime.UtcNow.Ticks}", timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), location = "ProductsController.cs:87", message = "Before GetProductByHouseIdAsync call", data = new { houseId = houseId.ToString() }, sessionId = "debug-session", runId = "run1", hypothesisId = "A,B,C,D,E" }) + "\n"); } catch { }
+            _logger.LogInformation("[DEBUG] Before GetProductByHouseIdAsync call - HouseId: {HouseId}", houseId);
             // #endregion
             
             var product = await _productService.GetProductByHouseIdAsync(houseId);
             
             // #region agent log
-            try { await System.IO.File.AppendAllTextAsync(@"c:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\.cursor\debug.log", System.Text.Json.JsonSerializer.Serialize(new { id = $"log_{DateTime.UtcNow.Ticks}", timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), location = "ProductsController.cs:92", message = "After GetProductByHouseIdAsync call", data = new { productIsNull = product == null, productId = product?.Id.ToString() ?? "null" }, sessionId = "debug-session", runId = "run1", hypothesisId = "A,B,C,D,E" }) + "\n"); } catch { }
+            _logger.LogInformation("[DEBUG] After GetProductByHouseIdAsync call - ProductIsNull: {IsNull}, ProductId: {ProductId}", 
+                product == null, product?.Id.ToString() ?? "null");
             // #endregion
             
             if (product == null)
@@ -106,7 +107,8 @@ public class ProductsController : ControllerBase
         catch (Exception ex)
         {
             // #region agent log
-            try { await System.IO.File.AppendAllTextAsync(@"c:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\.cursor\debug.log", System.Text.Json.JsonSerializer.Serialize(new { id = $"log_{DateTime.UtcNow.Ticks}", timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), location = "ProductsController.cs:102", message = "Exception in GetProductByHouseId", data = new { exceptionType = ex.GetType().Name, exceptionMessage = ex.Message, stackTrace = ex.StackTrace, innerException = ex.InnerException?.Message }, sessionId = "debug-session", runId = "run1", hypothesisId = "A,B,C,D,E" }) + "\n"); } catch { }
+            _logger.LogError(ex, "[DEBUG] Exception in GetProductByHouseId - HouseId: {HouseId}, ExceptionType: {Type}, Message: {Message}, InnerException: {Inner}", 
+                houseId, ex.GetType().Name, ex.Message, ex.InnerException?.Message ?? "none");
             // #endregion
             
             _logger.LogError(ex, "Error getting product for house {HouseId}", houseId);
