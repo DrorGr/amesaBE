@@ -1,4 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 using AmesaBackend.Payment.Data;
 using AmesaBackend.Payment.Services;
 using AmesaBackend.Payment.Configuration;
@@ -57,6 +60,39 @@ builder.Services.AddDbContext<PaymentDbContext>(options =>
 
 // Add shared services with Redis required for rate limiting
 builder.Services.AddAmesaBackendShared(builder.Configuration, builder.Environment, requireRedis: true);
+
+// Configure JWT Authentication
+var jwtSettings = builder.Configuration.GetSection("JwtSettings");
+var secretKey = jwtSettings["SecretKey"] 
+    ?? Environment.GetEnvironmentVariable("JwtSettings__SecretKey");
+
+if (!string.IsNullOrWhiteSpace(secretKey))
+{
+    builder.Services.AddAuthentication(options =>
+    {
+        options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    })
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = jwtSettings["Issuer"] ?? "AmesaAuthService",
+            ValidAudience = jwtSettings["Audience"] ?? "AmesaFrontend",
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey!)),
+            ClockSkew = TimeSpan.FromMinutes(5) // Allow 5 minute clock difference for reliability
+        };
+    });
+}
+else
+{
+    Log.Warning("JWT SecretKey is not configured. Authentication will not work. Set JwtSettings__SecretKey environment variable or configure JwtSettings:SecretKey in appsettings.");
+}
 
 // Add Rate Limit Service (required by PaymentRateLimitService)
 builder.Services.AddScoped<IRateLimitService, RateLimitService>();
