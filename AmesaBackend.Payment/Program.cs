@@ -71,6 +71,9 @@ var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var secretKey = jwtSettings["SecretKey"] 
     ?? Environment.GetEnvironmentVariable("JwtSettings__SecretKey");
 
+// Track if authentication was configured
+bool authenticationConfigured = false;
+
 if (!string.IsNullOrWhiteSpace(secretKey))
 {
     builder.Services.AddAuthentication(options =>
@@ -93,6 +96,8 @@ if (!string.IsNullOrWhiteSpace(secretKey))
             ClockSkew = TimeSpan.FromMinutes(5) // Allow 5 minute clock difference for reliability
         };
     });
+    authenticationConfigured = true;
+    Log.Information("JWT Authentication configured successfully");
 }
 else
 {
@@ -146,8 +151,17 @@ if (builder.Configuration.GetValue<bool>("XRay:Enabled", false))
 app.UseAmesaMiddleware();
 app.UseAmesaLogging();
 app.UseRouting();
-app.UseAuthentication();
-app.UseAuthorization();
+
+// Only use authentication if it was configured
+if (authenticationConfigured)
+{
+    app.UseAuthentication();
+    app.UseAuthorization();
+}
+else
+{
+    Log.Warning("Skipping UseAuthentication() and UseAuthorization() - JWT not configured");
+}
 
 app.MapHealthChecks("/health");
 app.MapControllers();

@@ -136,6 +136,24 @@ public class ProductsController : ControllerBase
         
         try
         {
+            // #region agent log
+            _logger.LogInformation("[DEBUG] ValidateProduct - Request null check - IsNull: {IsNull}", request == null);
+            // #endregion
+
+            if (request == null)
+            {
+                _logger.LogWarning("[DEBUG] ValidateProduct - Request body is null");
+                return BadRequest(new ApiResponse<ProductValidationResponse>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "INVALID_REQUEST",
+                        Message = "Request body is required"
+                    }
+                });
+            }
+
             if (!ControllerHelpers.TryGetUserId(User, out var userId))
             {
                 // #region agent log
@@ -145,7 +163,7 @@ public class ProductsController : ControllerBase
             }
 
             // #region agent log
-            _logger.LogInformation("[DEBUG] ValidateProduct - Before ValidateProductPurchaseAsync - ProductId: {ProductId}, Quantity: {Quantity}, UserId: {UserId}", id, request?.Quantity ?? 0, userId);
+            _logger.LogInformation("[DEBUG] ValidateProduct - Before ValidateProductPurchaseAsync - ProductId: {ProductId}, Quantity: {Quantity}, UserId: {UserId}", id, request.Quantity, userId);
             // #endregion
 
             var result = await _productService.ValidateProductPurchaseAsync(id, request.Quantity, userId);
