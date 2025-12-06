@@ -143,4 +143,9 @@ namespace AmesaBackend.Payment.DTOs
         public string Message { get; set; } = string.Empty;
         public object? Details { get; set; }
     }
+
+    public class StripeConfigResponse
+    {
+        public string PublishableKey { get; set; } = string.Empty;
+    }
 }

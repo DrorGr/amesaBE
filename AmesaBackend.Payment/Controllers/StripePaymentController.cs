@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using AmesaBackend.Payment.Services;
 using AmesaBackend.Payment.DTOs;
 using AmesaBackend.Payment.Helpers;
+using Microsoft.Extensions.Configuration;
 
 namespace AmesaBackend.Payment.Controllers;
 
@@ -13,16 +14,19 @@ public class StripePaymentController : ControllerBase
     private readonly IStripeService _stripeService;
     private readonly ILogger<StripePaymentController> _logger;
     private readonly IPaymentRateLimitService? _rateLimitService;
+    private readonly IConfiguration _configuration;
     private const int MAX_REQUEST_SIZE = 1024 * 1024; // 1MB
 
     public StripePaymentController(
         IStripeService stripeService,
         ILogger<StripePaymentController> logger,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        IConfiguration configuration)
     {
         _stripeService = stripeService;
         _logger = logger;
         _rateLimitService = serviceProvider.GetService<IPaymentRateLimitService>();
+        _configuration = configuration;
     }
 
     [HttpPost("create-payment-intent")]
@@ -188,6 +192,51 @@ public class StripePaymentController : ControllerBase
                 { 
                     Code = "INTERNAL_ERROR", 
                     Message = "An error occurred retrieving payment intent" 
+                } 
+            });
+        }
+    }
+
+    [HttpGet("publishable-key")]
+    public ActionResult<ApiResponse<StripeConfigResponse>> GetPublishableKey()
+    {
+        try
+        {
+            var publishableKey = _configuration["Stripe:PublishableKey"] 
+                ?? Environment.GetEnvironmentVariable("STRIPE_PUBLISHABLE_KEY");
+
+            if (string.IsNullOrWhiteSpace(publishableKey))
+            {
+                return StatusCode(500, new ApiResponse<StripeConfigResponse> 
+                { 
+                    Success = false, 
+                    Error = new ErrorResponse 
+                    { 
+                        Code = "CONFIGURATION_ERROR", 
+                        Message = "Stripe publishable key not configured" 
+                    } 
+                });
+            }
+
+            return Ok(new ApiResponse<StripeConfigResponse> 
+            { 
+                Success = true, 
+                Data = new StripeConfigResponse 
+                { 
+                    PublishableKey = publishableKey 
+                } 
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting Stripe publishable key");
+            return StatusCode(500, new ApiResponse<StripeConfigResponse> 
+            { 
+                Success = false, 
+                Error = new ErrorResponse 
+                { 
+                    Code = "INTERNAL_ERROR", 
+                    Message = "An error occurred retrieving Stripe configuration" 
                 } 
             });
         }
