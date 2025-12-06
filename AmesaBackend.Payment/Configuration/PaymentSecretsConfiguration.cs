@@ -33,7 +33,8 @@ public static class PaymentSecretsConfiguration
                         configurationBuilder.AddInMemoryCollection(new Dictionary<string, string?>
                         {
                             ["Stripe:PublishableKey"] = secrets.GetValueOrDefault("PublishableKey"),
-                            ["Stripe:SecretKey"] = secrets.GetValueOrDefault("SecretKey"),
+                            ["Stripe:ApiKey"] = secrets.GetValueOrDefault("SecretKey"), // Map SecretKey to ApiKey for StripeService
+                            ["Stripe:SecretKey"] = secrets.GetValueOrDefault("SecretKey"), // Keep for backward compatibility
                             ["Stripe:WebhookSecret"] = secrets.GetValueOrDefault("WebhookSecret")
                         });
                     }
