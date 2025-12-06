@@ -3,7 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace AmesaBackend.Payment.Models
 {
-    [Table("user_payment_methods")]
+    [Table("user_payment_methods", Schema = "amesa_payment")]
     public class UserPaymentMethod
     {
         [Key]
@@ -67,7 +67,7 @@ namespace AmesaBackend.Payment.Models
         public virtual ICollection<Transaction> Transactions { get; set; } = new List<Transaction>();
     }
 
-    [Table("transactions")]
+    [Table("transactions", Schema = "amesa_payment")]
     public class Transaction
     {
         [Key]
