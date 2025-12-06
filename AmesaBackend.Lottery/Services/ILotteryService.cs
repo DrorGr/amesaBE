@@ -39,6 +39,7 @@ namespace AmesaBackend.Lottery.Services
         // Product creation for houses
         Task<Guid?> CreateProductForHouseAsync(Guid houseId, string houseTitle, decimal ticketPrice, Guid? createdBy);
         Task<Guid?> GetProductIdForHouseAsync(Guid houseId);
+        Task<Dictionary<Guid, Guid?>> GetProductIdsForHousesAsync(List<Guid> houseIds);
     }
 
     /// <summary>

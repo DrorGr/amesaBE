@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using AmesaBackend.Lottery.Data;
 using AmesaBackend.Lottery.DTOs;
+using AmesaBackend.Lottery.Services;
 using AmesaBackend.Shared.Caching;
 
 namespace AmesaBackend.Lottery.Controllers
@@ -13,16 +14,19 @@ namespace AmesaBackend.Lottery.Controllers
         private readonly LotteryDbContext _context;
         private readonly ILogger<HousesSearchController> _logger;
         private readonly ICache _cache;
+        private readonly ILotteryService? _lotteryService;
         private static readonly TimeSpan HousesCacheExpiration = TimeSpan.FromMinutes(30);
 
         public HousesSearchController(
             LotteryDbContext context,
             ILogger<HousesSearchController> logger,
-            ICache cache)
+            ICache cache,
+            ILotteryService? lotteryService = null)
         {
             _context = context;
             _logger = logger;
             _cache = cache ?? throw new ArgumentNullException(nameof(cache));
+            _lotteryService = lotteryService;
         }
 
         [HttpGet]
@@ -128,6 +132,20 @@ namespace AmesaBackend.Lottery.Controllers
                     })
                     .ToListAsync();
 
+                // Batch fetch ProductIds for all houses in parallel (non-critical, don't fail if it fails)
+                Dictionary<Guid, Guid?> productIds = new Dictionary<Guid, Guid?>();
+                if (_lotteryService != null)
+                {
+                    try
+                    {
+                        productIds = await _lotteryService.GetProductIdsForHousesAsync(houseIds);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogDebug(ex, "Could not batch fetch product IDs for houses (non-critical)");
+                    }
+                }
+
                 var houseDtos = houses.Select(house =>
                 {
                     // Get ticket statistics from combined query
@@ -173,6 +191,7 @@ namespace AmesaBackend.Lottery.Controllers
                         UniqueParticipants = uniqueParticipants,
                         IsParticipantCapReached = isCapReached,
                         RemainingParticipantSlots = remainingSlots,
+                        ProductId = productIds.GetValueOrDefault(house.Id), // Batch fetched ProductId for payment integration
                         Images = house.Images.OrderBy(i => i.DisplayOrder).Select(i => new HouseImageDto
                         {
                             Id = i.Id,

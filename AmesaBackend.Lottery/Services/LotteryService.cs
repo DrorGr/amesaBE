@@ -1206,5 +1206,38 @@ namespace AmesaBackend.Lottery.Services
                 return null;
             }
         }
+
+        public async Task<Dictionary<Guid, Guid?>> GetProductIdsForHousesAsync(List<Guid> houseIds)
+        {
+            if (_httpRequest == null || _configuration == null || houseIds == null || houseIds.Count == 0)
+            {
+                return new Dictionary<Guid, Guid?>();
+            }
+
+            var result = new Dictionary<Guid, Guid?>();
+            
+            // Fetch ProductIds in parallel for all houses
+            var tasks = houseIds.Select(async houseId =>
+            {
+                try
+                {
+                    var productId = await GetProductIdForHouseAsync(houseId);
+                    return new { HouseId = houseId, ProductId = productId };
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "Error getting product ID for house {HouseId} in batch", houseId);
+                    return new { HouseId = houseId, ProductId = (Guid?)null };
+                }
+            });
+
+            var results = await Task.WhenAll(tasks);
+            foreach (var r in results)
+            {
+                result[r.HouseId] = r.ProductId;
+            }
+
+            return result;
+        }
     }
 }

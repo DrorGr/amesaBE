@@ -11,15 +11,18 @@ namespace AmesaBackend.Lottery.Services
         private readonly LotteryDbContext _context;
         private readonly AuthDbContext? _authContext;
         private readonly ILogger<WatchlistService> _logger;
+        private readonly ILotteryService? _lotteryService;
 
         public WatchlistService(
             LotteryDbContext context,
             ILogger<WatchlistService> logger,
-            AuthDbContext? authContext = null)
+            AuthDbContext? authContext = null,
+            ILotteryService? lotteryService = null)
         {
             _context = context;
             _authContext = authContext;
             _logger = logger;
+            _lotteryService = lotteryService;
         }
 
         public async Task<bool> AddToWatchlistAsync(Guid userId, Guid houseId, bool notificationEnabled = true)
@@ -125,8 +128,27 @@ namespace AmesaBackend.Lottery.Services
                     .ToListAsync();
 
                 var houses = watchlistItems.Select(w => w.House).ToList();
+                var houseIds = houses.Select(h => h.Id).ToList();
 
-                return houses.Select(MapToHouseDto).ToList();
+                // Batch fetch ProductIds for all houses in parallel (non-critical, don't fail if it fails)
+                Dictionary<Guid, Guid?> productIds = new Dictionary<Guid, Guid?>();
+                if (_lotteryService != null)
+                {
+                    try
+                    {
+                        productIds = await _lotteryService.GetProductIdsForHousesAsync(houseIds);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogDebug(ex, "Could not batch fetch product IDs for watchlist houses (non-critical)");
+                    }
+                }
+
+                return houses.Select(house =>
+                {
+                    var productId = productIds.TryGetValue(house.Id, out var pid) ? pid : null;
+                    return MapToHouseDto(house, productId);
+                }).ToList();
             }
             catch (Exception ex)
             {
@@ -215,13 +237,32 @@ namespace AmesaBackend.Lottery.Services
 
                 var watchlistItems = await query.ToListAsync();
 
-                return watchlistItems.Select(w => new WatchlistItemDto
+                // Batch fetch ProductIds for all houses in parallel (non-critical, don't fail if it fails)
+                var houseIds = watchlistItems.Select(w => w.HouseId).ToList();
+                Dictionary<Guid, Guid?> productIds = new Dictionary<Guid, Guid?>();
+                if (_lotteryService != null)
                 {
-                    Id = w.Id,
-                    HouseId = w.HouseId,
-                    House = MapToHouseDto(w.House),
-                    NotificationEnabled = w.NotificationEnabled,
-                    AddedAt = w.CreatedAt
+                    try
+                    {
+                        productIds = await _lotteryService.GetProductIdsForHousesAsync(houseIds);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogDebug(ex, "Could not batch fetch product IDs for watchlist houses (non-critical)");
+                    }
+                }
+
+                return watchlistItems.Select(w =>
+                {
+                    var productId = productIds.TryGetValue(w.HouseId, out var pid) ? pid : null;
+                    return new WatchlistItemDto
+                    {
+                        Id = w.Id,
+                        HouseId = w.HouseId,
+                        House = MapToHouseDto(w.House, productId),
+                        NotificationEnabled = w.NotificationEnabled,
+                        AddedAt = w.CreatedAt
+                    };
                 }).ToList();
             }
             catch (Exception ex)
@@ -257,7 +298,7 @@ namespace AmesaBackend.Lottery.Services
             }
         }
 
-        private HouseDto MapToHouseDto(House house)
+        private HouseDto MapToHouseDto(House house, Guid? productId = null)
         {
             var ticketsSold = house.Tickets?.Count(t => t.Status == "Active") ?? 0;
             var participationPercentage = house.TotalTickets > 0
@@ -307,6 +348,7 @@ namespace AmesaBackend.Lottery.Services
                 UniqueParticipants = uniqueParticipants,
                 IsParticipantCapReached = isCapReached,
                 RemainingParticipantSlots = remainingSlots,
+                ProductId = productId, // Batch fetched ProductId for payment integration
                 Images = house.Images?.Select(img => new HouseImageDto
                 {
                     Id = img.Id,
