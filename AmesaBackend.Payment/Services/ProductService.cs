@@ -45,18 +45,77 @@ public class ProductService : IProductService
 
     public async Task<ProductDto?> GetProductByHouseIdAsync(Guid houseId)
     {
-        var productLink = await _context.ProductLinks
-            .Include(pl => pl.Product)
-            .FirstOrDefaultAsync(pl => pl.LinkedEntityType == "house" && 
-                                        pl.LinkedEntityId == houseId &&
-                                        pl.Product.DeletedAt == null);
+        // #region agent log
+        try { await System.IO.File.AppendAllTextAsync(@"c:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\.cursor\debug.log", System.Text.Json.JsonSerializer.Serialize(new { id = $"log_{DateTime.UtcNow.Ticks}", timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), location = "ProductService.cs:46", message = "GetProductByHouseIdAsync entry", data = new { houseId = houseId.ToString() }, sessionId = "debug-session", runId = "run1", hypothesisId = "A,B,C,D" }) + "\n"); } catch { }
+        // #endregion
+        
+        // #region agent log
+        try { await System.IO.File.AppendAllTextAsync(@"c:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\.cursor\debug.log", System.Text.Json.JsonSerializer.Serialize(new { id = $"log_{DateTime.UtcNow.Ticks}", timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), location = "ProductService.cs:49", message = "Before database query", data = new { contextExists = _context != null, canConnect = true }, sessionId = "debug-session", runId = "run1", hypothesisId = "B" }) + "\n"); } catch { }
+        // #endregion
+        
+        ProductLink? productLink = null;
+        try
+        {
+            // #region agent log
+            try { await System.IO.File.AppendAllTextAsync(@"c:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\.cursor\debug.log", System.Text.Json.JsonSerializer.Serialize(new { id = $"log_{DateTime.UtcNow.Ticks}", timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), location = "ProductService.cs:55", message = "Before Include query", data = new { houseId = houseId.ToString() }, sessionId = "debug-session", runId = "run1", hypothesisId = "C,D" }) + "\n"); } catch { }
+            // #endregion
+            
+            // Fix: Check Product nullability before accessing DeletedAt
+            productLink = await _context.ProductLinks
+                .Include(pl => pl.Product)
+                .FirstOrDefaultAsync(pl => pl.LinkedEntityType == "house" && 
+                                            pl.LinkedEntityId == houseId);
+            
+            // #region agent log
+            try { await System.IO.File.AppendAllTextAsync(@"c:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\.cursor\debug.log", System.Text.Json.JsonSerializer.Serialize(new { id = $"log_{DateTime.UtcNow.Ticks}", timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), location = "ProductService.cs:64", message = "After database query", data = new { productLinkFound = productLink != null, productExists = productLink?.Product != null, productDeletedAt = productLink?.Product?.DeletedAt?.ToString() ?? "null" }, sessionId = "debug-session", runId = "run1", hypothesisId = "A,C,D" }) + "\n"); } catch { }
+            // #endregion
+        }
+        catch (Exception ex)
+        {
+            // #region agent log
+            try { await System.IO.File.AppendAllTextAsync(@"c:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\.cursor\debug.log", System.Text.Json.JsonSerializer.Serialize(new { id = $"log_{DateTime.UtcNow.Ticks}", timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), location = "ProductService.cs:70", message = "Database query exception", data = new { exceptionType = ex.GetType().Name, exceptionMessage = ex.Message, stackTrace = ex.StackTrace }, sessionId = "debug-session", runId = "run1", hypothesisId = "B,C,D" }) + "\n"); } catch { }
+            // #endregion
+            throw;
+        }
 
         if (productLink == null || productLink.Product == null)
         {
+            // #region agent log
+            try { await System.IO.File.AppendAllTextAsync(@"c:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\.cursor\debug.log", System.Text.Json.JsonSerializer.Serialize(new { id = $"log_{DateTime.UtcNow.Ticks}", timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), location = "ProductService.cs:78", message = "Product link or product is null", data = new { productLinkNull = productLink == null, productNull = productLink?.Product == null }, sessionId = "debug-session", runId = "run1", hypothesisId = "A,D" }) + "\n"); } catch { }
+            // #endregion
             return null;
         }
 
-        return MapToProductDto(productLink.Product);
+        // Check if product is deleted
+        if (productLink.Product.DeletedAt != null)
+        {
+            // #region agent log
+            try { await System.IO.File.AppendAllTextAsync(@"c:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\.cursor\debug.log", System.Text.Json.JsonSerializer.Serialize(new { id = $"log_{DateTime.UtcNow.Ticks}", timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), location = "ProductService.cs:85", message = "Product is deleted", data = new { productId = productLink.Product.Id.ToString(), deletedAt = productLink.Product.DeletedAt.ToString() }, sessionId = "debug-session", runId = "run1", hypothesisId = "A" }) + "\n"); } catch { }
+            // #endregion
+            return null;
+        }
+
+        // #region agent log
+        try { await System.IO.File.AppendAllTextAsync(@"c:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\.cursor\debug.log", System.Text.Json.JsonSerializer.Serialize(new { id = $"log_{DateTime.UtcNow.Ticks}", timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), location = "ProductService.cs:92", message = "Before MapToProductDto", data = new { productId = productLink.Product.Id.ToString(), hasPricingMetadata = !string.IsNullOrEmpty(productLink.Product.PricingMetadata), hasProductMetadata = !string.IsNullOrEmpty(productLink.Product.ProductMetadata) }, sessionId = "debug-session", runId = "run1", hypothesisId = "E" }) + "\n"); } catch { }
+        // #endregion
+        
+        try
+        {
+            var result = MapToProductDto(productLink.Product);
+            
+            // #region agent log
+            try { await System.IO.File.AppendAllTextAsync(@"c:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\.cursor\debug.log", System.Text.Json.JsonSerializer.Serialize(new { id = $"log_{DateTime.UtcNow.Ticks}", timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), location = "ProductService.cs:100", message = "After MapToProductDto success", data = new { productId = result.Id.ToString() }, sessionId = "debug-session", runId = "run1", hypothesisId = "E" }) + "\n"); } catch { }
+            // #endregion
+            
+            return result;
+        }
+        catch (Exception ex)
+        {
+            // #region agent log
+            try { await System.IO.File.AppendAllTextAsync(@"c:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\.cursor\debug.log", System.Text.Json.JsonSerializer.Serialize(new { id = $"log_{DateTime.UtcNow.Ticks}", timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), location = "ProductService.cs:107", message = "MapToProductDto exception", data = new { exceptionType = ex.GetType().Name, exceptionMessage = ex.Message, stackTrace = ex.StackTrace }, sessionId = "debug-session", runId = "run1", hypothesisId = "E" }) + "\n"); } catch { }
+            // #endregion
+            throw;
+        }
     }
 
     public async Task<List<ProductDto>> GetActiveProductsAsync(string? productType = null)
