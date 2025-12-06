@@ -6,6 +6,7 @@ public interface IProductService
 {
     Task<ProductDto> GetProductAsync(Guid productId);
     Task<ProductDto> GetProductByCodeAsync(string code);
+    Task<ProductDto?> GetProductByHouseIdAsync(Guid houseId);
     Task<List<ProductDto>> GetActiveProductsAsync(string? productType = null);
     Task<bool> IsProductAvailableAsync(Guid productId, int quantity = 1, Guid? userId = null);
     Task<decimal> CalculatePriceAsync(Guid productId, int quantity = 1, Guid? userId = null);

@@ -464,6 +464,7 @@ namespace AmesaBackend.Lottery.Services
                 UniqueParticipants = uniqueParticipants,
                 IsParticipantCapReached = isCapReached,
                 RemainingParticipantSlots = remainingSlots,
+                ProductId = null, // Will be populated by fetching from Payment service if needed
                 Images = house.Images?.Select(img => new HouseImageDto
                 {
                     Id = img.Id,
@@ -1026,6 +1027,39 @@ namespace AmesaBackend.Lottery.Services
             public DateTime Timestamp { get; set; }
         }
 
+        private class PaymentProductApiResponse
+        {
+            public bool Success { get; set; }
+            public ProductDto? Data { get; set; }
+            public string? Message { get; set; }
+            public PaymentErrorResponse? Error { get; set; }
+            public DateTime Timestamp { get; set; }
+        }
+
+        private class PaymentLinkApiResponse
+        {
+            public bool Success { get; set; }
+            public object? Data { get; set; }
+            public string? Message { get; set; }
+            public PaymentErrorResponse? Error { get; set; }
+            public DateTime Timestamp { get; set; }
+        }
+
+        private class ProductDto
+        {
+            public Guid Id { get; set; }
+            public string Code { get; set; } = string.Empty;
+            public string Name { get; set; } = string.Empty;
+            public string? Description { get; set; }
+            public string ProductType { get; set; } = string.Empty;
+            public string Status { get; set; } = string.Empty;
+            public decimal BasePrice { get; set; }
+            public string Currency { get; set; } = "USD";
+            public bool IsActive { get; set; }
+            public DateTime CreatedAt { get; set; }
+            public DateTime UpdatedAt { get; set; }
+        }
+
         /// <summary>
         /// Payment error response from Payment service
         /// Matches Payment.DTOs.ErrorResponse format
@@ -1048,6 +1082,129 @@ namespace AmesaBackend.Lottery.Services
             public string? ProviderTransactionId { get; set; }
             public string? Message { get; set; }
             public string? ErrorCode { get; set; }
+        }
+
+        /// <summary>
+        /// Creates a product and product link for a house in the Payment service
+        /// </summary>
+        public async Task<Guid?> CreateProductForHouseAsync(Guid houseId, string houseTitle, decimal ticketPrice, Guid? createdBy)
+        {
+            if (_httpRequest == null || _configuration == null)
+            {
+                _logger.LogWarning("HTTP request service or configuration not available, skipping product creation for house {HouseId}", houseId);
+                return null;
+            }
+
+            try
+            {
+                // Get payment service URL
+                var paymentServiceUrl = _configuration["PaymentService:BaseUrl"] 
+                    ?? Environment.GetEnvironmentVariable("PAYMENT_SERVICE_URL")
+                    ?? "http://amesa-backend-alb-509078867.eu-north-1.elb.amazonaws.com/api/v1";
+
+                // Create product request
+                // Use same format as SQL migration: LOTTERY-{houseIdWithoutDashes}
+                var productCode = $"LOTTERY-{houseId:N}".Replace("-", "");
+                var createProductRequest = new
+                {
+                    Code = productCode,
+                    Name = $"Lottery Ticket - {houseTitle}",
+                    Description = $"Lottery ticket for {houseTitle}",
+                    ProductType = "lottery_ticket",
+                    BasePrice = ticketPrice,
+                    Currency = "USD",
+                    IsActive = true
+                };
+
+                // Get JWT token from current context if available
+                var token = string.Empty; // Will be automatically added by HttpRequestService from HttpContext
+
+                // Call Payment service to create product
+                var productResponse = await _httpRequest.PostRequest<PaymentProductApiResponse>(
+                    $"{paymentServiceUrl}/products",
+                    createProductRequest,
+                    token);
+
+                if (productResponse == null || !productResponse.Success || productResponse.Data == null)
+                {
+                    _logger.LogWarning("Failed to create product for house {HouseId}: {Error}",
+                        houseId, productResponse?.Error?.Message ?? "Unknown error");
+                    return null;
+                }
+
+                var productId = productResponse.Data.Id;
+
+                // Create product link
+                var linkRequest = new
+                {
+                    LinkedEntityType = "house",
+                    LinkedEntityId = houseId,
+                    LinkMetadata = new Dictionary<string, object>
+                    {
+                        ["HouseTitle"] = houseTitle,
+                        ["TicketPrice"] = ticketPrice
+                    }
+                };
+
+                var linkResponse = await _httpRequest.PostRequest<PaymentLinkApiResponse>(
+                    $"{paymentServiceUrl}/products/{productId}/link",
+                    linkRequest,
+                    token);
+
+                if (linkResponse == null || !linkResponse.Success)
+                {
+                    _logger.LogWarning("Failed to create product link for house {HouseId}, product {ProductId}: {Error}",
+                        houseId, productId, linkResponse?.Error?.Message ?? "Unknown error");
+                    // Product was created but link failed - still return product ID
+                }
+
+                _logger.LogInformation("Created product {ProductId} for house {HouseId}", productId, houseId);
+                return productId;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error creating product for house {HouseId}", houseId);
+                return null; // Don't fail house creation if product creation fails
+            }
+        }
+
+        /// <summary>
+        /// Gets the product ID for a house from the Payment service
+        /// </summary>
+        public async Task<Guid?> GetProductIdForHouseAsync(Guid houseId)
+        {
+            if (_httpRequest == null || _configuration == null)
+            {
+                return null;
+            }
+
+            try
+            {
+                // Get payment service URL
+                var paymentServiceUrl = _configuration["PaymentService:BaseUrl"] 
+                    ?? Environment.GetEnvironmentVariable("PAYMENT_SERVICE_URL")
+                    ?? "http://amesa-backend-alb-509078867.eu-north-1.elb.amazonaws.com/api/v1";
+
+                // Get JWT token from current context if available
+                var token = string.Empty; // Will be automatically added by HttpRequestService from HttpContext
+
+                // Call Payment service to get product by house ID
+                var productResponse = await _httpRequest.GetRequest<PaymentProductApiResponse>(
+                    $"{paymentServiceUrl}/products/by-house/{houseId}",
+                    token);
+
+                if (productResponse == null || !productResponse.Success || productResponse.Data == null)
+                {
+                    return null;
+                }
+
+                return productResponse.Data.Id;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Error getting product ID for house {HouseId}", houseId);
+                return null;
+            }
         }
     }
 }

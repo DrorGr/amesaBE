@@ -31,6 +31,7 @@ namespace AmesaBackend.Lottery.DTOs
         public int UniqueParticipants { get; set; }
         public bool IsParticipantCapReached { get; set; }
         public int? RemainingParticipantSlots { get; set; }
+        public Guid? ProductId { get; set; }
         public List<HouseImageDto> Images { get; set; } = new();
         public DateTime CreatedAt { get; set; }
     }

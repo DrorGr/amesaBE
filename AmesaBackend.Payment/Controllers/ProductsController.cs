@@ -77,6 +77,34 @@ public class ProductsController : ControllerBase
         }
     }
 
+    [HttpGet("by-house/{houseId}")]
+    [AllowAnonymous]
+    public async Task<ActionResult<ApiResponse<ProductDto>>> GetProductByHouseId(Guid houseId)
+    {
+        try
+        {
+            var product = await _productService.GetProductByHouseIdAsync(houseId);
+            if (product == null)
+            {
+                return NotFound(new ApiResponse<ProductDto> { Success = false, Message = "Product not found for this house" });
+            }
+            return Ok(new ApiResponse<ProductDto> { Success = true, Data = product });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting product for house {HouseId}", houseId);
+            return StatusCode(500, new ApiResponse<ProductDto> 
+            { 
+                Success = false, 
+                Error = new ErrorResponse 
+                { 
+                    Code = "INTERNAL_ERROR", 
+                    Message = "An error occurred retrieving product for house" 
+                } 
+            });
+        }
+    }
+
     [HttpPost("{id}/validate")]
     [Authorize]
     public async Task<ActionResult<ApiResponse<ProductValidationResponse>>> ValidateProduct(
@@ -197,6 +225,41 @@ public class ProductsController : ControllerBase
                 { 
                     Code = "INTERNAL_ERROR", 
                     Message = "An error occurred updating product" 
+                } 
+            });
+        }
+    }
+
+    [HttpPost("{id}/link")]
+    [Authorize] // Allow authenticated users (service-to-service calls)
+    public async Task<ActionResult<ApiResponse<object>>> LinkProduct(
+        Guid id,
+        [FromBody] LinkProductRequest request)
+    {
+        try
+        {
+            if (!ControllerHelpers.TryGetUserId(User, out var userId))
+            {
+                return ControllerHelpers.UnauthorizedResponse<object>();
+            }
+
+            await _productService.LinkProductAsync(id, request.LinkedEntityType, request.LinkedEntityId, request.LinkMetadata);
+            return Ok(new ApiResponse<object> { Success = true, Message = "Product linked successfully" });
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound(new ApiResponse<object> { Success = false, Message = "Product not found" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error linking product {ProductId}", id);
+            return StatusCode(500, new ApiResponse<object> 
+            { 
+                Success = false, 
+                Error = new ErrorResponse 
+                { 
+                    Code = "INTERNAL_ERROR", 
+                    Message = "An error occurred linking product" 
                 } 
             });
         }

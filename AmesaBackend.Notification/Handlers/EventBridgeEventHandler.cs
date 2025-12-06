@@ -139,6 +139,83 @@ namespace AmesaBackend.Notification.Handlers
                 _logger.LogError(ex, "Error sending welcome email to {Email}", @event.Email);
             }
         }
+
+        public async Task HandlePaymentCompletedEvent(PaymentCompletedEvent @event)
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
+            
+            try
+            {
+                await notificationService.SendNotificationAsync(
+                    @event.UserId,
+                    "Payment Successful",
+                    $"Your payment of ${@event.Amount:F2} has been processed successfully.",
+                    "payment_success");
+                
+                _logger.LogInformation("Payment success notification sent to user {UserId}", @event.UserId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error sending payment success notification to user {UserId}", @event.UserId);
+            }
+        }
+
+        public async Task HandleTicketPurchasedEvent(TicketPurchasedEvent @event)
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
+            
+            try
+            {
+                var ticketText = @event.TicketCount == 1 ? "ticket" : "tickets";
+                var message = $"You've successfully purchased {@event.TicketCount} {ticketText} for the lottery!";
+                
+                if (@event.TicketNumbers != null && @event.TicketNumbers.Any())
+                {
+                    var ticketNumbers = string.Join(", ", @event.TicketNumbers.Take(5));
+                    if (@event.TicketNumbers.Count > 5)
+                    {
+                        ticketNumbers += $" and {@event.TicketNumbers.Count - 5} more";
+                    }
+                    message += $" Your ticket numbers: {ticketNumbers}";
+                }
+                
+                await notificationService.SendNotificationAsync(
+                    @event.UserId,
+                    "Tickets Purchased",
+                    message,
+                    "ticket_purchased");
+                
+                _logger.LogInformation("Ticket purchase notification sent to user {UserId} for {TicketCount} tickets", 
+                    @event.UserId, @event.TicketCount);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error sending ticket purchase notification to user {UserId}", @event.UserId);
+            }
+        }
+
+        public async Task HandlePaymentFailedEvent(PaymentFailedEvent @event)
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
+            
+            try
+            {
+                await notificationService.SendNotificationAsync(
+                    @event.UserId,
+                    "Payment Failed",
+                    $"Your payment of ${@event.Amount:F2} could not be processed. Please try again or contact support.",
+                    "payment_failed");
+                
+                _logger.LogInformation("Payment failure notification sent to user {UserId}", @event.UserId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error sending payment failure notification to user {UserId}", @event.UserId);
+            }
+        }
     }
 }
 

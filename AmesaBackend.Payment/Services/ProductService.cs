@@ -43,6 +43,22 @@ public class ProductService : IProductService
         return MapToProductDto(product);
     }
 
+    public async Task<ProductDto?> GetProductByHouseIdAsync(Guid houseId)
+    {
+        var productLink = await _context.ProductLinks
+            .Include(pl => pl.Product)
+            .FirstOrDefaultAsync(pl => pl.LinkedEntityType == "house" && 
+                                        pl.LinkedEntityId == houseId &&
+                                        pl.Product.DeletedAt == null);
+
+        if (productLink == null || productLink.Product == null)
+        {
+            return null;
+        }
+
+        return MapToProductDto(productLink.Product);
+    }
+
     public async Task<List<ProductDto>> GetActiveProductsAsync(string? productType = null)
     {
         var query = _context.Products

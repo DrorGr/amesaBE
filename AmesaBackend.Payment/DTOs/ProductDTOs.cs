@@ -125,3 +125,15 @@ public class ProductValidationResult
     public decimal CalculatedPrice { get; set; }
 }
 
+public class LinkProductRequest
+{
+    [Required]
+    [MaxLength(50)]
+    public string LinkedEntityType { get; set; } = string.Empty;
+
+    [Required]
+    public Guid LinkedEntityId { get; set; }
+
+    public Dictionary<string, object>? LinkMetadata { get; set; }
+}
+

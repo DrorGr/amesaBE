@@ -174,6 +174,29 @@ public class LotteryTicketProductHandler : IProductHandler
                 throw new InvalidOperationException("Failed to create lottery tickets");
             }
 
+            // Publish TicketPurchasedEvent for real-time updates and notifications
+            try
+            {
+                await eventPublisher.PublishAsync(new TicketPurchasedEvent
+                {
+                    UserId = userId,
+                    HouseId = houseId,
+                    TicketCount = response.Data.TicketsPurchased,
+                    TicketNumbers = response.Data.TicketNumbers ?? new List<string>()
+                });
+                
+                _logger.LogInformation(
+                    "Published TicketPurchasedEvent for user {UserId}, house {HouseId}, tickets {TicketCount}",
+                    userId, houseId, response.Data.TicketsPurchased);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, 
+                    "Failed to publish TicketPurchasedEvent for transaction {TransactionId} (non-critical)",
+                    transactionId);
+                // Don't fail the purchase if event publishing fails
+            }
+
             return new ProcessPurchaseResult
             {
                 Success = true,

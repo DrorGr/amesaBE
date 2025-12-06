@@ -87,6 +87,17 @@ namespace AmesaBackend.Lottery.Controllers
                     ? Math.Max(0, house.MaxParticipants.Value - uniqueParticipants)
                     : (int?)null;
 
+                // Fetch product ID from Payment service (non-critical, don't fail if it fails)
+                Guid? productId = null;
+                try
+                {
+                    productId = await _lotteryService.GetProductIdForHouseAsync(house.Id);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "Could not fetch product ID for house {HouseId} (non-critical)", house.Id);
+                }
+
                 var houseDto = new HouseDto
                 {
                     Id = house.Id,
@@ -116,6 +127,7 @@ namespace AmesaBackend.Lottery.Controllers
                     UniqueParticipants = uniqueParticipants,
                     IsParticipantCapReached = isCapReached,
                     RemainingParticipantSlots = remainingSlots,
+                    ProductId = productId,
                     Images = house.Images.OrderBy(i => i.DisplayOrder).Select(i => new HouseImageDto
                     {
                         Id = i.Id,
@@ -200,6 +212,31 @@ namespace AmesaBackend.Lottery.Controllers
                     throw;
                 }
 
+                // Create product for house in Payment service (non-critical, don't fail if it fails)
+                Guid? productId = null;
+                try
+                {
+                    productId = await _lotteryService.CreateProductForHouseAsync(
+                        house.Id, 
+                        house.Title, 
+                        house.TicketPrice, 
+                        house.CreatedBy);
+                    
+                    if (productId.HasValue)
+                    {
+                        _logger.LogInformation("Created product {ProductId} for house {HouseId}", productId.Value, house.Id);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Product creation returned null for house {HouseId}", house.Id);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to create product for house {HouseId} (non-critical)", house.Id);
+                    // Continue - product creation failure shouldn't block house creation
+                }
+
                 // Publish event after transaction commits (non-critical, don't fail if it fails)
                 try
                 {
@@ -258,6 +295,7 @@ namespace AmesaBackend.Lottery.Controllers
                     UniqueParticipants = 0,
                     IsParticipantCapReached = false,
                     RemainingParticipantSlots = house.MaxParticipants,
+                    ProductId = productId,
                     Images = new List<HouseImageDto>(),
                     CreatedAt = house.CreatedAt
                 };
@@ -466,6 +504,7 @@ namespace AmesaBackend.Lottery.Controllers
                     UniqueParticipants = uniqueParticipants,
                     IsParticipantCapReached = isCapReached,
                     RemainingParticipantSlots = remainingSlots,
+                    ProductId = null, // Product ID not fetched in update view for performance
                     Images = new List<HouseImageDto>(),
                     CreatedAt = house.CreatedAt
                 };
