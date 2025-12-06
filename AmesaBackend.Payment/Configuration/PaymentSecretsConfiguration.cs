@@ -30,13 +30,25 @@ public static class PaymentSecretsConfiguration
                     var secrets = JsonSerializer.Deserialize<Dictionary<string, string>>(secretValue);
                     if (secrets != null)
                     {
+                        var secretKey = secrets.GetValueOrDefault("SecretKey");
+                        var publishableKey = secrets.GetValueOrDefault("PublishableKey");
+                        var webhookSecret = secrets.GetValueOrDefault("WebhookSecret");
+                        
+                        // #region agent log
+                        Console.WriteLine($"[DEBUG] Stripe secrets loaded - SecretKey present: {!string.IsNullOrEmpty(secretKey)}, PublishableKey present: {!string.IsNullOrEmpty(publishableKey)}, WebhookSecret present: {!string.IsNullOrEmpty(webhookSecret)}");
+                        // #endregion
+                        
                         configurationBuilder.AddInMemoryCollection(new Dictionary<string, string?>
                         {
-                            ["Stripe:PublishableKey"] = secrets.GetValueOrDefault("PublishableKey"),
-                            ["Stripe:ApiKey"] = secrets.GetValueOrDefault("SecretKey"), // Map SecretKey to ApiKey for StripeService
-                            ["Stripe:SecretKey"] = secrets.GetValueOrDefault("SecretKey"), // Keep for backward compatibility
-                            ["Stripe:WebhookSecret"] = secrets.GetValueOrDefault("WebhookSecret")
+                            ["Stripe:PublishableKey"] = publishableKey,
+                            ["Stripe:ApiKey"] = secretKey, // Map SecretKey to ApiKey for StripeService
+                            ["Stripe:SecretKey"] = secretKey, // Keep for backward compatibility
+                            ["Stripe:WebhookSecret"] = webhookSecret
                         });
+                        
+                        // #region agent log
+                        Console.WriteLine($"[DEBUG] Stripe configuration keys set - ApiKey: {(!string.IsNullOrEmpty(secretKey) ? "SET" : "EMPTY")}, PublishableKey: {(!string.IsNullOrEmpty(publishableKey) ? "SET" : "EMPTY")}, WebhookSecret: {(!string.IsNullOrEmpty(webhookSecret) ? "SET" : "EMPTY")}");
+                        // #endregion
                     }
                 });
 

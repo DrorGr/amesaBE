@@ -37,13 +37,25 @@ public class StripeService : IStripeService
         _productHandlerRegistry = serviceProvider.GetRequiredService<IProductHandlerRegistry>();
 
         // Load from configuration (AWS Secrets Manager in production)
-        _apiKey = configuration["Stripe:ApiKey"] 
-            ?? Environment.GetEnvironmentVariable("STRIPE_API_KEY") 
+        // #region agent log
+        var apiKeyFromConfig = configuration["Stripe:ApiKey"];
+        var apiKeyFromEnv = Environment.GetEnvironmentVariable("STRIPE_API_KEY");
+        _logger.LogInformation("[DEBUG] StripeService constructor - ApiKey from config: {HasConfig}, ApiKey from env: {HasEnv}", 
+            !string.IsNullOrEmpty(apiKeyFromConfig), !string.IsNullOrEmpty(apiKeyFromEnv));
+        // #endregion
+        
+        _apiKey = apiKeyFromConfig 
+            ?? apiKeyFromEnv
             ?? throw new InvalidOperationException("Stripe API key not configured");
 
         _webhookSecret = configuration["Stripe:WebhookSecret"] 
             ?? Environment.GetEnvironmentVariable("STRIPE_WEBHOOK_SECRET") 
             ?? throw new InvalidOperationException("Stripe webhook secret not configured");
+
+        // #region agent log
+        _logger.LogInformation("[DEBUG] StripeService constructor - ApiKey set: {HasApiKey}, WebhookSecret set: {HasWebhookSecret}", 
+            !string.IsNullOrEmpty(_apiKey), !string.IsNullOrEmpty(_webhookSecret));
+        // #endregion
 
         StripeConfiguration.ApiKey = _apiKey;
     }
