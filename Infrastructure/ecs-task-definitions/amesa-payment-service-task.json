@@ -33,6 +33,10 @@
           "valueFrom": "/amesa/prod/JwtSettings/SecretKey"
         },
         {
+          "name": "ConnectionStrings__DefaultConnection",
+          "valueFrom": "/amesa/prod/ConnectionStrings/Payment"
+        },
+        {
           "name": "ConnectionStrings__Redis",
           "valueFrom": "/amesa/prod/ConnectionStrings/Redis"
         }
