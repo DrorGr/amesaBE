@@ -36,10 +36,12 @@ public class StripeService : IStripeService
         _auditService = serviceProvider.GetService<IPaymentAuditService>();
         _productHandlerRegistry = serviceProvider.GetRequiredService<IProductHandlerRegistry>();
 
-        // Load from configuration (AWS Secrets Manager in production)
+        // Load from configuration (ECS environment variables or AWS Secrets Manager)
+        // ECS environment variables use double underscores (Stripe__ApiKey) which .NET Core maps to Stripe:ApiKey
         // #region agent log
         var apiKeyFromConfig = configuration["Stripe:ApiKey"];
-        var apiKeyFromEnv = Environment.GetEnvironmentVariable("STRIPE_API_KEY");
+        var apiKeyFromEnv = Environment.GetEnvironmentVariable("STRIPE_API_KEY") 
+            ?? Environment.GetEnvironmentVariable("Stripe__ApiKey"); // ECS format
         var publishableKeyFromConfig = configuration["Stripe:PublishableKey"];
         _logger.LogInformation("[DEBUG] StripeService constructor - ApiKey from config: {HasConfig} (length: {Length}), ApiKey from env: {HasEnv}, PublishableKey from config: {HasPublishableKey}", 
             !string.IsNullOrEmpty(apiKeyFromConfig), apiKeyFromConfig?.Length ?? 0, !string.IsNullOrEmpty(apiKeyFromEnv), !string.IsNullOrEmpty(publishableKeyFromConfig));
@@ -54,7 +56,8 @@ public class StripeService : IStripeService
             ?? throw new InvalidOperationException($"Stripe API key not configured. Config value: {(string.IsNullOrEmpty(apiKeyFromConfig) ? "EMPTY" : "SET")}, Env value: {(string.IsNullOrEmpty(apiKeyFromEnv) ? "EMPTY" : "SET")}");
 
         _webhookSecret = configuration["Stripe:WebhookSecret"] 
-            ?? Environment.GetEnvironmentVariable("STRIPE_WEBHOOK_SECRET") 
+            ?? Environment.GetEnvironmentVariable("STRIPE_WEBHOOK_SECRET")
+            ?? Environment.GetEnvironmentVariable("Stripe__WebhookSecret") // ECS format
             ?? throw new InvalidOperationException("Stripe webhook secret not configured");
 
         // #region agent log

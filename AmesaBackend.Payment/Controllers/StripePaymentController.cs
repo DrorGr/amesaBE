@@ -202,11 +202,14 @@ public class StripePaymentController : ControllerBase
     {
         try
         {
+            // Check configuration first (ECS environment variables map Stripe__PublishableKey to Stripe:PublishableKey)
             var publishableKey = _configuration["Stripe:PublishableKey"] 
-                ?? Environment.GetEnvironmentVariable("STRIPE_PUBLISHABLE_KEY");
+                ?? Environment.GetEnvironmentVariable("STRIPE_PUBLISHABLE_KEY")
+                ?? Environment.GetEnvironmentVariable("Stripe__PublishableKey"); // ECS format
 
             if (string.IsNullOrWhiteSpace(publishableKey))
             {
+                _logger.LogError("[DEBUG] GetPublishableKey - PublishableKey not found in config or environment variables");
                 return StatusCode(500, new ApiResponse<StripeConfigResponse> 
                 { 
                     Success = false, 

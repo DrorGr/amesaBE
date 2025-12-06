@@ -24,41 +24,54 @@ public static class PaymentSecretsConfiguration
                 var awsRegion = Environment.GetEnvironmentVariable("AWS_REGION") ?? "eu-north-1";
                 var client = new AmazonSecretsManagerClient(Amazon.RegionEndpoint.GetBySystemName(awsRegion));
 
-                // Load Stripe secrets
-                LoadSecret(client, "amesa/payment/stripe-keys", (secretValue) =>
+                // Load Stripe secrets from AWS Secrets Manager (only if not already set via ECS environment variables)
+                // ECS environment variables (Stripe__ApiKey) are automatically mapped to Stripe:ApiKey by .NET Core
+                // Only load from Secrets Manager if environment variables are not present
+                var existingApiKey = Environment.GetEnvironmentVariable("Stripe__ApiKey") 
+                    ?? Environment.GetEnvironmentVariable("STRIPE_API_KEY");
+                
+                if (string.IsNullOrEmpty(existingApiKey))
                 {
-                    // Strip any leading whitespace or BOM
-                    secretValue = secretValue.TrimStart('\uFEFF', ' ', '\t', '\r', '\n');
-                    
-                    var secrets = JsonSerializer.Deserialize<Dictionary<string, string>>(secretValue);
-                    if (secrets != null)
+                    // No environment variable set, load from Secrets Manager
+                    LoadSecret(client, "amesa/payment/stripe-keys", (secretValue) =>
                     {
-                        var secretKey = secrets.GetValueOrDefault("SecretKey");
-                        var publishableKey = secrets.GetValueOrDefault("PublishableKey");
-                        var webhookSecret = secrets.GetValueOrDefault("WebhookSecret");
+                        // Strip any leading whitespace or BOM
+                        secretValue = secretValue.TrimStart('\uFEFF', ' ', '\t', '\r', '\n');
                         
-                        // #region agent log
-                        Console.WriteLine($"[DEBUG] Stripe secrets loaded - SecretKey present: {!string.IsNullOrEmpty(secretKey)}, PublishableKey present: {!string.IsNullOrEmpty(publishableKey)}, WebhookSecret present: {!string.IsNullOrEmpty(webhookSecret)}");
-                        // #endregion
-                        
-                        // Add in-memory collection - this should override appsettings.json values
-                        // Note: AddInMemoryCollection is added last, so it has highest priority
-                        var stripeConfig = new Dictionary<string, string?>
+                        var secrets = JsonSerializer.Deserialize<Dictionary<string, string>>(secretValue);
+                        if (secrets != null)
                         {
-                            ["Stripe:PublishableKey"] = publishableKey,
-                            ["Stripe:ApiKey"] = secretKey, // Map SecretKey to ApiKey for StripeService
-                            ["Stripe:SecretKey"] = secretKey, // Keep for backward compatibility
-                            ["Stripe:WebhookSecret"] = webhookSecret
-                        };
-                        
-                        configurationBuilder.AddInMemoryCollection(stripeConfig);
-                        
-                        // #region agent log
-                        Console.WriteLine($"[DEBUG] Stripe configuration keys set - ApiKey: {(!string.IsNullOrEmpty(secretKey) ? "SET" : "EMPTY")}, PublishableKey: {(!string.IsNullOrEmpty(publishableKey) ? "SET" : "EMPTY")}, WebhookSecret: {(!string.IsNullOrEmpty(webhookSecret) ? "SET" : "EMPTY")}");
-                        Console.WriteLine($"[DEBUG] Stripe ApiKey value (first 20 chars): {(string.IsNullOrEmpty(secretKey) ? "EMPTY" : secretKey.Substring(0, Math.Min(20, secretKey.Length)) + "...")}");
-                        // #endregion
-                    }
-                });
+                            var secretKey = secrets.GetValueOrDefault("SecretKey");
+                            var publishableKey = secrets.GetValueOrDefault("PublishableKey");
+                            var webhookSecret = secrets.GetValueOrDefault("WebhookSecret");
+                            
+                            // #region agent log
+                            Console.WriteLine($"[DEBUG] Stripe secrets loaded from Secrets Manager - SecretKey present: {!string.IsNullOrEmpty(secretKey)}, PublishableKey present: {!string.IsNullOrEmpty(publishableKey)}, WebhookSecret present: {!string.IsNullOrEmpty(webhookSecret)}");
+                            // #endregion
+                            
+                            // Add in-memory collection - this should override appsettings.json values
+                            // Note: AddInMemoryCollection is added last, so it has highest priority
+                            var stripeConfig = new Dictionary<string, string?>
+                            {
+                                ["Stripe:PublishableKey"] = publishableKey,
+                                ["Stripe:ApiKey"] = secretKey, // Map SecretKey to ApiKey for StripeService
+                                ["Stripe:SecretKey"] = secretKey, // Keep for backward compatibility
+                                ["Stripe:WebhookSecret"] = webhookSecret
+                            };
+                            
+                            configurationBuilder.AddInMemoryCollection(stripeConfig);
+                            
+                            // #region agent log
+                            Console.WriteLine($"[DEBUG] Stripe configuration keys set from Secrets Manager - ApiKey: {(!string.IsNullOrEmpty(secretKey) ? "SET" : "EMPTY")}, PublishableKey: {(!string.IsNullOrEmpty(publishableKey) ? "SET" : "EMPTY")}, WebhookSecret: {(!string.IsNullOrEmpty(webhookSecret) ? "SET" : "EMPTY")}");
+                            Console.WriteLine($"[DEBUG] Stripe ApiKey value (first 20 chars): {(string.IsNullOrEmpty(secretKey) ? "EMPTY" : secretKey.Substring(0, Math.Min(20, secretKey.Length)) + "...")}");
+                            // #endregion
+                        }
+                    });
+                }
+                else
+                {
+                    Console.WriteLine($"[DEBUG] Stripe API key already set via environment variable, skipping Secrets Manager load");
+                }
 
                 // Load Coinbase Commerce secrets
                 LoadSecret(client, "amesa/payment/coinbase-keys", (secretValue) =>
