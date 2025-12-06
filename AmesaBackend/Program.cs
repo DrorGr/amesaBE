@@ -26,7 +26,12 @@ if (args.Length > 0 && args[0] == "--seeder")
 builder.Host.UseMainSerilog(builder.Configuration);
 
 // Add Controllers
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+        options.JsonSerializerOptions.WriteIndented = false;
+    });
 builder.Services.AddEndpointsApiExplorer();
 
 // Configure Swagger/OpenAPI with Bearer token security
