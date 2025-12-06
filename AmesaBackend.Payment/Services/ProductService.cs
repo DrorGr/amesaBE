@@ -173,7 +173,9 @@ public class ProductService : IProductService
         // Check user quantity limit
         if (userId.HasValue && product.MaxQuantityPerUser.HasValue)
         {
+            // Fix: Add Include to properly load Transaction navigation property
             var userPurchases = await _context.TransactionItems
+                .Include(ti => ti.Transaction)
                 .Where(ti => ti.ProductId == productId &&
                              ti.Transaction.UserId == userId.Value &&
                              ti.Transaction.Status == "Completed")
@@ -211,73 +213,128 @@ public class ProductService : IProductService
 
     public async Task<ProductValidationResult> ValidateProductPurchaseAsync(Guid productId, int quantity, Guid userId)
     {
-        var product = await _context.Products
-            .FirstOrDefaultAsync(p => p.Id == productId && p.IsActive && p.Status == "active" && p.DeletedAt == null);
-
-        if (product == null)
+        // #region agent log
+        _logger.LogInformation("[DEBUG] ValidateProductPurchaseAsync entry - ProductId: {ProductId}, Quantity: {Quantity}, UserId: {UserId}", productId, quantity, userId);
+        // #endregion
+        
+        try
         {
+            // #region agent log
+            _logger.LogInformation("[DEBUG] Before product query - ProductId: {ProductId}", productId);
+            // #endregion
+            
+            var product = await _context.Products
+                .FirstOrDefaultAsync(p => p.Id == productId && p.IsActive && p.Status == "active" && p.DeletedAt == null);
+
+            // #region agent log
+            _logger.LogInformation("[DEBUG] After product query - ProductFound: {Found}, ProductId: {ProductId}", product != null, product?.Id.ToString() ?? "null");
+            // #endregion
+
+            if (product == null)
+            {
+                return new ProductValidationResult
+                {
+                    IsValid = false,
+                    Errors = new List<string> { "Product not found or not available" }
+                };
+            }
+
+            var errors = new List<string>();
+
+            // Validate quantity
+            if (quantity <= 0)
+            {
+                errors.Add("Quantity must be greater than zero");
+            }
+
+            if (product.MaxQuantityPerUser.HasValue && quantity > product.MaxQuantityPerUser.Value)
+            {
+                errors.Add($"Maximum quantity per user is {product.MaxQuantityPerUser.Value}");
+            }
+
+            // Validate availability dates
+            if (product.AvailableFrom.HasValue && DateTime.UtcNow < product.AvailableFrom.Value)
+            {
+                errors.Add("Product is not yet available");
+            }
+
+            if (product.AvailableUntil.HasValue && DateTime.UtcNow > product.AvailableUntil.Value)
+            {
+                errors.Add("Product is no longer available");
+            }
+
+            // Validate total quantity
+            if (product.TotalQuantityAvailable.HasValue)
+            {
+                var remaining = product.TotalQuantityAvailable.Value - product.QuantitySold;
+                if (quantity > remaining)
+                {
+                    errors.Add($"Only {remaining} items remaining");
+                }
+            }
+
+            // Validate user quantity limit
+            if (product.MaxQuantityPerUser.HasValue)
+            {
+                // #region agent log
+                _logger.LogInformation("[DEBUG] Before TransactionItems query - ProductId: {ProductId}, UserId: {UserId}", productId, userId);
+                // #endregion
+                
+                try
+                {
+                    // Fix: Add Include to properly load Transaction navigation property
+                    var userPurchases = await _context.TransactionItems
+                        .Include(ti => ti.Transaction)
+                        .Where(ti => ti.ProductId == productId &&
+                                     ti.Transaction.UserId == userId &&
+                                     ti.Transaction.Status == "Completed")
+                        .SumAsync(ti => ti.Quantity);
+
+                    // #region agent log
+                    _logger.LogInformation("[DEBUG] After TransactionItems query - UserPurchases: {Purchases}", userPurchases);
+                    // #endregion
+
+                    if (userPurchases + quantity > product.MaxQuantityPerUser.Value)
+                    {
+                        errors.Add($"You have already purchased {userPurchases} items. Maximum allowed is {product.MaxQuantityPerUser.Value}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // #region agent log
+                    _logger.LogError(ex, "[DEBUG] Exception in TransactionItems query - ProductId: {ProductId}, UserId: {UserId}, ExceptionType: {Type}, Message: {Message}", 
+                        productId, userId, ex.GetType().Name, ex.Message);
+                    // #endregion
+                    throw;
+                }
+            }
+
+            // #region agent log
+            _logger.LogInformation("[DEBUG] Before CalculatePriceAsync - ProductId: {ProductId}, Quantity: {Quantity}", productId, quantity);
+            // #endregion
+
+            var calculatedPrice = errors.Count == 0 ? await CalculatePriceAsync(productId, quantity, userId) : 0;
+
+            // #region agent log
+            _logger.LogInformation("[DEBUG] ValidateProductPurchaseAsync success - IsValid: {IsValid}, Errors: {ErrorCount}, Price: {Price}", 
+                errors.Count == 0, errors.Count, calculatedPrice);
+            // #endregion
+
             return new ProductValidationResult
             {
-                IsValid = false,
-                Errors = new List<string> { "Product not found or not available" }
+                IsValid = errors.Count == 0,
+                Errors = errors,
+                CalculatedPrice = calculatedPrice
             };
         }
-
-        var errors = new List<string>();
-
-        // Validate quantity
-        if (quantity <= 0)
+        catch (Exception ex)
         {
-            errors.Add("Quantity must be greater than zero");
+            // #region agent log
+            _logger.LogError(ex, "[DEBUG] Exception in ValidateProductPurchaseAsync - ProductId: {ProductId}, ExceptionType: {Type}, Message: {Message}", 
+                productId, ex.GetType().Name, ex.Message);
+            // #endregion
+            throw;
         }
-
-        if (product.MaxQuantityPerUser.HasValue && quantity > product.MaxQuantityPerUser.Value)
-        {
-            errors.Add($"Maximum quantity per user is {product.MaxQuantityPerUser.Value}");
-        }
-
-        // Validate availability dates
-        if (product.AvailableFrom.HasValue && DateTime.UtcNow < product.AvailableFrom.Value)
-        {
-            errors.Add("Product is not yet available");
-        }
-
-        if (product.AvailableUntil.HasValue && DateTime.UtcNow > product.AvailableUntil.Value)
-        {
-            errors.Add("Product is no longer available");
-        }
-
-        // Validate total quantity
-        if (product.TotalQuantityAvailable.HasValue)
-        {
-            var remaining = product.TotalQuantityAvailable.Value - product.QuantitySold;
-            if (quantity > remaining)
-            {
-                errors.Add($"Only {remaining} items remaining");
-            }
-        }
-
-        // Validate user quantity limit
-        if (product.MaxQuantityPerUser.HasValue)
-        {
-            var userPurchases = await _context.TransactionItems
-                .Where(ti => ti.ProductId == productId &&
-                             ti.Transaction.UserId == userId &&
-                             ti.Transaction.Status == "Completed")
-                .SumAsync(ti => ti.Quantity);
-
-            if (userPurchases + quantity > product.MaxQuantityPerUser.Value)
-            {
-                errors.Add($"You have already purchased {userPurchases} items. Maximum allowed is {product.MaxQuantityPerUser.Value}");
-            }
-        }
-
-        return new ProductValidationResult
-        {
-            IsValid = errors.Count == 0,
-            Errors = errors,
-            CalculatedPrice = errors.Count == 0 ? await CalculatePriceAsync(productId, quantity, userId) : 0
-        };
     }
 
     public async Task<ProductDto> CreateProductAsync(CreateProductRequest request, Guid createdBy)

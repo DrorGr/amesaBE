@@ -130,14 +130,30 @@ public class ProductsController : ControllerBase
         Guid id, 
         [FromBody] ProductValidationRequest request)
     {
+        // #region agent log
+        _logger.LogInformation("[DEBUG] ValidateProduct entry - ProductId: {ProductId}, Quantity: {Quantity}", id, request?.Quantity ?? 0);
+        // #endregion
+        
         try
         {
             if (!ControllerHelpers.TryGetUserId(User, out var userId))
             {
+                // #region agent log
+                _logger.LogWarning("[DEBUG] ValidateProduct - User not authenticated");
+                // #endregion
                 return ControllerHelpers.UnauthorizedResponse<ProductValidationResponse>();
             }
 
+            // #region agent log
+            _logger.LogInformation("[DEBUG] ValidateProduct - Before ValidateProductPurchaseAsync - ProductId: {ProductId}, Quantity: {Quantity}, UserId: {UserId}", id, request?.Quantity ?? 0, userId);
+            // #endregion
+
             var result = await _productService.ValidateProductPurchaseAsync(id, request.Quantity, userId);
+            
+            // #region agent log
+            _logger.LogInformation("[DEBUG] ValidateProduct - After ValidateProductPurchaseAsync - IsValid: {IsValid}, Errors: {Errors}, Price: {Price}", 
+                result.IsValid, string.Join(", ", result.Errors), result.CalculatedPrice);
+            // #endregion
             
             return Ok(new ApiResponse<ProductValidationResponse>
             {
@@ -152,6 +168,11 @@ public class ProductsController : ControllerBase
         }
         catch (Exception ex)
         {
+            // #region agent log
+            _logger.LogError(ex, "[DEBUG] Exception in ValidateProduct - ProductId: {ProductId}, ExceptionType: {Type}, Message: {Message}, InnerException: {Inner}", 
+                id, ex.GetType().Name, ex.Message, ex.InnerException?.Message ?? "none");
+            // #endregion
+            
             _logger.LogError(ex, "Error validating product {ProductId}", id);
             return StatusCode(500, new ApiResponse<ProductValidationResponse> 
             { 
