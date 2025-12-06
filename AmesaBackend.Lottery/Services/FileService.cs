@@ -90,16 +90,19 @@ namespace AmesaBackend.Lottery.Services
 
             try
             {
-                // Load original image
+                // Load original image into memory for reuse
                 originalImageStream.Position = 0;
-                using var image = await Image.LoadAsync(originalImageStream);
+                using var originalMemoryStream = new MemoryStream();
+                await originalImageStream.CopyToAsync(originalMemoryStream);
+                originalMemoryStream.Position = 0;
 
                 foreach (var size in sizes)
                 {
                     try
                     {
-                        // Clone image for processing (ImageSharp requires cloning for mutations)
-                        using var processedImage = image.Clone();
+                        // Reload image from memory stream for each size (ImageSharp images are not thread-safe and can't be cloned easily)
+                        originalMemoryStream.Position = 0;
+                        using var image = await Image.LoadAsync(originalMemoryStream);
 
                         // Resize maintaining aspect ratio
                         var resizeOptions = new ResizeOptions
@@ -109,7 +112,7 @@ namespace AmesaBackend.Lottery.Services
                             Sampler = KnownResamplers.Lanczos3 // High quality resampling
                         };
 
-                        processedImage.Mutate(x => x.Resize(resizeOptions));
+                        image.Mutate(x => x.Resize(resizeOptions));
 
                         // Process WebP version
                         var webpStream = new MemoryStream();
@@ -117,21 +120,25 @@ namespace AmesaBackend.Lottery.Services
                         {
                             Quality = size.Value.quality
                         };
-                        await processedImage.SaveAsync(webpStream, webpEncoder);
+                        await image.SaveAsync(webpStream, webpEncoder);
                         webpStream.Position = 0;
 
                         var webpKey = $"houses/{houseId}/{imageId}/{size.Key}.webp";
                         var webpUrl = await UploadStreamToS3Async(webpStream, webpKey, "image/webp");
                         uploadedUrls[$"{size.Key}_webp"] = webpUrl;
 
+                        // Reload image again for JPEG (since we already mutated it for WebP)
+                        originalMemoryStream.Position = 0;
+                        using var jpegImage = await Image.LoadAsync(originalMemoryStream);
+                        jpegImage.Mutate(x => x.Resize(resizeOptions));
+
                         // Process JPEG fallback
-                        processedImage.Mutate(x => x.Resize(resizeOptions)); // Re-resize for JPEG
                         var jpegStream = new MemoryStream();
                         var jpegEncoder = new JpegEncoder
                         {
                             Quality = size.Value.quality
                         };
-                        await processedImage.SaveAsync(jpegStream, jpegEncoder);
+                        await jpegImage.SaveAsync(jpegStream, jpegEncoder);
                         jpegStream.Position = 0;
 
                         var jpegKey = $"houses/{houseId}/{imageId}/{size.Key}.jpg";
