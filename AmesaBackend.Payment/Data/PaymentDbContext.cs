@@ -45,12 +45,27 @@ namespace AmesaBackend.Payment.Data
             modelBuilder.Entity<Product>(entity =>
             {
                 entity.HasKey(e => e.Id);
-                entity.Property(e => e.Code).IsRequired().HasMaxLength(50);
-                entity.Property(e => e.Name).IsRequired().HasMaxLength(255);
-                entity.Property(e => e.ProductType).IsRequired().HasMaxLength(50);
-                entity.Property(e => e.Status).IsRequired().HasMaxLength(20);
-                entity.Property(e => e.BasePrice).IsRequired().HasColumnType("decimal(15,2)");
-                entity.Property(e => e.Currency).IsRequired().HasMaxLength(3);
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.Code).IsRequired().HasMaxLength(50).HasColumnName("code");
+                entity.Property(e => e.Name).IsRequired().HasMaxLength(255).HasColumnName("name");
+                entity.Property(e => e.Description).HasColumnName("description");
+                entity.Property(e => e.ProductType).IsRequired().HasMaxLength(50).HasColumnName("product_type");
+                entity.Property(e => e.Status).IsRequired().HasMaxLength(20).HasColumnName("status");
+                entity.Property(e => e.BasePrice).IsRequired().HasColumnType("decimal(15,2)").HasColumnName("base_price");
+                entity.Property(e => e.Currency).IsRequired().HasMaxLength(3).HasColumnName("currency");
+                entity.Property(e => e.PricingModel).HasMaxLength(50).HasColumnName("pricing_model");
+                entity.Property(e => e.PricingMetadata).HasColumnName("pricing_metadata");
+                entity.Property(e => e.AvailableFrom).HasColumnName("available_from");
+                entity.Property(e => e.AvailableUntil).HasColumnName("available_until");
+                entity.Property(e => e.MaxQuantityPerUser).HasColumnName("max_quantity_per_user");
+                entity.Property(e => e.TotalQuantityAvailable).HasColumnName("total_quantity_available");
+                entity.Property(e => e.QuantitySold).HasColumnName("quantity_sold");
+                entity.Property(e => e.ProductMetadata).HasColumnName("product_metadata");
+                entity.Property(e => e.IsActive).HasColumnName("is_active");
+                entity.Property(e => e.CreatedBy).HasColumnName("created_by");
+                entity.Property(e => e.CreatedAt).HasColumnName("created_at");
+                entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
+                entity.Property(e => e.DeletedAt).HasColumnName("deleted_at");
                 entity.HasIndex(e => e.Code).IsUnique();
                 entity.HasIndex(e => new { e.ProductType, e.Status });
                 entity.HasIndex(e => new { e.IsActive, e.Status });
@@ -59,7 +74,12 @@ namespace AmesaBackend.Payment.Data
             modelBuilder.Entity<ProductLink>(entity =>
             {
                 entity.HasKey(e => e.Id);
-                entity.Property(e => e.LinkedEntityType).IsRequired().HasMaxLength(50);
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.ProductId).HasColumnName("product_id");
+                entity.Property(e => e.LinkedEntityType).IsRequired().HasMaxLength(50).HasColumnName("linked_entity_type");
+                entity.Property(e => e.LinkedEntityId).HasColumnName("linked_entity_id");
+                entity.Property(e => e.LinkMetadata).HasColumnName("link_metadata");
+                entity.Property(e => e.CreatedAt).HasColumnName("created_at");
                 entity.HasIndex(e => new { e.ProductId, e.LinkedEntityType, e.LinkedEntityId }).IsUnique();
                 entity.HasIndex(e => new { e.LinkedEntityType, e.LinkedEntityId });
                 entity.HasOne(e => e.Product).WithMany(p => p.Links).HasForeignKey(e => e.ProductId).OnDelete(DeleteBehavior.Cascade);
