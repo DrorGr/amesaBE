@@ -31,6 +31,10 @@
         {
           "name": "JwtSettings__SecretKey",
           "valueFrom": "/amesa/prod/JwtSettings/SecretKey"
+        },
+        {
+          "name": "ConnectionStrings__Redis",
+          "valueFrom": "/amesa/prod/ConnectionStrings/Redis"
         }
       ],
       "logConfiguration": {
