@@ -23,16 +23,48 @@ namespace AmesaBackend.Payment.Data
             modelBuilder.Entity<UserPaymentMethod>(entity =>
             {
                 entity.HasKey(e => e.Id);
-                entity.Property(e => e.Type).IsRequired().HasMaxLength(50);
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.UserId).HasColumnName("user_id");
+                entity.Property(e => e.Type).IsRequired().HasMaxLength(50).HasColumnName("type");
+                entity.Property(e => e.Provider).HasMaxLength(50).HasColumnName("provider");
+                entity.Property(e => e.ProviderPaymentMethodId).HasMaxLength(255).HasColumnName("provider_payment_method_id");
+                entity.Property(e => e.CardLastFour).HasMaxLength(4).HasColumnName("card_last_four");
+                entity.Property(e => e.CardBrand).HasMaxLength(50).HasColumnName("card_brand");
+                entity.Property(e => e.CardExpMonth).HasColumnName("card_exp_month");
+                entity.Property(e => e.CardExpYear).HasColumnName("card_exp_year");
+                entity.Property(e => e.IsDefault).HasColumnName("is_default");
+                entity.Property(e => e.IsActive).HasColumnName("is_active");
+                entity.Property(e => e.WalletType).HasMaxLength(100).HasColumnName("wallet_type");
+                entity.Property(e => e.WalletAccountId).HasMaxLength(255).HasColumnName("wallet_account_id");
+                entity.Property(e => e.PaymentMethodMetadata).HasColumnName("payment_method_metadata");
+                entity.Property(e => e.CreatedAt).HasColumnName("created_at");
+                entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
                 entity.HasIndex(e => e.UserId);
             });
 
             modelBuilder.Entity<Transaction>(entity =>
             {
                 entity.HasKey(e => e.Id);
-                entity.Property(e => e.Type).IsRequired().HasMaxLength(50);
-                entity.Property(e => e.Status).IsRequired().HasMaxLength(50);
-                entity.Property(e => e.Amount).HasColumnType("decimal(15,2)");
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.UserId).HasColumnName("user_id");
+                entity.Property(e => e.Type).IsRequired().HasMaxLength(50).HasColumnName("type");
+                entity.Property(e => e.Amount).IsRequired().HasColumnType("decimal(15,2)").HasColumnName("amount");
+                entity.Property(e => e.Currency).HasMaxLength(3).HasColumnName("currency");
+                entity.Property(e => e.Status).IsRequired().HasMaxLength(50).HasColumnName("status");
+                entity.Property(e => e.Description).HasColumnName("description");
+                entity.Property(e => e.ReferenceId).HasMaxLength(255).HasColumnName("reference_id");
+                entity.Property(e => e.PaymentMethodId).HasColumnName("payment_method_id");
+                entity.Property(e => e.ProviderTransactionId).HasMaxLength(255).HasColumnName("provider_transaction_id");
+                entity.Property(e => e.ProductId).HasColumnName("product_id");
+                entity.Property(e => e.IdempotencyKey).HasMaxLength(255).HasColumnName("idempotency_key");
+                entity.Property(e => e.ClientSecret).HasMaxLength(255).HasColumnName("client_secret");
+                entity.Property(e => e.IpAddress).HasMaxLength(45).HasColumnName("ip_address");
+                entity.Property(e => e.UserAgent).HasColumnName("user_agent");
+                entity.Property(e => e.ProviderResponse).HasColumnName("provider_response");
+                entity.Property(e => e.Metadata).HasColumnName("metadata");
+                entity.Property(e => e.ProcessedAt).HasColumnName("processed_at");
+                entity.Property(e => e.CreatedAt).HasColumnName("created_at");
+                entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
                 entity.HasIndex(e => e.UserId);
                 entity.HasIndex(e => e.ReferenceId);
                 entity.HasIndex(e => e.ProductId);
@@ -88,10 +120,18 @@ namespace AmesaBackend.Payment.Data
             modelBuilder.Entity<TransactionItem>(entity =>
             {
                 entity.HasKey(e => e.Id);
-                entity.Property(e => e.ItemType).IsRequired().HasMaxLength(50);
-                entity.Property(e => e.Description).IsRequired().HasMaxLength(255);
-                entity.Property(e => e.UnitPrice).IsRequired().HasColumnType("decimal(15,2)");
-                entity.Property(e => e.TotalPrice).IsRequired().HasColumnType("decimal(15,2)");
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.TransactionId).IsRequired().HasColumnName("transaction_id");
+                entity.Property(e => e.ProductId).HasColumnName("product_id");
+                entity.Property(e => e.ItemType).IsRequired().HasMaxLength(50).HasColumnName("item_type");
+                entity.Property(e => e.Description).IsRequired().HasMaxLength(255).HasColumnName("description");
+                entity.Property(e => e.Quantity).IsRequired().HasColumnName("quantity");
+                entity.Property(e => e.UnitPrice).IsRequired().HasColumnType("decimal(15,2)").HasColumnName("unit_price");
+                entity.Property(e => e.TotalPrice).IsRequired().HasColumnType("decimal(15,2)").HasColumnName("total_price");
+                entity.Property(e => e.LinkedEntityType).HasMaxLength(50).HasColumnName("linked_entity_type");
+                entity.Property(e => e.LinkedEntityId).HasColumnName("linked_entity_id");
+                entity.Property(e => e.ItemMetadata).HasColumnName("item_metadata");
+                entity.Property(e => e.CreatedAt).HasColumnName("created_at");
                 entity.HasIndex(e => e.TransactionId);
                 entity.HasIndex(e => e.ProductId);
                 entity.HasIndex(e => new { e.LinkedEntityType, e.LinkedEntityId });
@@ -102,10 +142,17 @@ namespace AmesaBackend.Payment.Data
             modelBuilder.Entity<PaymentAuditLog>(entity =>
             {
                 entity.HasKey(e => e.Id);
-                entity.Property(e => e.Action).IsRequired().HasMaxLength(50);
-                entity.Property(e => e.EntityType).IsRequired().HasMaxLength(50);
-                entity.Property(e => e.Currency).HasMaxLength(3);
-                entity.Property(e => e.IpAddress).HasMaxLength(45);
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.UserId).IsRequired().HasColumnName("user_id");
+                entity.Property(e => e.Action).IsRequired().HasMaxLength(50).HasColumnName("action");
+                entity.Property(e => e.EntityType).IsRequired().HasMaxLength(50).HasColumnName("entity_type");
+                entity.Property(e => e.EntityId).HasColumnName("entity_id");
+                entity.Property(e => e.Amount).HasColumnType("decimal(15,2)").HasColumnName("amount");
+                entity.Property(e => e.Currency).HasMaxLength(3).HasColumnName("currency");
+                entity.Property(e => e.IpAddress).HasMaxLength(45).HasColumnName("ip_address");
+                entity.Property(e => e.UserAgent).HasColumnName("user_agent");
+                entity.Property(e => e.Metadata).HasColumnName("metadata");
+                entity.Property(e => e.CreatedAt).HasColumnName("created_at");
                 entity.HasIndex(e => new { e.UserId, e.Action, e.CreatedAt });
                 entity.HasIndex(e => new { e.EntityType, e.EntityId });
                 entity.HasIndex(e => e.CreatedAt);

@@ -7,6 +7,7 @@ namespace AmesaBackend.Payment.Models;
 public class ProductLink
 {
     [Key]
+    [Column("id")]
     public Guid Id { get; set; }
 
     [Required]
