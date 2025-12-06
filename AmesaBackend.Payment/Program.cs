@@ -16,6 +16,8 @@ using ProductHandlers = AmesaBackend.Payment.Services.ProductHandlers;
 var builder = WebApplication.CreateBuilder(args);
 
 // Load payment secrets from AWS Secrets Manager (production only)
+// This must be called AFTER builder is created but configuration is built later
+// AddInMemoryCollection will override appsettings.json values
 builder.Configuration.LoadPaymentSecretsFromAws(builder.Environment);
 
 NpgsqlConnection.GlobalTypeMapper.EnableDynamicJson();

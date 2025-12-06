@@ -39,6 +39,18 @@
         {
           "name": "ConnectionStrings__Redis",
           "valueFrom": "/amesa/prod/ConnectionStrings/Redis"
+        },
+        {
+          "name": "Stripe__ApiKey",
+          "valueFrom": "arn:aws:secretsmanager:eu-north-1:129394705401:secret:amesa/payment/stripe-keys-hZZEUq:SecretKey::"
+        },
+        {
+          "name": "Stripe__PublishableKey",
+          "valueFrom": "arn:aws:secretsmanager:eu-north-1:129394705401:secret:amesa/payment/stripe-keys-hZZEUq:PublishableKey::"
+        },
+        {
+          "name": "Stripe__WebhookSecret",
+          "valueFrom": "arn:aws:secretsmanager:eu-north-1:129394705401:secret:amesa/payment/stripe-keys-hZZEUq:WebhookSecret::"
         }
       ],
       "logConfiguration": {

@@ -40,13 +40,18 @@ public class StripeService : IStripeService
         // #region agent log
         var apiKeyFromConfig = configuration["Stripe:ApiKey"];
         var apiKeyFromEnv = Environment.GetEnvironmentVariable("STRIPE_API_KEY");
-        _logger.LogInformation("[DEBUG] StripeService constructor - ApiKey from config: {HasConfig}, ApiKey from env: {HasEnv}", 
-            !string.IsNullOrEmpty(apiKeyFromConfig), !string.IsNullOrEmpty(apiKeyFromEnv));
+        var publishableKeyFromConfig = configuration["Stripe:PublishableKey"];
+        _logger.LogInformation("[DEBUG] StripeService constructor - ApiKey from config: {HasConfig} (length: {Length}), ApiKey from env: {HasEnv}, PublishableKey from config: {HasPublishableKey}", 
+            !string.IsNullOrEmpty(apiKeyFromConfig), apiKeyFromConfig?.Length ?? 0, !string.IsNullOrEmpty(apiKeyFromEnv), !string.IsNullOrEmpty(publishableKeyFromConfig));
+        if (!string.IsNullOrEmpty(apiKeyFromConfig))
+        {
+            _logger.LogInformation("[DEBUG] StripeService constructor - ApiKey first 20 chars: {Prefix}...", apiKeyFromConfig.Substring(0, Math.Min(20, apiKeyFromConfig.Length)));
+        }
         // #endregion
         
         _apiKey = apiKeyFromConfig 
             ?? apiKeyFromEnv
-            ?? throw new InvalidOperationException("Stripe API key not configured");
+            ?? throw new InvalidOperationException($"Stripe API key not configured. Config value: {(string.IsNullOrEmpty(apiKeyFromConfig) ? "EMPTY" : "SET")}, Env value: {(string.IsNullOrEmpty(apiKeyFromEnv) ? "EMPTY" : "SET")}");
 
         _webhookSecret = configuration["Stripe:WebhookSecret"] 
             ?? Environment.GetEnvironmentVariable("STRIPE_WEBHOOK_SECRET") 

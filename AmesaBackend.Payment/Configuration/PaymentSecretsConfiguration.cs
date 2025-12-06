@@ -41,16 +41,21 @@ public static class PaymentSecretsConfiguration
                         Console.WriteLine($"[DEBUG] Stripe secrets loaded - SecretKey present: {!string.IsNullOrEmpty(secretKey)}, PublishableKey present: {!string.IsNullOrEmpty(publishableKey)}, WebhookSecret present: {!string.IsNullOrEmpty(webhookSecret)}");
                         // #endregion
                         
-                        configurationBuilder.AddInMemoryCollection(new Dictionary<string, string?>
+                        // Add in-memory collection - this should override appsettings.json values
+                        // Note: AddInMemoryCollection is added last, so it has highest priority
+                        var stripeConfig = new Dictionary<string, string?>
                         {
                             ["Stripe:PublishableKey"] = publishableKey,
                             ["Stripe:ApiKey"] = secretKey, // Map SecretKey to ApiKey for StripeService
                             ["Stripe:SecretKey"] = secretKey, // Keep for backward compatibility
                             ["Stripe:WebhookSecret"] = webhookSecret
-                        });
+                        };
+                        
+                        configurationBuilder.AddInMemoryCollection(stripeConfig);
                         
                         // #region agent log
                         Console.WriteLine($"[DEBUG] Stripe configuration keys set - ApiKey: {(!string.IsNullOrEmpty(secretKey) ? "SET" : "EMPTY")}, PublishableKey: {(!string.IsNullOrEmpty(publishableKey) ? "SET" : "EMPTY")}, WebhookSecret: {(!string.IsNullOrEmpty(webhookSecret) ? "SET" : "EMPTY")}");
+                        Console.WriteLine($"[DEBUG] Stripe ApiKey value (first 20 chars): {(string.IsNullOrEmpty(secretKey) ? "EMPTY" : secretKey.Substring(0, Math.Min(20, secretKey.Length)) + "...")}");
                         // #endregion
                     }
                 });
