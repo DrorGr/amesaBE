@@ -106,10 +106,13 @@ public class StripeService : IStripeService
                 validatedAmount = calculatedPrice;
             }
 
-            // Validate amount
-            if (validatedAmount <= 0 || validatedAmount > 10000)
+            // Validate amount - Stripe minimum is $0.50 for USD
+            // See: https://docs.stripe.com/currencies#minimum-and-maximum-charge-amounts
+            var minimumAmount = GetMinimumAmountForCurrency(request.Currency);
+            if (validatedAmount < minimumAmount || validatedAmount > 10000)
             {
-                throw new ArgumentOutOfRangeException(nameof(request.Amount), "Amount must be between 0.01 and 10000");
+                throw new ArgumentOutOfRangeException(nameof(request.Amount), 
+                    $"Amount must be between {minimumAmount} and 10000 for currency {request.Currency.ToUpper()}");
             }
 
             var options = new PaymentIntentCreateOptions
@@ -143,7 +146,20 @@ public class StripeService : IStripeService
             }
 
             var service = new PaymentIntentService();
-            var paymentIntent = await service.CreateAsync(options);
+            PaymentIntent paymentIntent;
+            try
+            {
+                paymentIntent = await service.CreateAsync(options);
+            }
+            catch (StripeException stripeEx)
+            {
+                _logger.LogError(stripeEx, 
+                    "Stripe API error creating payment intent for user {UserId}. Error: {StripeErrorCode} - {StripeErrorMessage}", 
+                    userId, stripeEx.StripeError?.Code, stripeEx.StripeError?.Message);
+                throw new InvalidOperationException(
+                    $"Stripe payment intent creation failed: {stripeEx.StripeError?.Message ?? stripeEx.Message}", 
+                    stripeEx);
+            }
 
             // Store transaction with Pending status
             var transaction = new Transaction
@@ -639,6 +655,42 @@ public class StripeService : IStripeService
             _logger.LogError(ex, "Error getting Stripe payment intent {PaymentIntentId}", paymentIntentId);
             return null;
         }
+    }
+
+    /// <summary>
+    /// Gets the minimum amount for a currency based on Stripe's requirements.
+    /// See: https://docs.stripe.com/currencies#minimum-and-maximum-charge-amounts
+    /// </summary>
+    private static decimal GetMinimumAmountForCurrency(string currency)
+    {
+        return currency.ToUpper() switch
+        {
+            "USD" => 0.50m,
+            "EUR" => 0.50m,
+            "GBP" => 0.30m,
+            "AUD" => 0.50m,
+            "CAD" => 0.50m,
+            "NZD" => 0.50m,
+            "SGD" => 0.50m,
+            "CHF" => 0.50m,
+            "JPY" => 50m,
+            "HKD" => 4.00m,
+            "MXN" => 10m,
+            "PLN" => 2.00m,
+            "SEK" => 3.00m,
+            "NOK" => 3.00m,
+            "DKK" => 2.50m,
+            "CZK" => 15.00m,
+            "HUF" => 175.00m,
+            "BRL" => 0.50m,
+            "AED" => 2.00m,
+            "MYR" => 2.00m,
+            "THB" => 10m,
+            "BGN" => 1.00m,
+            "RON" => 2.00m,
+            "INR" => 0.50m,
+            _ => 0.50m // Default to $0.50 for unknown currencies
+        };
     }
 }
 

@@ -5,7 +5,7 @@ namespace AmesaBackend.Payment.DTOs;
 public class CreatePaymentIntentRequest
 {
     [Required]
-    [Range(0.01, 10000)]
+    [Range(0.50, 10000, ErrorMessage = "Amount must be at least $0.50 for USD payments")]
     public decimal Amount { get; set; }
 
     [Required]
