@@ -44,12 +44,26 @@ public class CoinbaseCommerceService : ICoinbaseCommerceService
 
         // Load from configuration (AWS Secrets Manager in production)
         _apiKey = configuration["CoinbaseCommerce:ApiKey"] 
-            ?? Environment.GetEnvironmentVariable("COINBASE_COMMERCE_API_KEY") 
-            ?? throw new InvalidOperationException("Coinbase Commerce API key not configured");
-
+            ?? Environment.GetEnvironmentVariable("COINBASE_COMMERCE_API_KEY");
+        
         _webhookSecret = configuration["CoinbaseCommerce:WebhookSecret"] 
-            ?? Environment.GetEnvironmentVariable("COINBASE_COMMERCE_WEBHOOK_SECRET") 
-            ?? throw new InvalidOperationException("Coinbase Commerce webhook secret not configured");
+            ?? Environment.GetEnvironmentVariable("COINBASE_COMMERCE_WEBHOOK_SECRET");
+
+        // Validate configuration with detailed logging
+        if (string.IsNullOrWhiteSpace(_apiKey))
+        {
+            _logger.LogError("Coinbase Commerce API key not configured. Check configuration key 'CoinbaseCommerce:ApiKey' or environment variable 'COINBASE_COMMERCE_API_KEY'");
+            throw new InvalidOperationException("Coinbase Commerce API key not configured. Check AWS Secrets Manager secret 'amesa/payment/coinbase-keys' or environment variables.");
+        }
+
+        if (string.IsNullOrWhiteSpace(_webhookSecret))
+        {
+            _logger.LogError("Coinbase Commerce webhook secret not configured. Check configuration key 'CoinbaseCommerce:WebhookSecret' or environment variable 'COINBASE_COMMERCE_WEBHOOK_SECRET'");
+            throw new InvalidOperationException("Coinbase Commerce webhook secret not configured. Check AWS Secrets Manager secret 'amesa/payment/coinbase-keys' or environment variables.");
+        }
+
+        _logger.LogInformation("Coinbase Commerce service initialized. API key present: {HasApiKey}, Webhook secret present: {HasWebhookSecret}", 
+            !string.IsNullOrEmpty(_apiKey), !string.IsNullOrEmpty(_webhookSecret));
 
         _httpClient.DefaultRequestHeaders.Add("X-CC-Api-Key", _apiKey);
         _httpClient.DefaultRequestHeaders.Add("X-CC-Version", "2018-03-22");
@@ -90,41 +104,138 @@ public class CoinbaseCommerceService : ICoinbaseCommerceService
                 }
             };
 
+            _logger.LogInformation("Creating Coinbase Commerce charge for product {ProductId}, quantity {Quantity}, amount {Amount} {Currency}", 
+                product.Id, request.Quantity, calculatedPrice, product.Currency);
+
             var response = await _httpClient.PostAsJsonAsync("/charges", chargeRequest);
-            response.EnsureSuccessStatusCode();
+            
+            // Handle HTTP errors with detailed logging
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                _logger.LogError("Coinbase Commerce API error. Status: {StatusCode}, Response: {ResponseBody}", 
+                    response.StatusCode, errorContent);
+                
+                throw new HttpRequestException(
+                    $"Coinbase Commerce API error: {response.StatusCode}. " +
+                    $"Response: {errorContent}. " +
+                    $"Check API key configuration and Coinbase Commerce account status.");
+            }
 
-            var chargeData = await response.Content.ReadFromJsonAsync<JsonElement>();
-            var charge = chargeData.GetProperty("data");
+            // Parse response with defensive checks
+            JsonElement chargeData;
+            try
+            {
+                var parsedData = await response.Content.ReadFromJsonAsync<JsonElement?>();
+                if (!parsedData.HasValue)
+                {
+                    var rawContent = await response.Content.ReadAsStringAsync();
+                    _logger.LogError("Failed to parse Coinbase Commerce response as JSON - response was null. Raw content: {RawContent}", rawContent);
+                    throw new InvalidOperationException("Failed to parse Coinbase Commerce response as JSON - response was null");
+                }
+                chargeData = parsedData.Value;
+            }
+            catch (JsonException ex)
+            {
+                var rawContent = await response.Content.ReadAsStringAsync();
+                _logger.LogError(ex, "Failed to parse Coinbase Commerce JSON response. Raw content: {RawContent}", rawContent);
+                throw new InvalidOperationException($"Failed to parse Coinbase Commerce response: {ex.Message}", ex);
+            }
 
-            var chargeId = charge.GetProperty("id").GetString() ?? "";
-            var code = charge.GetProperty("code").GetString() ?? "";
-            var hostedUrl = charge.GetProperty("hosted_url").GetString() ?? "";
-            var status = charge.GetProperty("status").GetString() ?? "";
-            var expiresAt = charge.GetProperty("expires_at").GetDateTime();
+            // Safely extract charge data
+            if (!chargeData.TryGetProperty("data", out var charge))
+            {
+                _logger.LogError("Coinbase Commerce response missing 'data' property. Response: {Response}", 
+                    JsonSerializer.Serialize(chargeData));
+                throw new InvalidOperationException("Coinbase Commerce response missing 'data' property");
+            }
 
-            // Parse pricing
-            var pricing = charge.GetProperty("pricing");
-            var local = pricing.GetProperty("local");
-            var localAmount = decimal.Parse(local.GetProperty("amount").GetString() ?? "0");
-            var localCurrency = local.GetProperty("currency").GetString() ?? "USD";
+            // Extract charge properties with null checks
+            var chargeId = charge.TryGetProperty("id", out var idProp) ? idProp.GetString() ?? "" : "";
+            var code = charge.TryGetProperty("code", out var codeProp) ? codeProp.GetString() ?? "" : "";
+            var hostedUrl = charge.TryGetProperty("hosted_url", out var urlProp) ? urlProp.GetString() ?? "" : "";
+            var status = charge.TryGetProperty("status", out var statusProp) ? statusProp.GetString() ?? "" : "";
+            
+            DateTime expiresAt;
+            if (charge.TryGetProperty("expires_at", out var expiresProp))
+            {
+                try
+                {
+                    expiresAt = expiresProp.GetDateTime();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to parse expires_at, using default expiration");
+                    expiresAt = DateTime.UtcNow.AddHours(1); // Default 1 hour expiration
+                }
+            }
+            else
+            {
+                _logger.LogWarning("Charge response missing expires_at, using default expiration");
+                expiresAt = DateTime.UtcNow.AddHours(1);
+            }
 
-            // Parse payments
+            // Parse pricing with defensive checks
+            decimal localAmount = calculatedPrice; // Default to calculated price
+            string localCurrency = product.Currency; // Default to product currency
+            
+            if (charge.TryGetProperty("pricing", out var pricing) && pricing.TryGetProperty("local", out var local))
+            {
+                if (local.TryGetProperty("amount", out var amountProp))
+                {
+                    var amountStr = amountProp.GetString();
+                    if (!string.IsNullOrEmpty(amountStr) && decimal.TryParse(amountStr, out var parsedAmount))
+                    {
+                        localAmount = parsedAmount;
+                    }
+                }
+                
+                if (local.TryGetProperty("currency", out var currencyProp))
+                {
+                    localCurrency = currencyProp.GetString() ?? product.Currency;
+                }
+            }
+
+            // Parse payments with defensive checks
             var payments = new List<CoinbasePayment>();
             if (charge.TryGetProperty("payments", out var paymentsArray))
             {
                 foreach (var payment in paymentsArray.EnumerateArray())
                 {
-                    payments.Add(new CoinbasePayment
+                    try
                     {
-                        Network = payment.GetProperty("network").GetString() ?? "",
-                        TransactionId = payment.GetProperty("transaction_id").GetString() ?? "",
-                        Status = payment.GetProperty("status").GetString() ?? "",
-                        Value = new CoinbaseValue
+                        var paymentObj = new CoinbasePayment
                         {
-                            Amount = decimal.Parse(payment.GetProperty("value").GetProperty("amount").GetString() ?? "0"),
-                            Currency = payment.GetProperty("value").GetProperty("currency").GetString() ?? ""
+                            Network = payment.TryGetProperty("network", out var networkProp) ? networkProp.GetString() ?? "" : "",
+                            TransactionId = payment.TryGetProperty("transaction_id", out var txIdProp) ? txIdProp.GetString() ?? "" : "",
+                            Status = payment.TryGetProperty("status", out var paymentStatusProp) ? paymentStatusProp.GetString() ?? "" : ""
+                        };
+
+                        // Parse payment value safely
+                        if (payment.TryGetProperty("value", out var valueProp))
+                        {
+                            var amountStr = valueProp.TryGetProperty("amount", out var amountProp) ? amountProp.GetString() : null;
+                            var currencyStr = valueProp.TryGetProperty("currency", out var currencyProp) ? currencyProp.GetString() : null;
+
+                            paymentObj.Value = new CoinbaseValue
+                            {
+                                Amount = !string.IsNullOrEmpty(amountStr) && decimal.TryParse(amountStr, out var parsedAmount) 
+                                    ? parsedAmount : 0,
+                                Currency = currencyStr ?? ""
+                            };
                         }
-                    });
+                        else
+                        {
+                            paymentObj.Value = new CoinbaseValue { Amount = 0, Currency = "" };
+                        }
+
+                        payments.Add(paymentObj);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to parse payment entry in charge response");
+                        // Continue processing other payments
+                    }
                 }
             }
 
@@ -153,33 +264,63 @@ public class CoinbaseCommerceService : ICoinbaseCommerceService
                 UpdatedAt = DateTime.UtcNow
             };
 
-            _context.Transactions.Add(transaction);
-            await _context.SaveChangesAsync();
-
-            // Audit log
-            if (_auditService != null)
+            // Save transaction with error handling
+            try
             {
-                await _auditService.LogActionAsync(
-                    userId,
-                    "crypto_charge_created",
-                    "transaction",
-                    transaction.Id,
-                    calculatedPrice,
-                    product.Currency,
-                    null,
-                    null,
-                    new Dictionary<string, object> { ["ChargeId"] = chargeId });
+                _context.Transactions.Add(transaction);
+                await _context.SaveChangesAsync();
+                _logger.LogInformation("Transaction {TransactionId} saved successfully for charge {ChargeId}", 
+                    transaction.Id, chargeId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to save transaction to database. TransactionId: {TransactionId}, ChargeId: {ChargeId}", 
+                    transaction.Id, chargeId);
+                throw new InvalidOperationException($"Failed to save transaction: {ex.Message}", ex);
             }
 
-            // Publish event
-            await _eventPublisher.PublishAsync(new PaymentInitiatedEvent
+            // Audit log (non-blocking)
+            if (_auditService != null)
             {
-                PaymentId = transaction.Id,
-                UserId = userId,
-                Amount = calculatedPrice,
-                Currency = product.Currency,
-                PaymentMethod = "crypto"
-            });
+                try
+                {
+                    await _auditService.LogActionAsync(
+                        userId,
+                        "crypto_charge_created",
+                        "transaction",
+                        transaction.Id,
+                        calculatedPrice,
+                        product.Currency,
+                        null,
+                        null,
+                        new Dictionary<string, object> { ["ChargeId"] = chargeId });
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to create audit log for transaction {TransactionId}", transaction.Id);
+                    // Don't fail the request if audit logging fails
+                }
+            }
+
+            // Publish event (non-blocking)
+            try
+            {
+                await _eventPublisher.PublishAsync(new PaymentInitiatedEvent
+                {
+                    PaymentId = transaction.Id,
+                    UserId = userId,
+                    Amount = calculatedPrice,
+                    Currency = product.Currency,
+                    PaymentMethod = "crypto"
+                });
+                _logger.LogInformation("PaymentInitiatedEvent published for transaction {TransactionId}", transaction.Id);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to publish PaymentInitiatedEvent for transaction {TransactionId}. Transaction was saved successfully.", 
+                    transaction.Id);
+                // Don't fail the request if event publishing fails - transaction is already saved
+            }
 
             return new CoinbaseChargeResponse
             {
@@ -199,10 +340,31 @@ public class CoinbaseCommerceService : ICoinbaseCommerceService
                 }
             };
         }
+        catch (KeyNotFoundException)
+        {
+            // Re-throw KeyNotFoundException as-is (will be handled by controller as 404)
+            throw;
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "HTTP error creating Coinbase Commerce charge for user {UserId}, product {ProductId}", 
+                userId, request.ProductId);
+            throw; // Re-throw HTTP errors with original message
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogError(ex, "Invalid operation creating Coinbase Commerce charge for user {UserId}, product {ProductId}", 
+                userId, request.ProductId);
+            throw; // Re-throw invalid operation errors
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error creating Coinbase Commerce charge for user {UserId}", userId);
-            throw;
+            _logger.LogError(ex, "Unexpected error creating Coinbase Commerce charge for user {UserId}, product {ProductId}. " +
+                "Exception type: {ExceptionType}, Message: {Message}, StackTrace: {StackTrace}", 
+                userId, request.ProductId, ex.GetType().Name, ex.Message, ex.StackTrace);
+            throw new InvalidOperationException(
+                $"Failed to create crypto payment charge: {ex.Message}. " +
+                $"Check logs for details. ProductId: {request.ProductId}, UserId: {userId}", ex);
         }
     }
 
