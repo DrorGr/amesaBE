@@ -102,6 +102,9 @@ public static class MiddlewareConfiguration
         // Add CORS early in pipeline
         app.UseCors("AllowFrontend");
 
+        // Add CSRF protection via Origin header validation (after CORS, before authentication)
+        app.UseOriginHeaderValidation();
+
         // Add shared middleware
         // Enable X-Ray tracing if configured
         if (configuration.GetValue<bool>("XRay:Enabled", false))
@@ -113,6 +116,7 @@ public static class MiddlewareConfiguration
         app.UseAmesaLogging();
 
         // Add custom security middleware (early in pipeline)
+        app.UseSecurityHeaders(); // Add security headers to all responses
         app.UseMiddleware<IpTrackingMiddleware>();
         app.UseMiddleware<EmailVerificationMiddleware>();
         app.UseMiddleware<SecurityAuditMiddleware>();
@@ -125,6 +129,10 @@ public static class MiddlewareConfiguration
 
         // Add authentication and authorization
         app.UseAuthentication();
+        
+        // Add session activity tracking (after authentication, before authorization)
+        app.UseMiddleware<SessionActivityMiddleware>();
+        
         app.UseAuthorization();
 
         // Add health checks endpoint
@@ -151,6 +159,8 @@ public static class MiddlewareConfiguration
         return app;
     }
 }
+
+
 
 
 

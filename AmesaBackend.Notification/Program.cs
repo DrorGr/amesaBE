@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Amazon.SimpleEmail;
 using Amazon.SimpleNotificationService;
 using Amazon.SQS;
+using Amazon.CloudWatch;
 using AmesaBackend.Notification.Data;
 using AmesaBackend.Notification.Services;
 using AmesaBackend.Notification.Services.Channels;
@@ -23,8 +24,6 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Load notification secrets from AWS Secrets Manager (production only)
 builder.Configuration.LoadNotificationSecretsFromAws(builder.Environment);
-
-NpgsqlConnection.GlobalTypeMapper.EnableDynamicJson();
 
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
@@ -44,7 +43,7 @@ builder.Services.AddControllers()
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Configure Entity Framework
+// Configure Entity Framework with connection pool and timeout settings
 builder.Services.AddDbContext<NotificationDbContext>(options =>
 {
     var connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING") 
@@ -52,12 +51,25 @@ builder.Services.AddDbContext<NotificationDbContext>(options =>
 
     if (!string.IsNullOrEmpty(connectionString))
     {
-        options.UseNpgsql(connectionString, npgsqlOptions =>
+        // Add connection pool and timeout parameters
+        var connectionStringBuilder = new NpgsqlConnectionStringBuilder(connectionString)
+        {
+            MaxPoolSize = 100,
+            MinPoolSize = 10,
+            ConnectionLifetime = 300, // 5 minutes
+            CommandTimeout = 30, // 30 seconds
+            Timeout = 15 // Connection timeout in seconds
+        };
+        
+        options.UseNpgsql(connectionStringBuilder.ConnectionString, npgsqlOptions =>
         {
             npgsqlOptions.EnableRetryOnFailure(
                 maxRetryCount: 3,
                 maxRetryDelay: TimeSpan.FromSeconds(30),
                 errorCodesToAdd: null);
+            
+            // Add explicit command timeout
+            npgsqlOptions.CommandTimeout(30);
         });
     }
 
@@ -196,6 +208,10 @@ builder.Services.AddSingleton<ITelegramBotClient>(sp =>
 // Rate limiting service (shared from Auth service)
 builder.Services.AddScoped<IRateLimitService, RateLimitService>();
 
+// CloudWatch client for metrics
+builder.Services.AddSingleton<IAmazonCloudWatch>(sp =>
+    new AmazonCloudWatchClient(Amazon.RegionEndpoint.GetBySystemName("eu-north-1")));
+
 // Channel providers
 builder.Services.AddScoped<IChannelProvider, EmailChannelProvider>();
 builder.Services.AddScoped<IChannelProvider, SMSChannelProvider>();
@@ -207,6 +223,18 @@ builder.Services.AddScoped<IChannelProvider, SocialMediaChannelProvider>();
 // Core services
 builder.Services.AddScoped<INotificationOrchestrator, NotificationOrchestrator>();
 builder.Services.AddScoped<ITemplateEngine, TemplateEngine>();
+builder.Services.AddScoped<INotificationTypeMappingService, NotificationTypeMappingService>();
+builder.Services.AddScoped<INotificationReadStateService, NotificationReadStateService>();
+builder.Services.AddScoped<INotificationPreferenceService, NotificationPreferenceService>();
+builder.Services.AddScoped<INotificationArchiveService, NotificationArchiveService>();
+builder.Services.AddScoped<ICloudWatchMetricsService, CloudWatchMetricsService>();
+
+// Service clients for cross-service communication
+builder.Services.AddScoped<ILotteryServiceClient, LotteryServiceClient>();
+builder.Services.AddScoped<IAuthServiceClient, AuthServiceClient>();
+
+// HttpContextAccessor for read state service
+builder.Services.AddHttpContextAccessor();
 
 // Add Background Service for EventBridge events
 builder.Services.AddHostedService<EventBridgeEventHandler>();
@@ -221,14 +249,22 @@ builder.Services.AddHostedService<NotificationQueueProcessor>(sp =>
     return new NotificationQueueProcessor(serviceProvider, logger, configuration, sqsClient);
 });
 
+// Add Background Service for notification archiving
+builder.Services.AddHostedService<NotificationArchiveBackgroundService>();
+
 // Add SignalR for real-time updates
 builder.Services.AddSignalR();
 
 // Register all health checks
 // Basic check for ALB (only verifies service is running)
 // Channel checks for detailed monitoring
+// Database check for connectivity
+var connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING") 
+    ?? builder.Configuration.GetConnectionString("DefaultConnection");
+
 builder.Services.AddHealthChecks()
     .AddCheck<AmesaBackend.Notification.HealthChecks.BasicHealthCheck>("basic")
+    .AddCheck<AmesaBackend.Notification.HealthChecks.DatabaseHealthCheck>("database")
     .AddCheck<AmesaBackend.Notification.HealthChecks.EmailChannelHealthCheck>("email_channel")
     .AddCheck<AmesaBackend.Notification.HealthChecks.SMSChannelHealthCheck>("sms_channel")
     .AddCheck<AmesaBackend.Notification.HealthChecks.WebPushChannelHealthCheck>("webpush_channel")
@@ -245,8 +281,10 @@ if (builder.Configuration.GetValue<bool>("XRay:Enabled", false))
     // X-Ray tracing removed for microservices
 }
 
+app.UseAmesaSecurityHeaders(); // Security headers (before other middleware)
 app.UseAmesaMiddleware();
 app.UseAmesaLogging();
+
 app.UseRouting();
 
 // Extract JWT token from query string for SignalR HTTP requests (negotiate endpoint)

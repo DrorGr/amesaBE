@@ -296,6 +296,13 @@ namespace AmesaBackend.Shared.Rest
             try
             {
                 TryAddHttpClientHeaders(httpClient, token, headers);
+                
+                // Set timeout from configuration
+                int? timeoutSeconds = _configuration.GetValue<int?>("HttpClients:TimeoutSec");
+                httpClient.Timeout = timeoutSeconds.HasValue
+                    ? TimeSpan.FromSeconds(timeoutSeconds.Value)
+                    : TimeSpan.FromSeconds(30); // Default 30 seconds for GET requests
+                
                 using (var response = await httpClient.GetAsync(url))
                 {
                     var isSuccess = HandleHttpResponseAndLogs(response, url, "GetRequest");
@@ -324,6 +331,12 @@ namespace AmesaBackend.Shared.Rest
             try
             {
                 TryAddHttpClientHeaders(httpClient, token);
+                
+                // Set timeout from configuration
+                int? timeoutSeconds = _configuration.GetValue<int?>("HttpClients:TimeoutSec");
+                httpClient.Timeout = timeoutSeconds.HasValue
+                    ? TimeSpan.FromSeconds(timeoutSeconds.Value)
+                    : TimeSpan.FromSeconds(30); // Default 30 seconds for GET requests
 
                 var response = await httpClient.GetAsync(url);
                 var isSuccess = HandleHttpResponseAndLogs(response, url, "GetRequest");

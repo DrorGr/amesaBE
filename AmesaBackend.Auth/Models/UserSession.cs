@@ -54,6 +54,11 @@ namespace AmesaBackend.Auth.Models
         [MaxLength(255)]
         public string? DeviceName { get; set; }
 
+        /// <summary>
+        /// Indicates if session was created with "Remember Me" option (30-day expiry vs 7-day expiry).
+        /// </summary>
+        public bool RememberMe { get; set; } = false;
+
         // Navigation properties
         public virtual User? User { get; set; }
         public virtual ICollection<UserActivityLog> ActivityLogs { get; set; } = new List<UserActivityLog>();

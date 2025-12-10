@@ -9,9 +9,14 @@ public interface ISessionService
     Task LogoutFromDeviceAsync(Guid userId, string sessionToken);
     Task LogoutAllDevicesAsync(Guid userId);
     Task InvalidateAllSessionsAsync(Guid userId);
+    Task UpdateSessionActivityAsync(string sessionToken);
+    Task CleanupExpiredSessionsAsync();
+    Task<bool> DetectSuspiciousActivityAsync(Guid userId, string ipAddress, string userAgent);
     string GenerateDeviceId(string userAgent, string ipAddress);
     string ExtractDeviceName(string userAgent);
 }
+
+
 
 
 

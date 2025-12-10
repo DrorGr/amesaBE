@@ -18,6 +18,8 @@ namespace AmesaBackend.Auth.Data
         public DbSet<UserActivityLog> UserActivityLogs { get; set; }
         public DbSet<UserPasswordHistory> UserPasswordHistory { get; set; }
         public DbSet<UserAuditLog> UserAuditLogs { get; set; }
+        public DbSet<BackupCode> BackupCodes { get; set; }
+        public DbSet<SecurityQuestion> SecurityQuestions { get; set; }
         
         // User preferences tables
         public DbSet<UserPreferences> UserPreferences { get; set; }
@@ -48,6 +50,8 @@ namespace AmesaBackend.Auth.Data
                 entity.Property(e => e.Gender).HasConversion<string>();
                 // Map DeletedAt to deleted_at column (nullable, for soft deletes)
                 entity.Property(e => e.DeletedAt).HasColumnName("deleted_at");
+                // Add query filter for soft deletes (exclude soft-deleted users by default)
+                entity.HasQueryFilter(e => e.DeletedAt == null);
             });
 
             // Configure UserAddress entity
@@ -86,6 +90,7 @@ namespace AmesaBackend.Auth.Data
             {
                 entity.HasKey(e => e.Id);
                 entity.Property(e => e.SessionToken).IsRequired().HasMaxLength(255);
+                entity.Property(e => e.RememberMe).HasDefaultValue(false);
                 entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId);
             });
 
@@ -114,6 +119,25 @@ namespace AmesaBackend.Auth.Data
                 entity.HasIndex(e => new { e.UserId, e.CreatedAt });
                 entity.HasIndex(e => new { e.EventType, e.CreatedAt });
                 entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId);
+            });
+
+            // Configure BackupCode entity
+            modelBuilder.Entity<BackupCode>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.CodeHash).IsRequired().HasMaxLength(255);
+                entity.HasIndex(e => new { e.UserId, e.IsUsed });
+                entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // Configure SecurityQuestion entity
+            modelBuilder.Entity<SecurityQuestion>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Question).IsRequired().HasMaxLength(255);
+                entity.Property(e => e.AnswerHash).IsRequired().HasMaxLength(255);
+                entity.HasIndex(e => new { e.UserId, e.Order });
+                entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
             });
 
             // Configure UserPreferences entity

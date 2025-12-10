@@ -20,6 +20,17 @@ namespace AmesaBackend.Shared.Middleware.Extensions
             builder.UseMiddleware<RequestResponseLoggingMiddleware>();
             return builder;
         }
+
+        /// <summary>
+        /// Adds security headers middleware to the pipeline.
+        /// Should be called early in the middleware pipeline, before routing.
+        /// </summary>
+        public static IApplicationBuilder UseAmesaSecurityHeaders(
+            this IApplicationBuilder builder)
+        {
+            builder.UseMiddleware<SecurityHeadersMiddleware>();
+            return builder;
+        }
     }
 }
 

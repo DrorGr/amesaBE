@@ -51,6 +51,31 @@ namespace AmesaBackend.Shared.Events
         public string? LastName { get; set; }
     }
 
+    public class ProfileUpdatedEvent : DomainEvent
+    {
+        public Guid UserId { get; set; }
+        public string Email { get; set; } = string.Empty;
+        public List<string> ChangedFields { get; set; } = new(); // ["firstName", "lastName", "phone", etc.]
+    }
+
+    public class PreferencesUpdatedEvent : DomainEvent
+    {
+        public Guid UserId { get; set; }
+        public string PreferenceCategory { get; set; } = string.Empty; // "notifications", "privacy", "lottery", etc.
+        public Dictionary<string, object> ChangedPreferences { get; set; } = new();
+    }
+
+    public class SystemAnnouncementEvent : DomainEvent
+    {
+        public Guid AnnouncementId { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public string Message { get; set; } = string.Empty;
+        public string Severity { get; set; } = "info"; // info, warning, error
+        public List<Guid>? TargetUserIds { get; set; } // null = all users
+        public string? TargetUserSegment { get; set; } // "all", "active", "premium", etc.
+        public DateTime? ExpiresAt { get; set; }
+    }
+
     public class UserVerifiedEvent : DomainEvent
     {
         public Guid UserId { get; set; }
@@ -63,6 +88,100 @@ namespace AmesaBackend.Shared.Events
         public Guid UserId { get; set; }
         public string Email { get; set; } = string.Empty;
         public string IpAddress { get; set; } = string.Empty;
+    }
+
+    public class AccountLockedEvent : DomainEvent
+    {
+        public Guid UserId { get; set; }
+        public string Email { get; set; } = string.Empty;
+        public string LockReason { get; set; } = string.Empty;
+        public DateTime? LockedUntil { get; set; }
+        public string IpAddress { get; set; } = string.Empty;
+    }
+
+    public class AccountUnlockedEvent : DomainEvent
+    {
+        public Guid UserId { get; set; }
+        public string Email { get; set; } = string.Empty;
+        public string UnlockReason { get; set; } = string.Empty;
+    }
+
+    public class FailedLoginAttemptsEvent : DomainEvent
+    {
+        public Guid UserId { get; set; }
+        public string Email { get; set; } = string.Empty;
+        public int AttemptCount { get; set; }
+        public string IpAddress { get; set; } = string.Empty;
+        public DateTime LastAttemptAt { get; set; }
+    }
+
+    public class NewDeviceLoginEvent : DomainEvent
+    {
+        public Guid UserId { get; set; }
+        public string Email { get; set; } = string.Empty;
+        public string DeviceId { get; set; } = string.Empty;
+        public string DeviceName { get; set; } = string.Empty;
+        public string IpAddress { get; set; } = string.Empty;
+        public string? UserAgent { get; set; }
+        public string? Location { get; set; }
+    }
+
+    public class NewLocationLoginEvent : DomainEvent
+    {
+        public Guid UserId { get; set; }
+        public string Email { get; set; } = string.Empty;
+        public string IpAddress { get; set; } = string.Empty;
+        public string Location { get; set; } = string.Empty;
+        public string? Country { get; set; }
+        public string? City { get; set; }
+    }
+
+    public class TwoFactorEnabledEvent : DomainEvent
+    {
+        public Guid UserId { get; set; }
+        public string Email { get; set; } = string.Empty;
+        public string TwoFactorMethod { get; set; } = string.Empty; // SMS, Authenticator, Email
+    }
+
+    public class TwoFactorDisabledEvent : DomainEvent
+    {
+        public Guid UserId { get; set; }
+        public string Email { get; set; } = string.Empty;
+        public string DisabledReason { get; set; } = string.Empty;
+    }
+
+    public class PasswordChangedEvent : DomainEvent
+    {
+        public Guid UserId { get; set; }
+        public string Email { get; set; } = string.Empty;
+        public bool ChangedByUser { get; set; } = true;
+        public Guid? ChangedByAdminId { get; set; }
+        public string IpAddress { get; set; } = string.Empty;
+    }
+
+    public class EmailChangedEvent : DomainEvent
+    {
+        public Guid UserId { get; set; }
+        public string OldEmail { get; set; } = string.Empty;
+        public string NewEmail { get; set; } = string.Empty;
+        public string IpAddress { get; set; } = string.Empty;
+    }
+
+    public class PhoneVerifiedEvent : DomainEvent
+    {
+        public Guid UserId { get; set; }
+        public string Email { get; set; } = string.Empty;
+        public string PhoneNumber { get; set; } = string.Empty;
+    }
+
+    public class SuspiciousActivityEvent : DomainEvent
+    {
+        public Guid UserId { get; set; }
+        public string Email { get; set; } = string.Empty;
+        public string ActivityType { get; set; } = string.Empty; // "unusual_login", "multiple_failed_attempts", etc.
+        public string Description { get; set; } = string.Empty;
+        public string IpAddress { get; set; } = string.Empty;
+        public string Severity { get; set; } = "medium"; // low, medium, high, critical
     }
 
     // House Events
@@ -90,13 +209,66 @@ namespace AmesaBackend.Shared.Events
         public List<string> TicketNumbers { get; set; } = new();
     }
 
+    public class TicketRefundedEvent : DomainEvent
+    {
+        public Guid UserId { get; set; }
+        public Guid HouseId { get; set; }
+        public Guid TicketId { get; set; }
+        public int TicketNumber { get; set; }
+        public decimal RefundAmount { get; set; }
+        public string RefundReason { get; set; } = string.Empty;
+    }
+
     // Lottery Draw Events
+    public class LotteryDrawStartingEvent : DomainEvent
+    {
+        public Guid DrawId { get; set; }
+        public Guid HouseId { get; set; }
+        public string HouseTitle { get; set; } = string.Empty;
+        public DateTime DrawStartTime { get; set; }
+        public int MinutesUntilStart { get; set; }
+    }
+
+    public class LotteryDrawStartedEvent : DomainEvent
+    {
+        public Guid DrawId { get; set; }
+        public Guid HouseId { get; set; }
+        public string HouseTitle { get; set; } = string.Empty;
+        public DateTime StartedAt { get; set; }
+    }
+
     public class LotteryDrawCompletedEvent : DomainEvent
     {
         public Guid DrawId { get; set; }
         public Guid HouseId { get; set; }
         public DateTime DrawDate { get; set; }
         public int TotalTickets { get; set; }
+    }
+
+    public class LotteryEndedEvent : DomainEvent
+    {
+        public Guid DrawId { get; set; }
+        public Guid HouseId { get; set; }
+        public string HouseTitle { get; set; } = string.Empty;
+        public DateTime EndedAt { get; set; }
+        public Guid? WinnerUserId { get; set; }
+        public string? WinnerName { get; set; }
+        public bool WasCancelled { get; set; } = false;
+        public string? CancellationReason { get; set; }
+    }
+
+    public class FavoriteAddedEvent : DomainEvent
+    {
+        public Guid UserId { get; set; }
+        public Guid HouseId { get; set; }
+        public string HouseTitle { get; set; } = string.Empty;
+    }
+
+    public class FavoriteRemovedEvent : DomainEvent
+    {
+        public Guid UserId { get; set; }
+        public Guid HouseId { get; set; }
+        public string HouseTitle { get; set; } = string.Empty;
     }
 
     public class LotteryDrawWinnerSelectedEvent : DomainEvent
@@ -148,6 +320,18 @@ namespace AmesaBackend.Shared.Events
         public Guid UserId { get; set; }
         public decimal RefundAmount { get; set; }
         public string RefundReason { get; set; } = string.Empty;
+    }
+
+    public class PaymentDisputedEvent : DomainEvent
+    {
+        public Guid PaymentId { get; set; }
+        public Guid TransactionId { get; set; }
+        public Guid UserId { get; set; }
+        public decimal Amount { get; set; }
+        public string Currency { get; set; } = "USD";
+        public string DisputeReason { get; set; } = string.Empty;
+        public string DisputeType { get; set; } = string.Empty; // chargeback, refund_request, etc.
+        public string Status { get; set; } = "pending"; // pending, under_review, won, lost
     }
 
     // Lottery Result Events

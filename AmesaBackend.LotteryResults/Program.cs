@@ -75,6 +75,7 @@ if (builder.Configuration.GetValue<bool>("XRay:Enabled", false))
     // X-Ray tracing removed for microservices
 }
 
+app.UseAmesaSecurityHeaders(); // Security headers (before other middleware)
 app.UseAmesaMiddleware();
 app.UseAmesaLogging();
 app.UseRouting();

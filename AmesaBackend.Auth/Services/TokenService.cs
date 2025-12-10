@@ -33,23 +33,29 @@ public class TokenService : ITokenService
         _logger = logger;
     }
 
-    public async Task<(string AccessToken, string RefreshToken, DateTime ExpiresAt)> GenerateTokensAsync(User user)
+    public async Task<(string AccessToken, string RefreshToken, DateTime ExpiresAt)> GenerateTokensAsync(User user, bool rememberMe = false)
     {
+        // Create refresh token first (needed for session token claim)
+        var refreshToken = GenerateSecureToken();
+        
         var claims = new List<Claim>
         {
             new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new Claim(ClaimTypes.Email, user.Email),
             new Claim(ClaimTypes.Name, user.Username),
             new Claim("firstName", user.FirstName),
-            new Claim("lastName", user.LastName)
+            new Claim("lastName", user.LastName),
+            new Claim("session_token", refreshToken) // Add session token to JWT for activity tracking
         };
 
-        var expiresAt = DateTime.UtcNow.AddMinutes(int.Parse(_configuration["JwtSettings:ExpiryInMinutes"] ?? "60"));
+        // Access token expiration (same for both remember me and session-based)
+        var expiresAt = DateTime.UtcNow.AddMinutes(_configuration.GetValue<int>("JwtSettings:ExpiryInMinutes", 60));
         var accessToken = _jwtTokenManager.GenerateAccessToken(claims, expiresAt);
-
-        // Create refresh token
-        var refreshToken = GenerateSecureToken();
-        var refreshExpiresAt = DateTime.UtcNow.AddDays(int.Parse(_configuration["JwtSettings:RefreshTokenExpiryInDays"] ?? "7"));
+        // RememberMe: 30 days (configurable), Session-based: 7 days (default)
+        var refreshTokenExpiryDays = rememberMe 
+            ? _configuration.GetValue<int>("JwtSettings:RememberMeExpiryInDays", 30)
+            : _configuration.GetValue<int>("JwtSettings:RefreshTokenExpiryInDays", 7);
+        var refreshExpiresAt = DateTime.UtcNow.AddDays(refreshTokenExpiryDays);
 
         // Extract IP and device info - use middleware values if available
         var httpContext = _httpContextAccessor.HttpContext;
@@ -68,6 +74,7 @@ public class TokenService : ITokenService
             SessionToken = refreshToken,
             ExpiresAt = refreshExpiresAt,
             IsActive = true,
+            RememberMe = rememberMe, // Store Remember Me status
             IpAddress = ipAddress,
             UserAgent = userAgent,
             DeviceId = deviceId,
@@ -101,12 +108,21 @@ public class TokenService : ITokenService
         }
     }
 
+    /// <summary>
+    /// Generates a cryptographically secure token using URL-safe Base64 encoding.
+    /// URL-safe encoding replaces '+' with '-', '/' with '_', and removes padding '='.
+    /// This ensures tokens can be safely used in URLs without encoding.
+    /// </summary>
     public string GenerateSecureToken()
     {
         using var rng = RandomNumberGenerator.Create();
         var bytes = new byte[32];
         rng.GetBytes(bytes);
-        return Convert.ToBase64String(bytes);
+        
+        // Convert to Base64 and make it URL-safe
+        var base64 = Convert.ToBase64String(bytes);
+        // Replace '+' with '-', '/' with '_', and remove padding '='
+        return base64.Replace('+', '-').Replace('/', '_').TrimEnd('=');
     }
 }
 

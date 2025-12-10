@@ -58,16 +58,21 @@ public static class JwtConfiguration
             .AddCookie("Cookies", options =>
             {
                 options.Cookie.HttpOnly = true;
-                options.Cookie.SecurePolicy = Microsoft.AspNetCore.Http.CookieSecurePolicy.SameAsRequest;
+                
                 if (environment.IsDevelopment())
                 {
+                    // Development: Lax SameSite, Secure based on request
                     options.Cookie.SameSite = Microsoft.AspNetCore.Http.SameSiteMode.Lax;
+                    options.Cookie.SecurePolicy = Microsoft.AspNetCore.Http.CookieSecurePolicy.SameAsRequest;
                 }
                 else
                 {
+                    // Production: Always secure, SameSite=None for CORS support
+                    // CSRF protection is provided by Origin header validation middleware
                     options.Cookie.SameSite = Microsoft.AspNetCore.Http.SameSiteMode.None;
-                    options.Cookie.SecurePolicy = Microsoft.AspNetCore.Http.CookieSecurePolicy.Always;
+                    options.Cookie.SecurePolicy = Microsoft.AspNetCore.Http.CookieSecurePolicy.Always; // Always secure in production
                 }
+                
                 options.ExpireTimeSpan = TimeSpan.FromDays(7);
                 options.SlidingExpiration = true;
             })
@@ -82,7 +87,7 @@ public static class JwtConfiguration
                     ValidIssuer = jwtSettings["Issuer"],
                     ValidAudience = jwtSettings["Audience"],
                     IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey!)),
-                    ClockSkew = TimeSpan.FromMinutes(5) // Allow 5 minute clock difference for reliability
+                    ClockSkew = TimeSpan.FromMinutes(configuration.GetValue<int>("SecuritySettings:Jwt:ClockSkewMinutes", 5)) // Configurable clock skew for reliability
                 };
 
                 options.Events = new JwtBearerEvents

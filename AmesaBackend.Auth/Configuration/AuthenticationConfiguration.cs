@@ -171,14 +171,16 @@ public static class AuthenticationConfiguration
                         logger.LogInformation("[DEBUG] OnCreatingTicket:after-cache-set hypothesisId=E");
                         // #endregion
 
-                        var emailCacheKey = $"oauth_temp_token_{email}";
+                        // Use hashed email for cache key to protect privacy
+                        var emailHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(email.ToLowerInvariant())));
+                        var emailCacheKey = $"oauth_temp_token_{emailHash}";
                         memoryCache.Set(emailCacheKey, tempToken, TimeSpan.FromMinutes(5));
                         context.Properties.Items["temp_token"] = tempToken;
                         
                         // #region agent log
                         var baseRedirectUri = context.Properties.RedirectUri ?? $"{frontendUrl}/auth/callback";
-                        var tempTokenPreview = tempToken?.Substring(0, Math.Min(10, tempToken?.Length ?? 0)) + "...";
-                        logger.LogInformation("[DEBUG] OnCreatingTicket:before-modify hypothesisId=A,B,C baseRedirectUri={BaseRedirectUri} tempTokenPreview={TempTokenPreview}", baseRedirectUri, tempTokenPreview);
+                        logger.LogInformation("[DEBUG] OnCreatingTicket:before-modify hypothesisId=A,B,C baseRedirectUri={BaseRedirectUri} tempTokenLength={TempTokenLength}", baseRedirectUri, tempToken?.Length ?? 0);
+                        // Note: tempToken value is NOT logged for security
                         // #endregion
                         
                         var modifiedRedirectUri = $"{frontendUrl}/auth/callback?code={Uri.EscapeDataString(tempToken ?? string.Empty)}";
@@ -191,7 +193,8 @@ public static class AuthenticationConfiguration
                             context.Properties.RedirectUri);
                         // #endregion
                         
-                        logger.LogInformation("User created/updated and tokens cached for: {Email}, temp_token: {TempToken}", email, tempToken);
+                        logger.LogInformation("User created/updated and tokens cached for: {Email}", email);
+                        // Note: temp_token value is NOT logged for security
                         
                         // #region agent log
                         logger.LogInformation("[DEBUG] OnCreatingTicket:exit hypothesisId=A,B,C finalRedirectUri={FinalRedirectUri} tempTokenInProperties={TempTokenInProperties}", 

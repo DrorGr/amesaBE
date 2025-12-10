@@ -5,6 +5,7 @@ using AmesaBackend.Shared.Events;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Distributed;
+using Microsoft.Extensions.Configuration;
 
 namespace AmesaBackend.Auth.Services;
 
@@ -14,6 +15,7 @@ public class EmailVerificationService : IEmailVerificationService
     private readonly IEventPublisher _eventPublisher;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ITokenService _tokenService;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<EmailVerificationService> _logger;
 
     public EmailVerificationService(
@@ -21,12 +23,14 @@ public class EmailVerificationService : IEmailVerificationService
         IEventPublisher eventPublisher,
         IHttpContextAccessor httpContextAccessor,
         ITokenService tokenService,
+        IConfiguration configuration,
         ILogger<EmailVerificationService> logger)
     {
         _context = context;
         _eventPublisher = eventPublisher;
         _httpContextAccessor = httpContextAccessor;
         _tokenService = tokenService;
+        _configuration = configuration;
         _logger = logger;
     }
 
@@ -42,8 +46,21 @@ public class EmailVerificationService : IEmailVerificationService
                 throw new InvalidOperationException("Invalid verification token");
             }
 
+            // Check if token has expired
+            if (user.EmailVerificationTokenExpiresAt.HasValue && 
+                user.EmailVerificationTokenExpiresAt.Value < DateTime.UtcNow)
+            {
+                // Clear expired token and expiration
+                user.EmailVerificationToken = null;
+                user.EmailVerificationTokenExpiresAt = null;
+                await _context.SaveChangesAsync();
+                
+                throw new InvalidOperationException("TOKEN_EXPIRED:Verification token has expired. Please request a new verification email.");
+            }
+
             user.EmailVerified = true;
             user.EmailVerificationToken = null;
+            user.EmailVerificationTokenExpiresAt = null; // Clear expiration when token is cleared
             user.VerificationStatus = UserVerificationStatus.EmailVerified;
             user.Status = UserStatus.Active;
             await _context.SaveChangesAsync();
@@ -108,15 +125,47 @@ public class EmailVerificationService : IEmailVerificationService
                 return;
             }
 
-            // Regenerate token if expired (>24 hours) or missing
-            var shouldRegenerate = string.IsNullOrEmpty(user.EmailVerificationToken) ||
-                (user.CreatedAt < DateTime.UtcNow.AddHours(-24));
+            // Regenerate token ONLY if missing or expired
+            // Don't regenerate if token exists and is not expired
+            var shouldRegenerate = false;
+            
+            if (string.IsNullOrEmpty(user.EmailVerificationToken))
+            {
+                // Token is missing - regenerate
+                shouldRegenerate = true;
+            }
+            else if (user.EmailVerificationTokenExpiresAt.HasValue)
+            {
+                // Token has expiration - check if expired
+                if (user.EmailVerificationTokenExpiresAt.Value < DateTime.UtcNow)
+                {
+                    shouldRegenerate = true;
+                }
+                // If token exists and not expired, don't regenerate
+            }
+            else
+            {
+                // Token exists but no expiration set (legacy data) - treat as expired if >24 hours old
+                if (user.CreatedAt < DateTime.UtcNow.AddHours(-24))
+                {
+                    shouldRegenerate = true;
+                }
+            }
 
             if (shouldRegenerate)
             {
+                var expiryHours = _configuration.GetValue<int>("SecuritySettings:EmailVerificationTokenExpiryHours", 24);
+
                 user.EmailVerificationToken = _tokenService.GenerateSecureToken();
+                user.EmailVerificationTokenExpiresAt = DateTime.UtcNow.AddHours(expiryHours);
                 user.UpdatedAt = DateTime.UtcNow;
                 await _context.SaveChangesAsync();
+                
+                _logger.LogInformation("Email verification token regenerated for user: {Email} (token was missing or expired)", user.Email);
+            }
+            else
+            {
+                _logger.LogInformation("Email verification token not regenerated for user: {Email} (valid token exists)", user.Email);
             }
 
             // Publish verification email event
@@ -136,6 +185,8 @@ public class EmailVerificationService : IEmailVerificationService
         }
     }
 }
+
+
 
 
 

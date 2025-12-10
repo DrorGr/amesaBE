@@ -16,6 +16,24 @@ namespace AmesaBackend.Notification.DTOs
         public DateTime CreatedAt { get; set; }
     }
 
+    public class NotificationReadHistoryDto
+    {
+        public Guid Id { get; set; }
+        public Guid NotificationId { get; set; }
+        public Guid UserId { get; set; }
+        public DateTime ReadAt { get; set; }
+        public string? DeviceId { get; set; }
+        public string? DeviceName { get; set; }
+        public string? Channel { get; set; }
+        public string ReadMethod { get; set; } = string.Empty;
+    }
+
+    public class SyncReadStateRequest
+    {
+        [Required]
+        public List<Guid> ReadNotificationIds { get; set; } = new();
+    }
+
     public class SendNotificationRequest
     {
         [Required]
@@ -55,6 +73,17 @@ namespace AmesaBackend.Notification.DTOs
         public int RetryCount { get; set; }
         public decimal? Cost { get; set; }
         public string Currency { get; set; } = "USD";
+        public DateTime CreatedAt { get; set; }
+    }
+
+    public class DeliveryStatusHistoryDto
+    {
+        public Guid Id { get; set; }
+        public Guid DeliveryId { get; set; }
+        public string Status { get; set; } = string.Empty;
+        public DateTime ChangedAt { get; set; }
+        public string? ChangedBy { get; set; }
+        public string? Reason { get; set; }
         public DateTime CreatedAt { get; set; }
     }
 
@@ -184,6 +213,8 @@ namespace AmesaBackend.Notification.DTOs
         public List<DeliveryResult> DeliveryResults { get; set; } = new();
         public int SuccessCount { get; set; }
         public int FailureCount { get; set; }
+        public bool SignalRFailed { get; set; }
+        public string? SignalRErrorMessage { get; set; }
     }
 
     public class NotificationRequest

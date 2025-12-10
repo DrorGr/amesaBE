@@ -106,7 +106,8 @@ namespace AmesaBackend.Lottery.Controllers
                         {
                             Id = id,
                             UniqueParticipants = 0,
-                            IsParticipantCapReached = false
+                            IsParticipantCapReached = false,
+                            ProductId = null
                         },
                         NotificationEnabled = notificationEnabled,
                         AddedAt = DateTime.UtcNow

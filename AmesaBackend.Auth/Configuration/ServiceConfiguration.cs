@@ -3,8 +3,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using AmesaBackend.Auth.Services;
 using AmesaBackend.Auth.BackgroundServices;
+using AmesaBackend.Auth.DTOs;
 using AmesaBackend.Shared.Extensions;
 using Amazon.Rekognition;
+using Microsoft.AspNetCore.Mvc;
 using Serilog;
 
 namespace AmesaBackend.Auth.Configuration;
@@ -13,10 +15,49 @@ public static class ServiceConfiguration
 {
     /// <summary>
     /// Configures Controllers and JSON options (camelCase serialization).
+    /// Also configures custom ModelState validation response to match ApiResponse format.
     /// </summary>
     public static IServiceCollection AddAuthControllers(this IServiceCollection services)
     {
         services.AddControllers()
+            .ConfigureApiBehaviorOptions(options =>
+            {
+                // Custom response factory for ModelState validation errors
+                // Returns ApiResponse format that frontend expects
+                options.InvalidModelStateResponseFactory = context =>
+                {
+                    var errors = new Dictionary<string, string[]>();
+                    foreach (var keyValuePair in context.ModelState)
+                    {
+                        var key = keyValuePair.Key;
+                        var errorMessages = keyValuePair.Value.Errors
+                            .Select(e => string.IsNullOrEmpty(e.ErrorMessage) ? "Invalid value" : e.ErrorMessage)
+                            .ToArray();
+                        
+                        if (errorMessages.Length > 0)
+                        {
+                            errors[key] = errorMessages;
+                        }
+                    }
+
+                    // Format validation errors into a single message
+                    var errorMessage = string.Join("; ", errors.SelectMany(e => e.Value));
+
+                    var response = new ApiResponse<object>
+                    {
+                        Success = false,
+                        Error = new ErrorResponse
+                        {
+                            Code = "VALIDATION_ERROR",
+                            Message = errorMessage,
+                            Details = errors // Include detailed field errors
+                        },
+                        Timestamp = DateTime.UtcNow
+                    };
+
+                    return new BadRequestObjectResult(response);
+                };
+            })
             .AddJsonOptions(options =>
             {
                 // Configure JSON serialization to use camelCase for property names
@@ -69,9 +110,16 @@ public static class ServiceConfiguration
         });
 
         // Add Application Services
+        // Infrastructure services
+        services.AddSingleton<ICircuitBreakerService, CircuitBreakerService>();
+        
         // Security services
         services.AddScoped<IRateLimitService, RateLimitService>();
         services.AddScoped<IAccountLockoutService, AccountLockoutService>();
+        
+        // Password breach checking service (with HttpClient)
+        services.AddHttpClient<IPasswordBreachService, PasswordBreachService>();
+        
         services.AddScoped<IPasswordValidatorService, PasswordValidatorService>();
         services.AddScoped<ICaptchaService, CaptchaService>();
         services.AddScoped<IAuditLogService, AuditLogService>();
@@ -89,6 +137,9 @@ public static class ServiceConfiguration
         services.AddScoped<IConfigurationService, ConfigurationService>();
         services.AddScoped<IAwsRekognitionService, AwsRekognitionService>();
         services.AddScoped<IIdentityVerificationService, IdentityVerificationService>();
+        services.AddScoped<ITwoFactorService, TwoFactorService>();
+        services.AddScoped<IAccountRecoveryService, AccountRecoveryService>();
+        services.AddScoped<IAccountDeletionService, AccountDeletionService>();
         services.AddHttpContextAccessor();
 
         // Note: reCAPTCHA Enterprise uses Google Cloud API client, not HttpClient
@@ -118,6 +169,7 @@ public static class ServiceConfiguration
 
         // Add Background Services
         services.AddHostedService<SessionCleanupService>();
+        services.AddHostedService<PasswordHistoryCleanupService>();
 
         // Add Response Compression
         services.AddResponseCompression(options =>

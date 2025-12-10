@@ -12,6 +12,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
+using Npgsql;
 
 namespace AmesaBackend.Notification.Services
 {
@@ -27,6 +28,8 @@ namespace AmesaBackend.Notification.Services
         private readonly ILogger<NotificationOrchestrator> _logger;
         private readonly IHubContext<NotificationHub>? _hubContext;
         private readonly IRateLimitService _rateLimitService;
+        private readonly INotificationPreferenceService _preferenceService;
+        private readonly ICloudWatchMetricsService? _metricsService;
 
         public NotificationOrchestrator(
             NotificationDbContext context,
@@ -38,7 +41,9 @@ namespace AmesaBackend.Notification.Services
             IConfiguration configuration,
             ILogger<NotificationOrchestrator> logger,
             IRateLimitService rateLimitService,
-            IHubContext<NotificationHub>? hubContext = null)
+            INotificationPreferenceService preferenceService,
+            IHubContext<NotificationHub>? hubContext = null,
+            ICloudWatchMetricsService? metricsService = null)
         {
             _context = context;
             _channelProviders = channelProviders;
@@ -49,7 +54,9 @@ namespace AmesaBackend.Notification.Services
             _configuration = configuration;
             _logger = logger;
             _rateLimitService = rateLimitService;
+            _preferenceService = preferenceService;
             _hubContext = hubContext;
+            _metricsService = metricsService;
         }
 
         public async Task<OrchestrationResult> SendMultiChannelAsync(Guid userId, NotificationRequest request, List<string> channels)
@@ -59,6 +66,9 @@ namespace AmesaBackend.Notification.Services
                 NotificationId = Guid.NewGuid()
             };
 
+            // Use explicit transaction for data consistency
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            
             try
             {
                 // Set language from user preferences if not provided
@@ -67,9 +77,19 @@ namespace AmesaBackend.Notification.Services
                     // Use default language - user language preference can be retrieved from user preferences service if needed
                     request.Language = NotificationChannelConstants.DefaultLanguage;
                 }
-                // Get user channel preferences from cache or database
+                // Get user channel preferences from cache or database with error handling
                 var cacheKey = $"{NotificationChannelConstants.CacheKeyUserPrefs}{userId}";
-                var cachedPrefs = await _cache.GetRecordAsync<Dictionary<string, object>>(cacheKey);
+                Dictionary<string, object>? cachedPrefs = null;
+
+                try
+                {
+                    cachedPrefs = await _cache.GetRecordAsync<Dictionary<string, object>>(cacheKey);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Redis cache unavailable for user {UserId}, falling back to database", userId);
+                    // Continue with null cachedPrefs - will fetch from database
+                }
                 
                 // If not in cache, fetch from database
                 if (cachedPrefs == null)
@@ -88,10 +108,18 @@ namespace AmesaBackend.Notification.Services
                         }
                     }
                     
-                    // Cache for 15 minutes
+                    // Cache for 15 minutes (only if cache is available)
                     if (cachedPrefs.Count > 0)
                     {
-                        await _cache.SetRecordAsync(cacheKey, cachedPrefs, TimeSpan.FromMinutes(15));
+                        try
+                        {
+                            await _cache.SetRecordAsync(cacheKey, cachedPrefs, TimeSpan.FromMinutes(15));
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to cache preferences for user {UserId}, continuing without cache", userId);
+                            // Continue - cache is optional
+                        }
                     }
                 }
                 
@@ -116,6 +144,7 @@ namespace AmesaBackend.Notification.Services
                     Id = result.NotificationId,
                     UserId = userId,
                     Type = request.Type,
+                    NotificationTypeCode = request.Type, // Use Type as NotificationTypeCode if not specified in request
                     Title = request.Title,
                     Message = request.Message,
                     Data = request.Data != null ? JsonSerializer.Serialize(request.Data) : null,
@@ -124,7 +153,60 @@ namespace AmesaBackend.Notification.Services
 
                 _context.UserNotifications.Add(notification);
 
-                // Process each channel
+                // Save notification record first to ensure data consistency
+                // If SaveChangesAsync fails, no notifications will be sent
+                try
+                {
+                    await _context.SaveChangesAsync();
+                }
+                catch (DbUpdateConcurrencyException ex)
+                {
+                    _logger.LogWarning(ex, "Concurrency conflict saving notification {NotificationId}", result.NotificationId);
+                    throw; // Let retry logic handle
+                }
+                catch (DbUpdateException ex)
+                {
+                    _logger.LogError(ex, "Database update failed for notification {NotificationId}", result.NotificationId);
+                    throw;
+                }
+                catch (NpgsqlException ex) when (ex.IsTransient)
+                {
+                    _logger.LogWarning(ex, "Transient database error saving notification {NotificationId}, will retry", result.NotificationId);
+                    throw; // Retry policy should handle
+                }
+                catch (NpgsqlException ex)
+                {
+                    _logger.LogError(ex, "Database error saving notification {NotificationId}: {Error}", 
+                        result.NotificationId, ex.Message);
+                    throw;
+                }
+
+                // Process each channel - prepare delivery records (don't send yet)
+                var notificationTypeCode = notification.NotificationTypeCode ?? request.Type;
+                var deliveriesToAdd = new List<NotificationDelivery>();
+                var channelsToSend = new List<(string ChannelName, IChannelProvider Provider, NotificationDelivery Delivery)>();
+                
+                // Check per-user rate limit across all channels
+                var userRateLimitKey = $"notification_user:{userId}";
+                var userRateLimit = 50; // Max 50 notifications per hour per user
+                var userCanSend = await _rateLimitService.CheckRateLimitAsync(
+                    userRateLimitKey, 
+                    userRateLimit, 
+                    TimeSpan.FromHours(1));
+
+                if (!userCanSend)
+                {
+                    _logger.LogWarning("Per-user rate limit exceeded for user {UserId}", userId);
+                    await transaction.RollbackAsync();
+                    result.DeliveryResults.Add(new DeliveryResult
+                    {
+                        Success = false,
+                        ErrorMessage = "User rate limit exceeded"
+                    });
+                    result.FailureCount++;
+                    return result;
+                }
+                
                 foreach (var channelName in channels)
                 {
                     var provider = _channelProviders.FirstOrDefault(p => p.ChannelName.Equals(channelName, StringComparison.OrdinalIgnoreCase));
@@ -140,7 +222,15 @@ namespace AmesaBackend.Notification.Services
                         continue;
                     }
 
-                    // Check if channel is enabled for user
+                    // Check if notification should be sent based on user preferences (feature, type, channel, quiet hours, frequency limits)
+                    if (!await _preferenceService.ShouldSendNotificationAsync(userId, notificationTypeCode, channelName))
+                    {
+                        _logger.LogInformation("Notification {Type} not allowed for user {UserId} on channel {Channel}", 
+                            notificationTypeCode, userId, channelName);
+                        continue;
+                    }
+
+                    // Check if channel provider is available and enabled
                     if (!provider.IsChannelEnabled(userId))
                     {
                         _logger.LogInformation("Channel {ChannelName} is disabled for user {UserId}", channelName, userId);
@@ -163,88 +253,185 @@ namespace AmesaBackend.Notification.Services
                         continue;
                     }
 
-                    // Increment rate limit
-                    await _rateLimitService.IncrementRateLimitAsync(rateLimitKey, rateLimits.window);
-
-                    // Send notification via channel
-                    var deliveryResult = await provider.SendAsync(request);
-
-                    // Create delivery record
+                    // Create delivery record (will be updated after send)
                     var delivery = new NotificationDelivery
                     {
                         Id = Guid.NewGuid(),
                         NotificationId = result.NotificationId,
                         Channel = channelName,
-                        Status = deliveryResult.Success ? NotificationChannelConstants.StatusSent : NotificationChannelConstants.StatusFailed,
-                        ExternalId = deliveryResult.ExternalId,
-                        ErrorMessage = deliveryResult.ErrorMessage,
-                        Cost = deliveryResult.Cost,
+                        Status = NotificationChannelConstants.StatusPending,
                         Currency = NotificationChannelConstants.DefaultCurrency,
                         CreatedAt = DateTime.UtcNow,
                         UpdatedAt = DateTime.UtcNow
                     };
 
-                    if (deliveryResult.Success)
-                    {
-                        delivery.DeliveredAt = DateTime.UtcNow;
-                        result.SuccessCount++;
-                    }
-                    else
-                    {
-                        result.FailureCount++;
-                    }
-
-                    _context.NotificationDeliveries.Add(delivery);
-                    result.DeliveryResults.Add(deliveryResult);
-
-                    // Publish EventBridge event
-                    try
-                    {
-                        var eventToPublish = new NotificationSentEvent
-                        {
-                            NotificationId = result.NotificationId,
-                            UserId = userId,
-                            Channel = channelName,
-                            Type = request.Type,
-                            Source = "amesa.notification-service",
-                            DetailType = EventBridgeConstants.DetailType.NotificationSent
-                        };
-                        await _eventPublisher.PublishAsync(eventToPublish);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Failed to publish EventBridge event for notification {NotificationId}", result.NotificationId);
-                    }
+                    deliveriesToAdd.Add(delivery);
+                    channelsToSend.Add((channelName, provider, delivery));
                 }
 
-                await _context.SaveChangesAsync();
-
-                // Send real-time notification via SignalR
-                if (_hubContext != null)
+                // Save all delivery records in same transaction
+                if (deliveriesToAdd.Count > 0)
                 {
                     try
                     {
-                        var notificationDto = new NotificationDto
-                        {
-                            Id = notification.Id,
-                            UserId = notification.UserId,
-                            TemplateId = notification.TemplateId,
-                            Type = notification.Type,
-                            Title = notification.Title,
-                            Message = notification.Message,
-                            IsRead = notification.IsRead,
-                            ReadAt = notification.ReadAt,
-                            Data = notification.Data != null ? JsonSerializer.Deserialize<Dictionary<string, object>>(notification.Data) : null,
-                            CreatedAt = notification.CreatedAt
-                        };
+                        _context.NotificationDeliveries.AddRange(deliveriesToAdd);
+                        await _context.SaveChangesAsync();
+                    }
+                    catch (DbUpdateException ex)
+                    {
+                        _logger.LogError(ex, "Failed to save delivery records for notification {NotificationId}", result.NotificationId);
+                        await transaction.RollbackAsync();
+                        throw;
+                    }
+                }
+                
+                // Commit transaction before sending notifications
+                await transaction.CommitAsync();
+                
+                // Increment per-user rate limit after successful commit
+                await _rateLimitService.IncrementRateLimitAsync(userRateLimitKey, TimeSpan.FromHours(1));
+                
+                // Now send notifications (outside transaction to avoid long-running transactions)
+                foreach (var (channelName, provider, delivery) in channelsToSend)
+                {
+                    try
+                    {
+                        // Send notification via channel
+                        var deliveryResult = await provider.SendAsync(request);
 
-                        await _hubContext.Clients
-                            .Group($"notifications_{userId}")
-                            .SendAsync("ReceiveNotification", notificationDto);
+                        // Update delivery record
+                        delivery.Status = deliveryResult.Success ? NotificationChannelConstants.StatusSent : NotificationChannelConstants.StatusFailed;
+                        delivery.ExternalId = deliveryResult.ExternalId;
+                        delivery.ErrorMessage = deliveryResult.ErrorMessage;
+                        delivery.Cost = deliveryResult.Cost;
+                        delivery.UpdatedAt = DateTime.UtcNow;
+
+                        if (deliveryResult.Success)
+                        {
+                            delivery.DeliveredAt = DateTime.UtcNow;
+                            result.SuccessCount++;
+                            
+                            // Increment rate limit only after successful send
+                            var rateLimitKey = $"{NotificationChannelConstants.RateLimitPrefix}{channelName}:{userId}";
+                            var rateLimits = GetRateLimitsForChannel(channelName);
+                            await _rateLimitService.IncrementRateLimitAsync(rateLimitKey, rateLimits.window);
+                            
+                            // Send CloudWatch metrics
+                            if (_metricsService != null)
+                            {
+                                await _metricsService.PutMetricAsync("NotificationDeliverySuccess", 1, "Count");
+                                await _metricsService.PutMetricWithDimensionsAsync("NotificationDeliveryByChannel", 
+                                    new Dictionary<string, string> { { "Channel", channelName } }, 1, "Count");
+                            }
+                        }
+                        else
+                        {
+                            result.FailureCount++;
+                            
+                            // Send CloudWatch metrics for failures
+                            if (_metricsService != null)
+                            {
+                                await _metricsService.PutMetricAsync("NotificationDeliveryFailure", 1, "Count");
+                                await _metricsService.PutMetricWithDimensionsAsync("NotificationDeliveryFailureByChannel", 
+                                    new Dictionary<string, string> { { "Channel", channelName } }, 1, "Count");
+                            }
+                        }
+
+                        result.DeliveryResults.Add(deliveryResult);
+                        
+                        // Update delivery in database
+                        _context.NotificationDeliveries.Update(delivery);
+                        await _context.SaveChangesAsync();
+
+                        // Publish EventBridge event (non-blocking, but track failures)
+                        try
+                        {
+                            var eventToPublish = new NotificationSentEvent
+                            {
+                                NotificationId = result.NotificationId,
+                                UserId = userId,
+                                Channel = channelName,
+                                Type = request.Type,
+                                Source = "amesa.notification-service",
+                                DetailType = EventBridgeConstants.DetailType.NotificationSent
+                            };
+                            await _eventPublisher.PublishAsync(eventToPublish);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to publish EventBridge event for notification {NotificationId}. This may affect analytics.", result.NotificationId);
+                            // Don't fail the notification delivery, but log for monitoring
+                        }
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogWarning(ex, "Failed to send SignalR notification for user {UserId}", userId);
+                        _logger.LogError(ex, "Failed to send notification via channel {Channel} for notification {NotificationId}", 
+                            channelName, result.NotificationId);
+                        
+                        // Update delivery status to failed
+                        delivery.Status = NotificationChannelConstants.StatusFailed;
+                        delivery.ErrorMessage = ex.Message;
+                        delivery.UpdatedAt = DateTime.UtcNow;
+                        _context.NotificationDeliveries.Update(delivery);
+                        await _context.SaveChangesAsync();
+                        
+                        result.FailureCount++;
+                        result.DeliveryResults.Add(new DeliveryResult
+                        {
+                            Success = false,
+                            ErrorMessage = ex.Message
+                        });
+                    }
+                }
+
+                // Send real-time notification via SignalR with retry mechanism
+                if (_hubContext != null)
+                {
+                    const int maxRetries = 3;
+                    var retryCount = 0;
+                    var sent = false;
+                    
+                    while (!sent && retryCount < maxRetries)
+                    {
+                        try
+                        {
+                            var notificationDto = new NotificationDto
+                            {
+                                Id = notification.Id,
+                                UserId = notification.UserId,
+                                TemplateId = notification.TemplateId,
+                                Type = notification.Type,
+                                Title = notification.Title,
+                                Message = notification.Message,
+                                IsRead = notification.IsRead,
+                                ReadAt = notification.ReadAt,
+                                Data = notification.Data != null ? JsonSerializer.Deserialize<Dictionary<string, object>>(notification.Data) : null,
+                                CreatedAt = notification.CreatedAt
+                            };
+
+                            await _hubContext.Clients
+                                .Group($"notifications_{userId}")
+                                .SendAsync("ReceiveNotification", notificationDto);
+                            
+                            sent = true;
+                        }
+                        catch (Exception ex)
+                        {
+                            retryCount++;
+                            if (retryCount >= maxRetries)
+                            {
+                                _logger.LogWarning(ex, "Failed to send SignalR notification for user {UserId} after {Retries} retries", 
+                                    userId, maxRetries);
+                                result.SignalRFailed = true;
+                                result.SignalRErrorMessage = ex.Message;
+                            }
+                            else
+                            {
+                                _logger.LogWarning(ex, "SignalR send failed for user {UserId}, retry {Retry}/{MaxRetries}", 
+                                    userId, retryCount, maxRetries);
+                                await Task.Delay(100 * retryCount); // Exponential backoff
+                            }
+                        }
                     }
                 }
 
@@ -253,6 +440,7 @@ namespace AmesaBackend.Notification.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error in SendMultiChannelAsync for user {UserId}", userId);
+                await transaction.RollbackAsync();
                 throw;
             }
         }
@@ -292,6 +480,9 @@ namespace AmesaBackend.Notification.Services
 
         public async Task ResendFailedNotificationAsync(Guid deliveryId)
         {
+            const int maxRetries = 5;
+            const int baseDelayMs = 1000; // 1 second base delay
+            
             try
             {
                 var delivery = await _context.NotificationDeliveries
@@ -310,11 +501,28 @@ namespace AmesaBackend.Notification.Services
                     return;
                 }
 
+                // Check retry limit
+                if (delivery.RetryCount >= maxRetries)
+                {
+                    _logger.LogWarning("Delivery {DeliveryId} has exceeded max retries ({MaxRetries}). Not retrying.", 
+                        deliveryId, maxRetries);
+                    return;
+                }
+
                 var provider = _channelProviders.FirstOrDefault(p => p.ChannelName.Equals(delivery.Channel, StringComparison.OrdinalIgnoreCase));
                 if (provider == null)
                 {
                     _logger.LogWarning("Channel provider not found: {Channel}", delivery.Channel);
                     return;
+                }
+
+                // Exponential backoff: wait before retry
+                if (delivery.RetryCount > 0)
+                {
+                    var delayMs = baseDelayMs * (int)Math.Pow(2, delivery.RetryCount - 1);
+                    _logger.LogInformation("Waiting {DelayMs}ms before retry {RetryCount} for delivery {DeliveryId}", 
+                        delayMs, delivery.RetryCount + 1, deliveryId);
+                    await Task.Delay(delayMs);
                 }
 
                 var request = new NotificationRequest
@@ -340,6 +548,13 @@ namespace AmesaBackend.Notification.Services
                 if (result.Success)
                 {
                     delivery.DeliveredAt = DateTime.UtcNow;
+                    _logger.LogInformation("Successfully resent notification delivery {DeliveryId} on retry {RetryCount}", 
+                        deliveryId, delivery.RetryCount);
+                }
+                else
+                {
+                    _logger.LogWarning("Failed to resend notification delivery {DeliveryId} on retry {RetryCount}/{MaxRetries}. Error: {Error}", 
+                        deliveryId, delivery.RetryCount, maxRetries, result.ErrorMessage);
                 }
 
                 await _context.SaveChangesAsync();

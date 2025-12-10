@@ -63,6 +63,9 @@ namespace AmesaBackend.Notification.Models
         [MaxLength(50)]
         public string Type { get; set; } = string.Empty;
 
+        [MaxLength(100)]
+        public string? NotificationTypeCode { get; set; }
+
         public bool IsRead { get; set; } = false;
 
         public DateTime? ReadAt { get; set; }
@@ -70,9 +73,22 @@ namespace AmesaBackend.Notification.Models
         [Column(TypeName = "jsonb")]
         public string? Data { get; set; }
 
+        [Timestamp]
+        [Column(TypeName = "bytea")]
+        public byte[]? RowVersion { get; set; }
+
+        public bool IsDeleted { get; set; } = false;
+
+        public DateTime? DeletedAt { get; set; }
+
+        [MaxLength(255)]
+        public string? DeletedBy { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         public virtual NotificationTemplate? Template { get; set; }
+        public virtual NotificationType? NotificationType { get; set; }
+        public virtual ICollection<NotificationReadHistory> ReadHistory { get; set; } = new List<NotificationReadHistory>();
     }
 
     [Table("email_templates")]
@@ -128,15 +144,37 @@ namespace AmesaBackend.Notification.Models
         [MaxLength(255)]
         public string? ExternalId { get; set; }
 
+        [MaxLength(255)]
+        public string? TrackingToken { get; set; }
+
+        public bool ClickTrackingEnabled { get; set; } = true;
+
+        public int OpenCount { get; set; } = 0;
+
+        public int ClickCount { get; set; } = 0;
+
         public string? ErrorMessage { get; set; }
 
         public DateTime? DeliveredAt { get; set; }
 
         public DateTime? OpenedAt { get; set; }
 
+        public DateTime? LastOpenedAt { get; set; }
+
         public DateTime? ClickedAt { get; set; }
 
+        public DateTime? LastClickedAt { get; set; }
+
         public int RetryCount { get; set; } = 0;
+
+        [MaxLength(50)]
+        public string? BounceType { get; set; }
+
+        public string? BounceReason { get; set; }
+
+        public bool UnsubscribeRequested { get; set; } = false;
+
+        public string? UnsubscribeReason { get; set; }
 
         [Column(TypeName = "decimal(10,6)")]
         public decimal? Cost { get; set; }
@@ -294,6 +332,163 @@ namespace AmesaBackend.Notification.Models
         public DateTime? ProcessedAt { get; set; }
 
         public virtual UserNotification? Notification { get; set; }
+    }
+
+    [Table("notification_types", Schema = "amesa_notification")]
+    public class NotificationType
+    {
+        [Key]
+        public Guid Id { get; set; }
+
+        [Required]
+        [MaxLength(100)]
+        public string Code { get; set; } = string.Empty;
+
+        [Required]
+        [MaxLength(255)]
+        public string Name { get; set; } = string.Empty;
+
+        [Required]
+        [MaxLength(50)]
+        public string Category { get; set; } = string.Empty;
+
+        [Required]
+        [MaxLength(100)]
+        public string Feature { get; set; } = string.Empty;
+
+        public string? Description { get; set; }
+
+        public string[] DefaultChannels { get; set; } = Array.Empty<string>();
+
+        public bool IsCritical { get; set; } = false;
+
+        public bool RequiresConfirmation { get; set; } = false;
+
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+        public virtual ICollection<UserNotification> UserNotifications { get; set; } = new List<UserNotification>();
+        public virtual ICollection<UserTypePreference> UserTypePreferences { get; set; } = new List<UserTypePreference>();
+    }
+
+    [Table("notification_read_history", Schema = "amesa_notification")]
+    public class NotificationReadHistory
+    {
+        [Key]
+        public Guid Id { get; set; }
+
+        [Required]
+        public Guid NotificationId { get; set; }
+
+        [Required]
+        public Guid UserId { get; set; }
+
+        public DateTime ReadAt { get; set; } = DateTime.UtcNow;
+
+        [MaxLength(255)]
+        public string? DeviceId { get; set; }
+
+        [MaxLength(255)]
+        public string? DeviceName { get; set; }
+
+        public string? UserAgent { get; set; }
+
+        [MaxLength(50)]
+        public string? Channel { get; set; }
+
+        [MaxLength(45)]
+        public string? IpAddress { get; set; }
+
+        [Required]
+        [MaxLength(50)]
+        public string ReadMethod { get; set; } = "manual";
+
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+        public virtual UserNotification? Notification { get; set; }
+    }
+
+    [Table("user_feature_preferences", Schema = "amesa_notification")]
+    public class UserFeaturePreference
+    {
+        [Key]
+        public Guid Id { get; set; }
+
+        [Required]
+        public Guid UserId { get; set; }
+
+        [Required]
+        [MaxLength(100)]
+        public string Feature { get; set; } = string.Empty;
+
+        public bool Enabled { get; set; } = true;
+
+        public string[] Channels { get; set; } = Array.Empty<string>();
+
+        public int? FrequencyLimit { get; set; }
+
+        [MaxLength(20)]
+        public string? FrequencyWindow { get; set; }
+
+        public TimeSpan? QuietHoursStart { get; set; }
+
+        public TimeSpan? QuietHoursEnd { get; set; }
+
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    [Table("user_type_preferences", Schema = "amesa_notification")]
+    public class UserTypePreference
+    {
+        [Key]
+        public Guid Id { get; set; }
+
+        [Required]
+        public Guid UserId { get; set; }
+
+        [Required]
+        [MaxLength(100)]
+        public string NotificationTypeCode { get; set; } = string.Empty;
+
+        public bool Enabled { get; set; } = true;
+
+        public string[] Channels { get; set; } = Array.Empty<string>();
+
+        public int Priority { get; set; } = 5;
+
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+        public virtual NotificationType? NotificationType { get; set; }
+    }
+
+    [Table("notification_delivery_status_history", Schema = "amesa_notification")]
+    public class NotificationDeliveryStatusHistory
+    {
+        [Key]
+        public Guid Id { get; set; }
+
+        [Required]
+        public Guid DeliveryId { get; set; }
+
+        [Required]
+        [MaxLength(50)]
+        public string Status { get; set; } = string.Empty;
+
+        public DateTime ChangedAt { get; set; } = DateTime.UtcNow;
+
+        [MaxLength(255)]
+        public string? ChangedBy { get; set; }
+
+        public string? Reason { get; set; }
+
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+        public virtual NotificationDelivery? Delivery { get; set; }
     }
 }
 

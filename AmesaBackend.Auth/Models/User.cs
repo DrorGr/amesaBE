@@ -65,6 +65,8 @@ namespace AmesaBackend.Auth.Models
         [MaxLength(255)]
         public string? EmailVerificationToken { get; set; }
 
+        public DateTime? EmailVerificationTokenExpiresAt { get; set; }
+
         [MaxLength(10)]
         public string? PhoneVerificationToken { get; set; }
 

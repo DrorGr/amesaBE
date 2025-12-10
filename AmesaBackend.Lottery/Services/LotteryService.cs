@@ -48,25 +48,18 @@ namespace AmesaBackend.Lottery.Services
         /// <summary>
         /// Check if user verification is required and if user is verified
         /// </summary>
+        /// <summary>
+        /// Checks if user has completed identity verification (required for ticket purchases).
+        /// Always enforces verification requirement - identity verification is mandatory for ticket purchases.
+        /// </summary>
         public async Task CheckVerificationRequirementAsync(Guid userId)
         {
-            if (_configurationService == null)
-            {
-                return; // Configuration service not available, skip check
-            }
-
-            var isRequired = await _configurationService.IsFeatureEnabledAsync("id_verification_required");
-            if (!isRequired)
-            {
-                return; // Verification not required
-            }
-
             // Check user verification status using EF Core (preferred over raw SQL)
             // Use AuthDbContext to query users table with proper type safety
             if (_authContext == null)
             {
-                _logger.LogWarning("AuthDbContext not available, skipping verification check for user {UserId}", userId);
-                return; // Skip check if AuthDbContext not injected
+                _logger.LogWarning("AuthDbContext not available, cannot verify identity for user {UserId}", userId);
+                throw new UnauthorizedAccessException("ID_VERIFICATION_REQUIRED: Identity verification check unavailable");
             }
 
             var user = await _authContext.Users
@@ -79,9 +72,12 @@ namespace AmesaBackend.Lottery.Services
                 throw new UnauthorizedAccessException("ID_VERIFICATION_REQUIRED: User not found");
             }
 
-            if (user.VerificationStatus != UserVerificationStatus.IdentityVerified)
+            // Require IdentityVerified or FullyVerified status
+            // Identity verification is mandatory for ticket purchases (Step 4 requirement)
+            if (user.VerificationStatus != UserVerificationStatus.IdentityVerified && 
+                user.VerificationStatus != UserVerificationStatus.FullyVerified)
             {
-                throw new UnauthorizedAccessException("ID_VERIFICATION_REQUIRED: Identity verification required to purchase lottery tickets");
+                throw new UnauthorizedAccessException("ID_VERIFICATION_REQUIRED: Identity verification required to purchase lottery tickets. Please complete identity verification in your account settings.");
             }
         }
 
@@ -924,6 +920,9 @@ namespace AmesaBackend.Lottery.Services
 
             try
             {
+                // Check identity verification requirement (mandatory for ticket purchases)
+                await CheckVerificationRequirementAsync(userId);
+
                 // Get house to calculate price (read-only query - use AsNoTracking for performance)
                 var house = await _context.Houses
                     .AsNoTracking()

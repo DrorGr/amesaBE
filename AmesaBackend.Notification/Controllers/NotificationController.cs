@@ -8,6 +8,7 @@ using AmesaBackend.Notification.Services;
 using AmesaBackend.Shared.Events;
 using AmesaBackend.Shared.Caching;
 using System.Security.Claims;
+using System.ComponentModel.DataAnnotations;
 
 namespace AmesaBackend.Notification.Controllers
 {
@@ -17,17 +18,23 @@ namespace AmesaBackend.Notification.Controllers
     {
         private readonly NotificationDbContext _context;
         private readonly INotificationOrchestrator _orchestrator;
+        private readonly INotificationReadStateService _readStateService;
+        private readonly INotificationPreferenceService _preferenceService;
         private readonly ILogger<NotificationController> _logger;
         private readonly ICache _cache;
 
         public NotificationController(
             NotificationDbContext context,
             INotificationOrchestrator orchestrator,
+            INotificationReadStateService readStateService,
+            INotificationPreferenceService preferenceService,
             ILogger<NotificationController> logger,
             ICache cache)
         {
             _context = context;
             _orchestrator = orchestrator;
+            _readStateService = readStateService;
+            _preferenceService = preferenceService;
             _logger = logger;
             _cache = cache ?? throw new ArgumentNullException(nameof(cache));
         }
@@ -52,7 +59,7 @@ namespace AmesaBackend.Notification.Controllers
                 }
 
                 var query = _context.UserNotifications
-                    .Where(n => n.UserId == userId)
+                    .Where(n => n.UserId == userId && !n.IsDeleted)
                     .AsQueryable();
 
                 if (unreadOnly == true)
@@ -115,7 +122,7 @@ namespace AmesaBackend.Notification.Controllers
                 }
 
                 var notification = await _context.UserNotifications
-                    .Where(n => n.Id == id && n.UserId == userId)
+                    .Where(n => n.Id == id && n.UserId == userId && !n.IsDeleted)
                     .Select(n => new NotificationDto
                     {
                         Id = n.Id,
@@ -174,8 +181,9 @@ namespace AmesaBackend.Notification.Controllers
                     });
                 }
 
+                // Verify notification exists and belongs to user (not soft-deleted)
                 var notification = await _context.UserNotifications
-                    .FirstOrDefaultAsync(n => n.Id == id && n.UserId == userId);
+                    .FirstOrDefaultAsync(n => n.Id == id && n.UserId == userId && !n.IsDeleted);
 
                 if (notification == null)
                 {
@@ -186,11 +194,20 @@ namespace AmesaBackend.Notification.Controllers
                     });
                 }
 
-                if (!notification.IsRead)
+                // Get device info from headers
+                var deviceId = Request.Headers["X-Device-Id"].FirstOrDefault();
+                var userAgent = Request.Headers["User-Agent"].FirstOrDefault();
+
+                // Use read state service for proper tracking and SignalR broadcast
+                var success = await _readStateService.MarkAsReadAsync(id, userId, deviceId, userAgent, "web");
+
+                if (!success)
                 {
-                    notification.IsRead = true;
-                    notification.ReadAt = DateTime.UtcNow;
-                    await _context.SaveChangesAsync();
+                    return StatusCode(500, new ApiResponse<bool>
+                    {
+                        Success = false,
+                        Message = "Failed to mark notification as read"
+                    });
                 }
 
                 return Ok(new ApiResponse<bool>
@@ -213,7 +230,7 @@ namespace AmesaBackend.Notification.Controllers
 
         [HttpPut("read-all")]
         [Authorize]
-        public async Task<ActionResult<ApiResponse<bool>>> MarkAllAsRead()
+        public async Task<ActionResult<ApiResponse<bool>>> MarkAllAsRead([FromQuery] string? notificationTypeCode = null)
         {
             try
             {
@@ -227,24 +244,14 @@ namespace AmesaBackend.Notification.Controllers
                     });
                 }
 
-                var notifications = await _context.UserNotifications
-                    .Where(n => n.UserId == userId && !n.IsRead)
-                    .ToListAsync();
-
-                var now = DateTime.UtcNow;
-                foreach (var notification in notifications)
-                {
-                    notification.IsRead = true;
-                    notification.ReadAt = now;
-                }
-
-                await _context.SaveChangesAsync();
+                // Use read state service for proper tracking and SignalR broadcast
+                var count = await _readStateService.MarkAllAsReadAsync(userId, notificationTypeCode);
 
                 return Ok(new ApiResponse<bool>
                 {
                     Success = true,
                     Data = true,
-                    Message = $"{notifications.Count} notification(s) marked as read"
+                    Message = $"{count} notification(s) marked as read"
                 });
             }
             catch (Exception ex)
@@ -254,6 +261,170 @@ namespace AmesaBackend.Notification.Controllers
                 {
                     Success = false,
                     Message = "Failed to mark all notifications as read"
+                });
+            }
+        }
+
+        [HttpPut("{id}/unread")]
+        [Authorize]
+        public async Task<ActionResult<ApiResponse<bool>>> MarkAsUnread(Guid id)
+        {
+            try
+            {
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+                {
+                    return Unauthorized(new ApiResponse<bool>
+                    {
+                        Success = false,
+                        Message = "Invalid user authentication"
+                    });
+                }
+
+                // Verify notification exists and belongs to user (not soft-deleted)
+                var notification = await _context.UserNotifications
+                    .FirstOrDefaultAsync(n => n.Id == id && n.UserId == userId && !n.IsDeleted);
+
+                if (notification == null)
+                {
+                    return NotFound(new ApiResponse<bool>
+                    {
+                        Success = false,
+                        Message = "Notification not found"
+                    });
+                }
+
+                var success = await _readStateService.MarkAsUnreadAsync(id, userId);
+
+                if (!success)
+                {
+                    return StatusCode(500, new ApiResponse<bool>
+                    {
+                        Success = false,
+                        Message = "Failed to mark notification as unread"
+                    });
+                }
+
+                return Ok(new ApiResponse<bool>
+                {
+                    Success = true,
+                    Data = true,
+                    Message = "Notification marked as unread"
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error marking notification {NotificationId} as unread", id);
+                return StatusCode(500, new ApiResponse<bool>
+                {
+                    Success = false,
+                    Message = "Failed to mark notification as unread"
+                });
+            }
+        }
+
+        [HttpGet("{id}/read-history")]
+        [Authorize]
+        public async Task<ActionResult<ApiResponse<List<NotificationReadHistoryDto>>>> GetReadHistory(Guid id)
+        {
+            try
+            {
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+                {
+                    return Unauthorized(new ApiResponse<List<NotificationReadHistoryDto>>
+                    {
+                        Success = false,
+                        Message = "Invalid user authentication"
+                    });
+                }
+
+                // Verify notification exists and belongs to user (not soft-deleted)
+                var notification = await _context.UserNotifications
+                    .FirstOrDefaultAsync(n => n.Id == id && n.UserId == userId && !n.IsDeleted);
+
+                if (notification == null)
+                {
+                    return NotFound(new ApiResponse<List<NotificationReadHistoryDto>>
+                    {
+                        Success = false,
+                        Message = "Notification not found"
+                    });
+                }
+
+                var history = await _readStateService.GetReadHistoryAsync(id);
+
+                var historyDto = history.Select(h => new NotificationReadHistoryDto
+                {
+                    Id = h.Id,
+                    NotificationId = h.NotificationId,
+                    UserId = h.UserId,
+                    ReadAt = h.ReadAt,
+                    DeviceId = h.DeviceId,
+                    DeviceName = h.DeviceName,
+                    Channel = h.Channel,
+                    ReadMethod = h.ReadMethod
+                }).ToList();
+
+                return Ok(new ApiResponse<List<NotificationReadHistoryDto>>
+                {
+                    Success = true,
+                    Data = historyDto,
+                    Message = "Read history retrieved successfully"
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching read history for notification {NotificationId}", id);
+                return StatusCode(500, new ApiResponse<List<NotificationReadHistoryDto>>
+                {
+                    Success = false,
+                    Message = "Failed to fetch read history"
+                });
+            }
+        }
+
+        [HttpPost("sync-read-state")]
+        [Authorize]
+        public async Task<ActionResult<ApiResponse<bool>>> SyncReadState([FromBody] SyncReadStateRequest request)
+        {
+            try
+            {
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+                {
+                    return Unauthorized(new ApiResponse<bool>
+                    {
+                        Success = false,
+                        Message = "Invalid user authentication"
+                    });
+                }
+
+                if (request == null || request.ReadNotificationIds == null || request.ReadNotificationIds.Count == 0)
+                {
+                    return BadRequest(new ApiResponse<bool>
+                    {
+                        Success = false,
+                        Message = "Read notification IDs are required"
+                    });
+                }
+
+                await _readStateService.SyncReadStateAsync(userId, request.ReadNotificationIds);
+
+                return Ok(new ApiResponse<bool>
+                {
+                    Success = true,
+                    Data = true,
+                    Message = $"Synced {request.ReadNotificationIds.Count} notification read state(s)"
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error syncing read state");
+                return StatusCode(500, new ApiResponse<bool>
+                {
+                    Success = false,
+                    Message = "Failed to sync read state"
                 });
             }
         }
@@ -275,7 +446,7 @@ namespace AmesaBackend.Notification.Controllers
                 }
 
                 var notification = await _context.UserNotifications
-                    .FirstOrDefaultAsync(n => n.Id == id && n.UserId == userId);
+                    .FirstOrDefaultAsync(n => n.Id == id && n.UserId == userId && !n.IsDeleted);
 
                 if (notification == null)
                 {
@@ -286,7 +457,10 @@ namespace AmesaBackend.Notification.Controllers
                     });
                 }
 
-                _context.UserNotifications.Remove(notification);
+                // Soft delete instead of hard delete
+                notification.IsDeleted = true;
+                notification.DeletedAt = DateTime.UtcNow;
+                notification.DeletedBy = userIdClaim;
                 await _context.SaveChangesAsync();
 
                 return Ok(new ApiResponse<bool>
@@ -353,6 +527,69 @@ namespace AmesaBackend.Notification.Controllers
             }
         }
 
+        [HttpGet("{id}/delivery-status-history")]
+        [Authorize]
+        public async Task<ActionResult<ApiResponse<List<DeliveryStatusHistoryDto>>>> GetDeliveryStatusHistory(Guid id)
+        {
+            try
+            {
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+                {
+                    return Unauthorized(new ApiResponse<List<DeliveryStatusHistoryDto>>
+                    {
+                        Success = false,
+                        Message = "Invalid user authentication"
+                    });
+                }
+
+                // Verify notification belongs to user (not soft-deleted)
+                var notification = await _context.UserNotifications
+                    .FirstOrDefaultAsync(n => n.Id == id && n.UserId == userId && !n.IsDeleted);
+
+                if (notification == null)
+                {
+                    return NotFound(new ApiResponse<List<DeliveryStatusHistoryDto>>
+                    {
+                        Success = false,
+                        Message = "Notification not found"
+                    });
+                }
+
+                // Get all delivery status history for this notification
+                var history = await _context.NotificationDeliveryStatusHistories
+                    .Where(h => h.Delivery != null && h.Delivery.NotificationId == id)
+                    .OrderByDescending(h => h.ChangedAt)
+                    .Select(h => new DeliveryStatusHistoryDto
+                    {
+                        Id = h.Id,
+                        DeliveryId = h.DeliveryId,
+                        Status = h.Status,
+                        ChangedAt = h.ChangedAt,
+                        ChangedBy = h.ChangedBy,
+                        Reason = h.Reason,
+                        CreatedAt = h.CreatedAt
+                    })
+                    .ToListAsync();
+
+                return Ok(new ApiResponse<List<DeliveryStatusHistoryDto>>
+                {
+                    Success = true,
+                    Data = history,
+                    Message = "Delivery status history retrieved successfully"
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching delivery status history for notification {NotificationId}", id);
+                return StatusCode(500, new ApiResponse<List<DeliveryStatusHistoryDto>>
+                {
+                    Success = false,
+                    Message = "Failed to fetch delivery status history"
+                });
+            }
+        }
+
         [HttpGet("{id}/delivery-status")]
         [Authorize]
         public async Task<ActionResult<ApiResponse<List<DeliveryStatusDto>>>> GetDeliveryStatus(Guid id)
@@ -369,9 +606,9 @@ namespace AmesaBackend.Notification.Controllers
                     });
                 }
 
-                // Verify notification belongs to user
+                // Verify notification belongs to user (not soft-deleted)
                 var notification = await _context.UserNotifications
-                    .FirstOrDefaultAsync(n => n.Id == id && n.UserId == userId);
+                    .FirstOrDefaultAsync(n => n.Id == id && n.UserId == userId && !n.IsDeleted);
 
                 if (notification == null)
                 {
@@ -418,9 +655,9 @@ namespace AmesaBackend.Notification.Controllers
                     });
                 }
 
-                // Verify notification belongs to user
+                // Verify notification belongs to user (not soft-deleted)
                 var notification = await _context.UserNotifications
-                    .FirstOrDefaultAsync(n => n.Id == id && n.UserId == userId);
+                    .FirstOrDefaultAsync(n => n.Id == id && n.UserId == userId && !n.IsDeleted);
 
                 if (notification == null)
                 {
@@ -678,11 +915,284 @@ namespace AmesaBackend.Notification.Controllers
                 });
             }
         }
+
+        [HttpGet("preferences/features")]
+        [Authorize]
+        public async Task<ActionResult<ApiResponse<List<FeaturePreferenceDto>>>> GetFeaturePreferences()
+        {
+            try
+            {
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+                {
+                    return Unauthorized(new ApiResponse<List<FeaturePreferenceDto>>
+                    {
+                        Success = false,
+                        Message = "Invalid user authentication"
+                    });
+                }
+
+                var preferences = await _preferenceService.GetFeaturePreferencesAsync(userId);
+
+                var dtos = preferences.Select(p => new FeaturePreferenceDto
+                {
+                    Id = p.Id,
+                    Feature = p.Feature,
+                    Enabled = p.Enabled,
+                    Channels = p.Channels.ToList(),
+                    FrequencyLimit = p.FrequencyLimit,
+                    FrequencyWindow = p.FrequencyWindow,
+                    QuietHoursStart = p.QuietHoursStart,
+                    QuietHoursEnd = p.QuietHoursEnd
+                }).ToList();
+
+                return Ok(new ApiResponse<List<FeaturePreferenceDto>>
+                {
+                    Success = true,
+                    Data = dtos,
+                    Message = "Feature preferences retrieved successfully"
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching feature preferences");
+                return StatusCode(500, new ApiResponse<List<FeaturePreferenceDto>>
+                {
+                    Success = false,
+                    Message = "Failed to fetch feature preferences"
+                });
+            }
+        }
+
+        [HttpPut("preferences/features")]
+        [Authorize]
+        public async Task<ActionResult<ApiResponse<FeaturePreferenceDto>>> UpdateFeaturePreference([FromBody] UpdateFeaturePreferenceRequest request)
+        {
+            try
+            {
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+                {
+                    return Unauthorized(new ApiResponse<FeaturePreferenceDto>
+                    {
+                        Success = false,
+                        Message = "Invalid user authentication"
+                    });
+                }
+
+                var preference = await _preferenceService.GetFeaturePreferenceAsync(userId, request.Feature);
+                var enabled = request.Enabled ?? preference?.Enabled ?? true;
+                var channels = request.Channels?.ToArray() ?? preference?.Channels;
+
+                await _preferenceService.UpdateFeaturePreferenceAsync(
+                    userId,
+                    request.Feature,
+                    enabled,
+                    channels,
+                    request.QuietHoursStart,
+                    request.QuietHoursEnd,
+                    request.FrequencyLimit,
+                    request.FrequencyWindow);
+
+                var updated = await _preferenceService.GetFeaturePreferenceAsync(userId, request.Feature);
+                if (updated == null)
+                {
+                    return StatusCode(500, new ApiResponse<FeaturePreferenceDto>
+                    {
+                        Success = false,
+                        Message = "Failed to retrieve updated preference"
+                    });
+                }
+
+                var dto = new FeaturePreferenceDto
+                {
+                    Id = updated.Id,
+                    Feature = updated.Feature,
+                    Enabled = updated.Enabled,
+                    Channels = updated.Channels.ToList(),
+                    FrequencyLimit = updated.FrequencyLimit,
+                    FrequencyWindow = updated.FrequencyWindow,
+                    QuietHoursStart = updated.QuietHoursStart,
+                    QuietHoursEnd = updated.QuietHoursEnd
+                };
+
+                return Ok(new ApiResponse<FeaturePreferenceDto>
+                {
+                    Success = true,
+                    Data = dto,
+                    Message = "Feature preference updated successfully"
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating feature preference");
+                return StatusCode(500, new ApiResponse<FeaturePreferenceDto>
+                {
+                    Success = false,
+                    Message = "Failed to update feature preference"
+                });
+            }
+        }
+
+        [HttpGet("preferences/types")]
+        [Authorize]
+        public async Task<ActionResult<ApiResponse<List<TypePreferenceDto>>>> GetTypePreferences()
+        {
+            try
+            {
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+                {
+                    return Unauthorized(new ApiResponse<List<TypePreferenceDto>>
+                    {
+                        Success = false,
+                        Message = "Invalid user authentication"
+                    });
+                }
+
+                var preferences = await _preferenceService.GetTypePreferencesAsync(userId);
+
+                var dtos = preferences.Select(p => new TypePreferenceDto
+                {
+                    Id = p.Id,
+                    NotificationTypeCode = p.NotificationTypeCode,
+                    Enabled = p.Enabled,
+                    Channels = p.Channels.ToList(),
+                    Priority = p.Priority
+                }).ToList();
+
+                return Ok(new ApiResponse<List<TypePreferenceDto>>
+                {
+                    Success = true,
+                    Data = dtos,
+                    Message = "Type preferences retrieved successfully"
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching type preferences");
+                return StatusCode(500, new ApiResponse<List<TypePreferenceDto>>
+                {
+                    Success = false,
+                    Message = "Failed to fetch type preferences"
+                });
+            }
+        }
+
+        [HttpPut("preferences/types")]
+        [Authorize]
+        public async Task<ActionResult<ApiResponse<TypePreferenceDto>>> UpdateTypePreference([FromBody] UpdateTypePreferenceRequest request)
+        {
+            try
+            {
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+                {
+                    return Unauthorized(new ApiResponse<TypePreferenceDto>
+                    {
+                        Success = false,
+                        Message = "Invalid user authentication"
+                    });
+                }
+
+                var preference = await _preferenceService.GetTypePreferenceAsync(userId, request.NotificationTypeCode);
+                var enabled = request.Enabled ?? preference?.Enabled ?? true;
+                var channels = request.Channels?.ToArray() ?? preference?.Channels;
+                var priority = request.Priority ?? preference?.Priority ?? 5;
+
+                await _preferenceService.UpdateTypePreferenceAsync(
+                    userId,
+                    request.NotificationTypeCode,
+                    enabled,
+                    channels,
+                    priority);
+
+                var updated = await _preferenceService.GetTypePreferenceAsync(userId, request.NotificationTypeCode);
+                if (updated == null)
+                {
+                    return StatusCode(500, new ApiResponse<TypePreferenceDto>
+                    {
+                        Success = false,
+                        Message = "Failed to retrieve updated preference"
+                    });
+                }
+
+                var dto = new TypePreferenceDto
+                {
+                    Id = updated.Id,
+                    NotificationTypeCode = updated.NotificationTypeCode,
+                    Enabled = updated.Enabled,
+                    Channels = updated.Channels.ToList(),
+                    Priority = updated.Priority
+                };
+
+                return Ok(new ApiResponse<TypePreferenceDto>
+                {
+                    Success = true,
+                    Data = dto,
+                    Message = "Type preference updated successfully"
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating type preference");
+                return StatusCode(500, new ApiResponse<TypePreferenceDto>
+                {
+                    Success = false,
+                    Message = "Failed to update type preference"
+                });
+            }
+        }
     }
 
     public class ResendNotificationRequest
     {
         public string? Channel { get; set; }
+    }
+
+    // Feature and Type Preference DTOs
+    public class FeaturePreferenceDto
+    {
+        public Guid Id { get; set; }
+        public string Feature { get; set; } = string.Empty;
+        public bool Enabled { get; set; }
+        public List<string> Channels { get; set; } = new();
+        public int? FrequencyLimit { get; set; }
+        public string? FrequencyWindow { get; set; }
+        public TimeSpan? QuietHoursStart { get; set; }
+        public TimeSpan? QuietHoursEnd { get; set; }
+    }
+
+    public class TypePreferenceDto
+    {
+        public Guid Id { get; set; }
+        public string NotificationTypeCode { get; set; } = string.Empty;
+        public bool Enabled { get; set; }
+        public List<string> Channels { get; set; } = new();
+        public int Priority { get; set; }
+    }
+
+    public class UpdateFeaturePreferenceRequest
+    {
+        [Required]
+        [StringLength(100)]
+        public string Feature { get; set; } = string.Empty;
+        public bool? Enabled { get; set; }
+        public List<string>? Channels { get; set; }
+        public int? FrequencyLimit { get; set; }
+        public string? FrequencyWindow { get; set; }
+        public TimeSpan? QuietHoursStart { get; set; }
+        public TimeSpan? QuietHoursEnd { get; set; }
+    }
+
+    public class UpdateTypePreferenceRequest
+    {
+        [Required]
+        [StringLength(100)]
+        public string NotificationTypeCode { get; set; } = string.Empty;
+        public bool? Enabled { get; set; }
+        public List<string>? Channels { get; set; }
+        public int? Priority { get; set; }
     }
 }
 

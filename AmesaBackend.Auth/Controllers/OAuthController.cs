@@ -6,8 +6,9 @@ using Microsoft.AspNetCore.Authorization;
 using AmesaBackend.Auth.Services;
 using AmesaBackend.Auth.Models;
 using AmesaBackend.Auth.DTOs;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Distributed;
 using System.Security.Cryptography;
+using System.Text.Json;
 
 namespace AmesaBackend.Auth.Controllers
 {
@@ -18,21 +19,48 @@ namespace AmesaBackend.Auth.Controllers
         private readonly IAuthService _authService;
         private readonly IConfiguration _configuration;
         private readonly ILogger<OAuthController> _logger;
-        private readonly IMemoryCache _memoryCache;
+        private readonly IDistributedCache _distributedCache;
         private readonly IRateLimitService _rateLimitService;
+        private readonly JsonSerializerOptions _jsonOptions;
 
         public OAuthController(
             IAuthService authService,
             IConfiguration configuration,
             ILogger<OAuthController> logger,
-            IMemoryCache memoryCache,
+            IDistributedCache distributedCache,
             IRateLimitService rateLimitService)
         {
             _authService = authService;
             _configuration = configuration;
             _logger = logger;
-            _memoryCache = memoryCache;
+            _distributedCache = distributedCache;
             _rateLimitService = rateLimitService;
+            _jsonOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+        }
+
+        /// <summary>
+        /// Builds an error redirect URL with error code and optional details
+        /// </summary>
+        private string BuildErrorRedirectUrl(string errorCode, string? provider = null, Dictionary<string, object>? details = null)
+        {
+            var frontendUrl = _configuration["FrontendUrl"] ?? "https://dpqbvdgnenckf.cloudfront.net";
+            var errorParams = new List<string> { $"error_code={Uri.EscapeDataString(errorCode)}" };
+            
+            if (!string.IsNullOrEmpty(provider))
+            {
+                errorParams.Add($"provider={Uri.EscapeDataString(provider)}");
+            }
+            
+            if (details != null && details.Count > 0)
+            {
+                // Encode details as JSON and base64 for URL safety
+                var detailsJson = JsonSerializer.Serialize(details, _jsonOptions);
+                var detailsBase64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(detailsJson))
+                    .Replace('+', '-').Replace('/', '_').TrimEnd('=');
+                errorParams.Add($"details={Uri.EscapeDataString(detailsBase64)}");
+            }
+            
+            return $"{frontendUrl}/auth/callback?{string.Join("&", errorParams)}";
         }
 
         [HttpGet("google")]
@@ -87,9 +115,12 @@ namespace AmesaBackend.Auth.Controllers
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error initiating Google OAuth");
-                var frontendUrl = _configuration["FrontendUrl"] ?? "https://dpqbvdgnenckf.cloudfront.net";
-                return Redirect($"{frontendUrl}/auth/callback?error={Uri.EscapeDataString("Failed to initiate Google login")}");
+                _logger.LogError(ex, "Error initiating Google OAuth. Exception: {ExceptionType}, Message: {Message}", 
+                    ex.GetType().Name, ex.Message);
+                return Redirect(BuildErrorRedirectUrl("OAUTH_INIT_FAILED", "Google", new Dictionary<string, object>
+                {
+                    { "exception_type", ex.GetType().Name }
+                }));
             }
         }
 
@@ -107,16 +138,14 @@ namespace AmesaBackend.Auth.Controllers
                     ?? "unknown";
                 var rateLimitKey = $"oauth:google-callback:{clientIp}";
                 
-                // Increment rate limit counter
-                await _rateLimitService.IncrementRateLimitAsync(rateLimitKey, TimeSpan.FromMinutes(15));
-                var currentCount = await _rateLimitService.GetCurrentCountAsync(rateLimitKey);
-                
+                // Atomically increment and check rate limit to prevent race conditions
                 // Allow maximum 10 OAuth callback attempts per 15 minutes per IP
+                var isAllowed = await _rateLimitService.IncrementAndCheckRateLimitAsync(rateLimitKey, 10, TimeSpan.FromMinutes(15));
                 var frontendUrl = _configuration["FrontendUrl"] ?? "http://localhost:4200";
                 
-                if (currentCount > 10)
+                if (!isAllowed)
                 {
-                    _logger.LogWarning("OAuth callback rate limit exceeded for IP: {ClientIp}, Count: {Count}", clientIp, currentCount);
+                    _logger.LogWarning("OAuth callback rate limit exceeded for IP: {ClientIp}", clientIp);
                     var errorFrontendUrl = _configuration["FrontendUrl"] ?? "https://dpqbvdgnenckf.cloudfront.net";
                     return Redirect($"{errorFrontendUrl}/auth/callback?error={Uri.EscapeDataString("Too many authentication attempts. Please try again later.")}");
                 }
@@ -139,8 +168,13 @@ namespace AmesaBackend.Auth.Controllers
                 
                 if (!googleResult.Succeeded)
                 {
-                    _logger.LogWarning("Google OAuth callback: Google authentication failed or not authenticated");
-                    return Redirect($"{frontendUrl}/auth/callback?error={Uri.EscapeDataString("Google authentication failed")}");
+                    var failureReason = googleResult.Failure?.Message ?? "Unknown";
+                    _logger.LogWarning("Google OAuth callback: Authentication failed. Reason: {Reason}, Failure: {Failure}", 
+                        failureReason, googleResult.Failure?.ToString() ?? "None");
+                    return Redirect(BuildErrorRedirectUrl("OAUTH_AUTHENTICATION_FAILED", "Google", new Dictionary<string, object>
+                    {
+                        { "reason", failureReason }
+                    }));
                 }
 
                 // Get email from authenticated principal (used in multiple places)
@@ -164,18 +198,22 @@ namespace AmesaBackend.Auth.Controllers
                     !string.IsNullOrEmpty(tempToken), 
                     tempToken?.Length ?? 0,
                     googleResult.Properties?.Items.TryGetValue("temp_token", out _) == true ? "Properties" : Request.Query.ContainsKey("temp_token") ? "Query" : "None");
+                // Note: tempToken value is NOT logged for security
                 // #endregion
                 
                 // If not found in properties, try to get it from email cache (fallback)
                 if (string.IsNullOrEmpty(tempToken) && !string.IsNullOrEmpty(email))
                 {
-                    var emailCacheKey = $"oauth_temp_token_{email}";
-                    if (_memoryCache.TryGetValue(emailCacheKey, out string? cachedToken) && !string.IsNullOrEmpty(cachedToken))
+                    // Use hashed email for cache key to protect privacy
+                    var emailHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(email.ToLowerInvariant())));
+                    var emailCacheKey = $"oauth_temp_token_{emailHash}";
+                    var cachedTokenBytes = await _distributedCache.GetAsync(emailCacheKey);
+                    if (cachedTokenBytes != null && cachedTokenBytes.Length > 0)
                     {
-                        tempToken = cachedToken;
+                        tempToken = System.Text.Encoding.UTF8.GetString(cachedTokenBytes);
                         _logger.LogInformation("Google OAuth callback: Found temp_token from email cache");
                         // Remove from cache after use
-                        _memoryCache.Remove(emailCacheKey);
+                        await _distributedCache.RemoveAsync(emailCacheKey);
                     }
                 }
                 
@@ -233,19 +271,28 @@ namespace AmesaBackend.Auth.Controllers
 
                         var fallbackTempToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
                         var cacheKey = $"oauth_token_{fallbackTempToken}";
-                        _logger.LogInformation("[DEBUG] GoogleCallback:creating-token-cache cacheKey={CacheKey} hasAccessToken={HasAccessToken} isNewUser={IsNewUser} userAlreadyExists={UserAlreadyExists}", 
-                            cacheKey,
+                        _logger.LogInformation("[DEBUG] GoogleCallback:creating-token-cache hasAccessToken={HasAccessToken} isNewUser={IsNewUser} userAlreadyExists={UserAlreadyExists}", 
                             !string.IsNullOrEmpty(authResponse.Response.AccessToken),
                             authResponse.IsNewUser,
                             !authResponse.IsNewUser);
-                        _memoryCache.Set(cacheKey, new OAuthTokenCache
+                        // Note: cacheKey and token values are NOT logged for security
+                        var cacheExpiration = TimeSpan.FromMinutes(
+                            _configuration.GetValue<int>("SecuritySettings:OAuthTokenCacheExpirationMinutes", 5));
+                        var cacheData = new OAuthTokenCache
                         {
                             AccessToken = authResponse.Response.AccessToken,
                             RefreshToken = authResponse.Response.RefreshToken,
                             ExpiresAt = authResponse.Response.ExpiresAt,
                             IsNewUser = authResponse.IsNewUser,
                             UserAlreadyExists = !authResponse.IsNewUser
-                        }, TimeSpan.FromMinutes(10)); // Increased from 5 to 10 minutes to handle delays
+                        };
+                        var cacheJson = JsonSerializer.Serialize(cacheData, _jsonOptions);
+                        var cacheBytes = System.Text.Encoding.UTF8.GetBytes(cacheJson);
+                        var cacheOptions = new DistributedCacheEntryOptions
+                        {
+                            AbsoluteExpirationRelativeToNow = cacheExpiration
+                        };
+                        await _distributedCache.SetAsync(cacheKey, cacheBytes, cacheOptions);
 
                         await HttpContext.SignOutAsync("Cookies");
                         await HttpContext.SignOutAsync(GoogleDefaults.AuthenticationScheme);
@@ -253,16 +300,24 @@ namespace AmesaBackend.Auth.Controllers
                     }
                 }
 
-                _logger.LogWarning("Google OAuth callback: Could not process callback - redirecting to frontend with error");
+                _logger.LogWarning("Google OAuth callback: Could not process callback - missing required data (email or googleId)");
                 await HttpContext.SignOutAsync("Cookies");
                 await HttpContext.SignOutAsync(GoogleDefaults.AuthenticationScheme);
-                return Redirect($"{frontendUrl}/auth/callback?error={Uri.EscapeDataString("Error processing authentication")}");
+                return Redirect(BuildErrorRedirectUrl("OAUTH_MISSING_DATA", "Google", new Dictionary<string, object>
+                {
+                    { "missing", "email or googleId" }
+                }));
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error processing Google OAuth callback");
-                var frontendUrl = _configuration["FrontendUrl"] ?? "http://localhost:4200";
-                return Redirect($"{frontendUrl}/auth/callback?error={Uri.EscapeDataString("Error processing authentication")}");
+                _logger.LogError(ex, "Error processing Google OAuth callback. Exception: {ExceptionType}, Message: {Message}, StackTrace: {StackTrace}", 
+                    ex.GetType().Name, ex.Message, ex.StackTrace);
+                await HttpContext.SignOutAsync("Cookies");
+                await HttpContext.SignOutAsync(GoogleDefaults.AuthenticationScheme);
+                return Redirect(BuildErrorRedirectUrl("OAUTH_PROCESSING_ERROR", "Google", new Dictionary<string, object>
+                {
+                    { "exception_type", ex.GetType().Name }
+                }));
             }
         }
 
@@ -313,9 +368,12 @@ namespace AmesaBackend.Auth.Controllers
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error initiating Meta OAuth");
-                var frontendUrl = _configuration["FrontendUrl"] ?? "https://dpqbvdgnenckf.cloudfront.net";
-                return Redirect($"{frontendUrl}/auth/callback?error={Uri.EscapeDataString("Failed to initiate Meta login")}");
+                _logger.LogError(ex, "Error initiating Meta OAuth. Exception: {ExceptionType}, Message: {Message}", 
+                    ex.GetType().Name, ex.Message);
+                return Redirect(BuildErrorRedirectUrl("OAUTH_INIT_FAILED", "Meta", new Dictionary<string, object>
+                {
+                    { "exception_type", ex.GetType().Name }
+                }));
             }
         }
 
@@ -332,28 +390,34 @@ namespace AmesaBackend.Auth.Controllers
                     ?? "unknown";
                 var rateLimitKey = $"oauth:meta-callback:{clientIp}";
                 
-                // Increment rate limit counter
-                await _rateLimitService.IncrementRateLimitAsync(rateLimitKey, TimeSpan.FromMinutes(15));
-                var currentCount = await _rateLimitService.GetCurrentCountAsync(rateLimitKey);
-                
+                // Atomically increment and check rate limit to prevent race conditions
                 // Allow maximum 10 OAuth callback attempts per 15 minutes per IP
+                var isAllowed = await _rateLimitService.IncrementAndCheckRateLimitAsync(rateLimitKey, 10, TimeSpan.FromMinutes(15));
                 var frontendUrl = _configuration["FrontendUrl"] ?? 
                                  _configuration.GetSection("AllowedOrigins").Get<string[]>()?[0] ?? 
                                  "https://dpqbvdgnenckf.cloudfront.net";
                 
-                if (currentCount > 10)
+                if (!isAllowed)
                 {
-                    _logger.LogWarning("OAuth callback rate limit exceeded for IP: {ClientIp}, Count: {Count}", clientIp, currentCount);
-                    var errorFrontendUrl = _configuration["FrontendUrl"] ?? "https://dpqbvdgnenckf.cloudfront.net";
-                    return Redirect($"{errorFrontendUrl}/auth/callback?error={Uri.EscapeDataString("Too many authentication attempts. Please try again later.")}");
+                    _logger.LogWarning("OAuth callback rate limit exceeded for IP: {ClientIp}, Provider: Meta", clientIp);
+                    return Redirect(BuildErrorRedirectUrl("OAUTH_RATE_LIMIT_EXCEEDED", "Meta", new Dictionary<string, object>
+                    {
+                        { "ip", clientIp },
+                        { "retry_after_minutes", 15 }
+                    }));
                 }
 
                 var result = await HttpContext.AuthenticateAsync(FacebookDefaults.AuthenticationScheme);
 
                 if (!result.Succeeded)
                 {
-                    _logger.LogWarning("Meta authentication failed");
-                    return Redirect($"{frontendUrl}/auth/callback?error={Uri.EscapeDataString("Meta authentication failed")}");
+                    var failureReason = result.Failure?.Message ?? "Unknown";
+                    _logger.LogWarning("Meta OAuth callback: Authentication failed. Reason: {Reason}, Failure: {Failure}", 
+                        failureReason, result.Failure?.ToString() ?? "None");
+                    return Redirect(BuildErrorRedirectUrl("OAUTH_AUTHENTICATION_FAILED", "Meta", new Dictionary<string, object>
+                    {
+                        { "reason", failureReason }
+                    }));
                 }
 
                 var claims = result.Principal?.Claims.ToList() ?? new List<System.Security.Claims.Claim>();
@@ -372,8 +436,12 @@ namespace AmesaBackend.Auth.Controllers
 
                 if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(metaId))
                 {
-                    _logger.LogWarning("Meta authentication: missing email or ID");
-                    return Redirect($"{frontendUrl}/auth/callback?error={Uri.EscapeDataString("Invalid Meta authentication data")}");
+                    _logger.LogWarning("Meta OAuth callback: Missing required data. Email: {HasEmail}, MetaId: {HasMetaId}", 
+                        !string.IsNullOrEmpty(email), !string.IsNullOrEmpty(metaId));
+                    return Redirect(BuildErrorRedirectUrl("OAUTH_MISSING_DATA", "Meta", new Dictionary<string, object>
+                    {
+                        { "missing", string.IsNullOrEmpty(email) ? "email" : "metaId" }
+                    }));
                 }
 
                 // Parse Meta birthday (format: MM/DD/YYYY or MM/DD)
@@ -424,33 +492,47 @@ namespace AmesaBackend.Auth.Controllers
                 var tempToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
                 
                 var cacheKey = $"oauth_token_{tempToken}";
-                _logger.LogInformation("[DEBUG] MetaCallback:creating-token-cache cacheKey={CacheKey} hasAccessToken={HasAccessToken} isNewUser={IsNewUser} userAlreadyExists={UserAlreadyExists}", 
-                    cacheKey,
+                _logger.LogInformation("[DEBUG] MetaCallback:creating-token-cache hasAccessToken={HasAccessToken} isNewUser={IsNewUser} userAlreadyExists={UserAlreadyExists}", 
                     !string.IsNullOrEmpty(authResponse.Response.AccessToken),
                     authResponse.IsNewUser,
                     !authResponse.IsNewUser);
-                _memoryCache.Set(cacheKey, new OAuthTokenCache
+                // Note: cacheKey and token values are NOT logged for security
+                var cacheExpiration = TimeSpan.FromMinutes(
+                    _configuration.GetValue<int>("SecuritySettings:OAuthTokenCacheExpirationMinutes", 5));
+                var cacheData = new OAuthTokenCache
                 {
                     AccessToken = authResponse.Response.AccessToken,
                     RefreshToken = authResponse.Response.RefreshToken,
                     ExpiresAt = authResponse.Response.ExpiresAt,
                     IsNewUser = authResponse.IsNewUser,
                     UserAlreadyExists = !authResponse.IsNewUser
-                }, TimeSpan.FromMinutes(10)); // Increased from 5 to 10 minutes to handle delays
+                };
+                var cacheJson = JsonSerializer.Serialize(cacheData, _jsonOptions);
+                var cacheBytes = System.Text.Encoding.UTF8.GetBytes(cacheJson);
+                var cacheOptions = new DistributedCacheEntryOptions
+                {
+                    AbsoluteExpirationRelativeToNow = cacheExpiration
+                };
+                await _distributedCache.SetAsync(cacheKey, cacheBytes, cacheOptions);
 
                 return Redirect($"{frontendUrl}/auth/callback?code={Uri.EscapeDataString(tempToken)}");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error processing Meta OAuth callback");
-                var frontendUrl = _configuration["FrontendUrl"] ?? "https://dpqbvdgnenckf.cloudfront.net";
-                return Redirect($"{frontendUrl}/auth/callback?error={Uri.EscapeDataString("Error processing Meta authentication")}");
+                _logger.LogError(ex, "Error processing Meta OAuth callback. Exception: {ExceptionType}, Message: {Message}, StackTrace: {StackTrace}", 
+                    ex.GetType().Name, ex.Message, ex.StackTrace);
+                await HttpContext.SignOutAsync("Cookies");
+                await HttpContext.SignOutAsync(FacebookDefaults.AuthenticationScheme);
+                return Redirect(BuildErrorRedirectUrl("OAUTH_PROCESSING_ERROR", "Meta", new Dictionary<string, object>
+                {
+                    { "exception_type", ex.GetType().Name }
+                }));
             }
         }
 
         [HttpPost("exchange")]
         [AllowAnonymous]
-        public IActionResult ExchangeToken([FromBody] ExchangeTokenRequest request)
+        public async Task<IActionResult> ExchangeToken([FromBody] ExchangeTokenRequest request)
         {
             try
             {
@@ -460,17 +542,17 @@ namespace AmesaBackend.Auth.Controllers
                 }
 
                 var cacheKey = $"oauth_token_{request.Code}";
-                _logger.LogInformation("[DEBUG] ExchangeToken:entry codeLength={CodeLength} codePreview={CodePreview} cacheKey={CacheKey}", 
+                _logger.LogInformation("[DEBUG] ExchangeToken:entry codeLength={CodeLength} cacheKey={CacheKey}", 
                     request.Code?.Length ?? 0, 
-                    request.Code != null ? request.Code.Substring(0, Math.Min(20, request.Code.Length)) : "null",
                     cacheKey);
                 
-                if (!_memoryCache.TryGetValue(cacheKey, out OAuthTokenCache? cachedData) || cachedData == null)
+                var cachedDataBytes = await _distributedCache.GetAsync(cacheKey);
+                OAuthTokenCache? cachedData = null;
+                
+                if (cachedDataBytes == null || cachedDataBytes.Length == 0)
                 {
-                    _logger.LogWarning("[DEBUG] ExchangeToken:cache-miss codeLength={CodeLength} cacheKey={CacheKey} cacheExists={CacheExists}", 
-                        request.Code?.Length ?? 0, 
-                        cacheKey,
-                        _memoryCache.TryGetValue(cacheKey, out _));
+                _logger.LogWarning("[DEBUG] ExchangeToken:cache-miss codeLength={CodeLength}", 
+                    request.Code?.Length ?? 0);
                     _logger.LogWarning("Invalid or expired OAuth exchange token");
                     return Unauthorized(new ApiResponse<object>
                     {
@@ -489,15 +571,34 @@ namespace AmesaBackend.Auth.Controllers
                     });
                 }
                 
+                // Deserialize cached data
+                var cachedJson = System.Text.Encoding.UTF8.GetString(cachedDataBytes);
+                cachedData = JsonSerializer.Deserialize<OAuthTokenCache>(cachedJson, _jsonOptions);
+                
+                if (cachedData == null)
+                {
+                    _logger.LogWarning("Failed to deserialize OAuth token cache data");
+                    return Unauthorized(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Error = new ErrorResponse
+                        {
+                            Code = "OAUTH_TOKEN_EXPIRED",
+                            Message = "Invalid or expired token. Please try logging in again."
+                        }
+                    });
+                }
+                
                 _logger.LogInformation("[DEBUG] ExchangeToken:cache-hit hasAccessToken={HasAccessToken} hasRefreshToken={HasRefreshToken} isNewUser={IsNewUser} userAlreadyExists={UserAlreadyExists}", 
                     !string.IsNullOrEmpty(cachedData.AccessToken),
                     !string.IsNullOrEmpty(cachedData.RefreshToken),
                     cachedData.IsNewUser,
                     cachedData.UserAlreadyExists);
+                // Note: AccessToken and RefreshToken values are NOT logged for security
                 
                 _logger.LogInformation("Successfully retrieved tokens from cache for code");
 
-                _memoryCache.Remove(cacheKey);
+                await _distributedCache.RemoveAsync(cacheKey);
 
                 // Return wrapped in ApiResponse for consistency with other endpoints
                 return Ok(new ApiResponse<object>

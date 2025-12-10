@@ -5,7 +5,7 @@ using System.Text;
 using AmesaBackend.Payment.Data;
 using AmesaBackend.Payment.Services;
 using AmesaBackend.Payment.Configuration;
-using AmesaBackend.Payment.Middleware;
+using AmesaBackend.Shared.Middleware;
 using AmesaBackend.Shared.Extensions;
 using AmesaBackend.Shared.Middleware.Extensions;
 using AmesaBackend.Auth.Services;
@@ -131,8 +131,8 @@ builder.Services.AddHealthChecks();
 
 var app = builder.Build();
 
-// Security middleware (before other middleware)
-app.UseMiddleware<SecurityHeadersMiddleware>();
+// Security headers middleware (before other middleware)
+app.UseAmesaSecurityHeaders();
 
 // HTTPS redirection and HSTS (production only)
 if (!app.Environment.IsDevelopment())
