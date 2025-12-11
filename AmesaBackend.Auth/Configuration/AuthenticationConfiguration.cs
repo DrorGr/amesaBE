@@ -43,6 +43,10 @@ public static class AuthenticationConfiguration
                 options.CorrelationCookie.Path = "/";
                 options.CorrelationCookie.MaxAge = TimeSpan.FromMinutes(10);
                 
+                // Don't set Domain explicitly - let it default to request host
+                // This ensures the cookie works correctly with CloudFront
+                // The cookie will be set for the CloudFront domain when requests come through CloudFront
+                
                 if (environment.IsDevelopment())
                 {
                     options.CorrelationCookie.SameSite = Microsoft.AspNetCore.Http.SameSiteMode.Lax;
@@ -50,6 +54,8 @@ public static class AuthenticationConfiguration
                 }
                 else
                 {
+                    // Production: SameSite=None requires Secure=true for cross-site cookies
+                    // This is necessary for OAuth redirects from Google back to our domain
                     options.CorrelationCookie.SameSite = Microsoft.AspNetCore.Http.SameSiteMode.None;
                     options.CorrelationCookie.SecurePolicy = Microsoft.AspNetCore.Http.CookieSecurePolicy.Always;
                 }
