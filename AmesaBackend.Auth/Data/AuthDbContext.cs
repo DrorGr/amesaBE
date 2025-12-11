@@ -78,8 +78,8 @@ namespace AmesaBackend.Auth.Data
                 entity.Property(e => e.DocumentNumber).IsRequired().HasMaxLength(100);
                 entity.Property(e => e.ValidationKey).IsRequired();
                 entity.HasIndex(e => e.ValidationKey).IsUnique();
-                entity.Property(e => e.LivenessScore).HasColumnType("decimal(5,2)");
-                entity.Property(e => e.FaceMatchScore).HasColumnType("decimal(5,2)");
+                entity.Property(e => e.LivenessScore).HasColumnName("liveness_score").HasColumnType("decimal(5,2)");
+                entity.Property(e => e.FaceMatchScore).HasColumnName("face_match_score").HasColumnType("decimal(5,2)");
                 entity.Property(e => e.VerificationProvider).HasMaxLength(50);
                 entity.Property(e => e.VerificationMetadata).HasColumnType("jsonb");
                 entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId);
