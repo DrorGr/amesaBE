@@ -262,8 +262,10 @@ namespace AmesaBackend.Auth.Services
             {
                 // Removed CanConnectAsync() check - it causes DbContext thread safety issues
                 // The query will fail gracefully if the database is unavailable
+                // Use AsNoTracking to avoid DbContext concurrency issues
                 
                 var document = await _context.UserIdentityDocuments
+                    .AsNoTracking()
                     .FirstOrDefaultAsync(d => d.UserId == userId);
 
                 if (document == null)
