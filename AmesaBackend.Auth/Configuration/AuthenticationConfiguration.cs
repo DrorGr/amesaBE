@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Authentication.Facebook;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Logging;
 using AmesaBackend.Auth.Services;
 using AmesaBackend.Auth.Models;
@@ -60,7 +60,7 @@ public static class AuthenticationConfiguration
                     {
                         var serviceProvider = context.HttpContext.RequestServices;
                         var authService = serviceProvider.GetRequiredService<IAuthService>();
-                        var memoryCache = serviceProvider.GetRequiredService<IMemoryCache>();
+                        var distributedCache = serviceProvider.GetRequiredService<IDistributedCache>();
                         var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
                         
                         // #region agent log
@@ -158,14 +158,24 @@ public static class AuthenticationConfiguration
                         logger.LogInformation("[DEBUG] OnCreatingTicket:before-cache-set hypothesisId=E cacheKey={CacheKey}", cacheKey);
                         // #endregion
                         
-                        memoryCache.Set(cacheKey, new OAuthTokenCache
+                        // Use distributed cache instead of memory cache for consistency across instances
+                        var cacheExpiration = TimeSpan.FromMinutes(
+                            configuration.GetValue<int>("SecuritySettings:OAuthTokenCacheExpirationMinutes", 5));
+                        var cacheData = new OAuthTokenCache
                         {
                             AccessToken = authResponse.AccessToken,
                             RefreshToken = authResponse.RefreshToken,
                             ExpiresAt = authResponse.ExpiresAt,
                             IsNewUser = isNewUser,
                             UserAlreadyExists = !isNewUser
-                        }, TimeSpan.FromMinutes(5));
+                        };
+                        var cacheJson = System.Text.Json.JsonSerializer.Serialize(cacheData, new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase });
+                        var cacheBytes = System.Text.Encoding.UTF8.GetBytes(cacheJson);
+                        var cacheOptions = new Microsoft.Extensions.Caching.Distributed.DistributedCacheEntryOptions
+                        {
+                            AbsoluteExpirationRelativeToNow = cacheExpiration
+                        };
+                        await distributedCache.SetAsync(cacheKey, cacheBytes, cacheOptions);
 
                         // #region agent log
                         logger.LogInformation("[DEBUG] OnCreatingTicket:after-cache-set hypothesisId=E");
@@ -174,7 +184,8 @@ public static class AuthenticationConfiguration
                         // Use hashed email for cache key to protect privacy
                         var emailHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(email.ToLowerInvariant())));
                         var emailCacheKey = $"oauth_temp_token_{emailHash}";
-                        memoryCache.Set(emailCacheKey, tempToken, TimeSpan.FromMinutes(5));
+                        var emailCacheBytes = System.Text.Encoding.UTF8.GetBytes(tempToken);
+                        await distributedCache.SetAsync(emailCacheKey, emailCacheBytes, cacheOptions);
                         context.Properties.Items["temp_token"] = tempToken;
                         
                         // #region agent log
