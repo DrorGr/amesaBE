@@ -106,6 +106,9 @@ else
     Log.Warning("JWT SecretKey is not configured. Authentication will not work. Set JwtSettings__SecretKey environment variable or configure JwtSettings:SecretKey in appsettings.");
 }
 
+// Add Circuit Breaker Service (required by RateLimitService)
+builder.Services.AddSingleton<ICircuitBreakerService, CircuitBreakerService>();
+
 // Add Rate Limit Service (required by PaymentRateLimitService)
 builder.Services.AddScoped<IRateLimitService, RateLimitService>();
 
