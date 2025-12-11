@@ -12,7 +12,7 @@ namespace AmesaBackend.Auth.Services
     public class AccountRecoveryService : IAccountRecoveryService
     {
         private readonly AuthDbContext _context;
-        private readonly IPasswordResetService _passwordResetService;
+        private readonly Lazy<IPasswordResetService> _passwordResetService;
         private readonly IEmailVerificationService _emailVerificationService;
         private readonly ITokenService _tokenService;
         private readonly IConfiguration _configuration;
@@ -20,7 +20,7 @@ namespace AmesaBackend.Auth.Services
 
         public AccountRecoveryService(
             AuthDbContext context,
-            IPasswordResetService passwordResetService,
+            Lazy<IPasswordResetService> passwordResetService,
             IEmailVerificationService emailVerificationService,
             ITokenService tokenService,
             IConfiguration configuration,
@@ -70,7 +70,7 @@ namespace AmesaBackend.Auth.Services
 
             // Use existing password reset service for email recovery
             var request = new DTOs.ForgotPasswordRequest { Email = email };
-            await _passwordResetService.ForgotPasswordAsync(request);
+            await _passwordResetService.Value.ForgotPasswordAsync(request);
 
             _logger.LogInformation("Email recovery initiated for user: {UserId}", user.Id);
             return true;

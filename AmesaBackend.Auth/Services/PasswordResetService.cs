@@ -17,7 +17,7 @@ public class PasswordResetService : IPasswordResetService
     private readonly IPasswordValidatorService _passwordValidator;
     private readonly ITokenService _tokenService;
     private readonly ISessionService _sessionService;
-    private readonly IAccountRecoveryService _accountRecoveryService;
+    private readonly Lazy<IAccountRecoveryService> _accountRecoveryService;
     private readonly IConfiguration _configuration;
     private readonly ILogger<PasswordResetService> _logger;
     private readonly int _tokenExpiryHours;
@@ -29,7 +29,7 @@ public class PasswordResetService : IPasswordResetService
         IPasswordValidatorService passwordValidator,
         ITokenService tokenService,
         ISessionService sessionService,
-        IAccountRecoveryService accountRecoveryService,
+        Lazy<IAccountRecoveryService> accountRecoveryService,
         IConfiguration configuration,
         ILogger<PasswordResetService> logger)
     {
@@ -127,7 +127,7 @@ public class PasswordResetService : IPasswordResetService
                 };
 
                 // Verify recovery code first
-                var isValid = await _accountRecoveryService.VerifyRecoveryCodeAsync(
+                var isValid = await _accountRecoveryService.Value.VerifyRecoveryCodeAsync(
                     request.Identifier, request.RecoveryCode, method);
 
                 if (!isValid)

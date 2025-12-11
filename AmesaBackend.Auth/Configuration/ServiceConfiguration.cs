@@ -128,7 +128,33 @@ public static class ServiceConfiguration
         services.AddScoped<ITokenService, TokenService>();
         services.AddScoped<ISessionService, SessionService>();
         services.AddScoped<IEmailVerificationService, EmailVerificationService>();
-        services.AddScoped<IPasswordResetService, PasswordResetService>();
+        
+        // Register AccountRecoveryService with Lazy<IPasswordResetService> to break circular dependency
+        services.AddScoped<IAccountRecoveryService>(sp =>
+        {
+            var context = sp.GetRequiredService<AuthDbContext>();
+            var passwordResetService = new Lazy<IPasswordResetService>(() => sp.GetRequiredService<IPasswordResetService>());
+            var emailVerificationService = sp.GetRequiredService<IEmailVerificationService>();
+            var tokenService = sp.GetRequiredService<ITokenService>();
+            var configuration = sp.GetRequiredService<IConfiguration>();
+            var logger = sp.GetRequiredService<ILogger<AccountRecoveryService>>();
+            return new AccountRecoveryService(context, passwordResetService, emailVerificationService, tokenService, configuration, logger);
+        });
+        
+        // Register PasswordResetService with Lazy<IAccountRecoveryService> to break circular dependency
+        services.AddScoped<IPasswordResetService>(sp =>
+        {
+            var context = sp.GetRequiredService<AuthDbContext>();
+            var eventPublisher = sp.GetRequiredService<IEventPublisher>();
+            var passwordValidator = sp.GetRequiredService<IPasswordValidatorService>();
+            var tokenService = sp.GetRequiredService<ITokenService>();
+            var sessionService = sp.GetRequiredService<ISessionService>();
+            var accountRecoveryService = new Lazy<IAccountRecoveryService>(() => sp.GetRequiredService<IAccountRecoveryService>());
+            var configuration = sp.GetRequiredService<IConfiguration>();
+            var logger = sp.GetRequiredService<ILogger<PasswordResetService>>();
+            return new PasswordResetService(context, eventPublisher, passwordValidator, tokenService, sessionService, accountRecoveryService, configuration, logger);
+        });
+        
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<IAdminAuthService, AdminAuthService>();
@@ -138,7 +164,6 @@ public static class ServiceConfiguration
         services.AddScoped<IAwsRekognitionService, AwsRekognitionService>();
         services.AddScoped<IIdentityVerificationService, IdentityVerificationService>();
         services.AddScoped<ITwoFactorService, TwoFactorService>();
-        services.AddScoped<IAccountRecoveryService, AccountRecoveryService>();
         services.AddScoped<IAccountDeletionService, AccountDeletionService>();
         services.AddHttpContextAccessor();
 
