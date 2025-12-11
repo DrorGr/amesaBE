@@ -44,6 +44,10 @@ public static class DatabaseConfiguration
                         maxRetryDelay: TimeSpan.FromSeconds(30),
                         errorCodesToAdd: null);
                 });
+                
+                // Disable concurrency detection to allow concurrent read operations
+                // This is safe when using AsNoTracking() for read operations
+                options.EnableThreadSafetyChecks(false);
             }
 
             if (environment.IsDevelopment())
