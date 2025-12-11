@@ -142,7 +142,10 @@ namespace AmesaBackend.Auth.Services
                 // Update user verification status and profile from ID document if verified
                 if (isVerified)
                 {
-                    var user = await _context.Users.FindAsync(userId);
+                    // Use AsNoTracking and FirstOrDefaultAsync to avoid DbContext concurrency issues
+                    var user = await _context.Users
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(u => u.Id == userId);
                     if (user != null)
                     {
                         user.VerificationStatus = UserVerificationStatus.IdentityVerified;
@@ -223,9 +226,13 @@ namespace AmesaBackend.Auth.Services
                             _logger.LogInformation("Updated user profile from ID document OCR for user {UserId}. Fields updated: {Fields}",
                                 userId, string.Join(", ", updatedFields));
                         }
+                        
+                        // Use Update() to mark the entity as modified since we used AsNoTracking()
+                        _context.Users.Update(user);
                     }
                 }
 
+                // Save changes for both UserIdentityDocument and User (if updated)
                 await _context.SaveChangesAsync();
 
                 _logger.LogInformation("Identity verification completed for user {UserId}. Verified: {IsVerified}, ValidationKey: {ValidationKey}",

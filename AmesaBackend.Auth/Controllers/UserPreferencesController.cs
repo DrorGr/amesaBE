@@ -170,7 +170,10 @@ namespace AmesaBackend.Auth.Controllers
                 _logger.LogInformation("[DEBUG] UpdatePreferences:before-query userId={UserId}", userId);
                 // #endregion
                 
+                // Use AsNoTracking initially to avoid DbContext concurrency issues
+                // We'll attach the entity if we need to update it
                 var existingPreferences = await _context.UserPreferences
+                    .AsNoTracking()
                     .FirstOrDefaultAsync(up => up.UserId == userId);
 
                 // #region agent log
@@ -285,6 +288,7 @@ namespace AmesaBackend.Auth.Controllers
                     }
                     // #endregion
                     
+                    // Update the entity properties
                     existingPreferences.PreferencesJson = preferencesJson;
                     existingPreferences.Version = request.Version ?? existingPreferences.Version;
                     existingPreferences.UpdatedAt = DateTime.UtcNow;
@@ -294,6 +298,8 @@ namespace AmesaBackend.Auth.Controllers
                     _logger.LogInformation("[DEBUG] UpdatePreferences:before-SaveChangesAsync-update existingPreferences.UserId={UserId}", existingPreferences.UserId);
                     // #endregion
                     
+                    // Use Update() to mark the entity as modified (handles both tracked and untracked entities)
+                    _context.UserPreferences.Update(existingPreferences);
                     await _context.SaveChangesAsync();
                     
                     // #region agent log
@@ -376,7 +382,9 @@ namespace AmesaBackend.Auth.Controllers
                     });
                 }
 
+                // Use AsNoTracking to avoid DbContext concurrency issues
                 var existingPreferences = await _context.UserPreferences
+                    .AsNoTracking()
                     .FirstOrDefaultAsync(up => up.UserId == userId);
 
                 var defaultPreferences = CreateDefaultPreferences(userId.Value);
@@ -391,6 +399,9 @@ namespace AmesaBackend.Auth.Controllers
                     existingPreferences.Version = defaultPreferences.Version;
                     existingPreferences.UpdatedAt = DateTime.UtcNow;
                     existingPreferences.UpdatedBy = userId.ToString()!;
+                    
+                    // Use Update() to mark the entity as modified since we used AsNoTracking()
+                    _context.UserPreferences.Update(existingPreferences);
                 }
 
                 await _context.SaveChangesAsync();
