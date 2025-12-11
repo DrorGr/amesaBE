@@ -73,6 +73,7 @@ namespace AmesaBackend.Auth.Data
             // Configure UserIdentityDocument entity
             modelBuilder.Entity<UserIdentityDocument>(entity =>
             {
+                entity.ToTable("user_identity_documents", "amesa_auth");
                 entity.HasKey(e => e.Id);
                 entity.Property(e => e.DocumentType).IsRequired().HasMaxLength(50);
                 entity.Property(e => e.DocumentNumber).IsRequired().HasMaxLength(100);
@@ -82,6 +83,7 @@ namespace AmesaBackend.Auth.Data
                 entity.Property(e => e.FaceMatchScore).HasColumnName("face_match_score").HasColumnType("decimal(5,2)");
                 entity.Property(e => e.VerificationProvider).HasMaxLength(50);
                 entity.Property(e => e.VerificationMetadata).HasColumnType("jsonb");
+                entity.Property(e => e.LastVerificationAttempt).HasColumnName("last_verification_attempt");
                 entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId);
             });
 
