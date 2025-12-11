@@ -802,7 +802,12 @@ namespace AmesaBackend.Auth.Services
 
         public async Task<UserDto> GetCurrentUserAsync(Guid userId)
         {
-            var user = await _context.Users.FindAsync(userId);
+            // Use AsNoTracking to avoid DbContext tracking issues and prevent concurrent operation errors
+            // Also use FirstOrDefaultAsync instead of FindAsync to avoid potential query filter issues
+            var user = await _context.Users
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u => u.Id == userId);
+            
             if (user == null)
             {
                 throw new InvalidOperationException("User not found");
