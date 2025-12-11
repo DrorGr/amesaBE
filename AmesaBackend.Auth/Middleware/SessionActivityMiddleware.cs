@@ -1,5 +1,6 @@
 using AmesaBackend.Auth.Services;
 using System.Security.Claims;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace AmesaBackend.Auth.Middleware
 {
@@ -10,14 +11,16 @@ namespace AmesaBackend.Auth.Middleware
     {
         private readonly RequestDelegate _next;
         private readonly ILogger<SessionActivityMiddleware> _logger;
+        private readonly IServiceProvider _serviceProvider;
 
-        public SessionActivityMiddleware(RequestDelegate next, ILogger<SessionActivityMiddleware> logger)
+        public SessionActivityMiddleware(RequestDelegate next, ILogger<SessionActivityMiddleware> logger, IServiceProvider serviceProvider)
         {
             _next = next;
             _logger = logger;
+            _serviceProvider = serviceProvider;
         }
 
-        public async Task InvokeAsync(HttpContext context, ISessionService sessionService)
+        public async Task InvokeAsync(HttpContext context)
         {
             // Only update activity for authenticated requests
             if (context.User?.Identity?.IsAuthenticated == true)
@@ -30,11 +33,16 @@ namespace AmesaBackend.Auth.Middleware
                     if (!string.IsNullOrEmpty(sessionToken))
                     {
                         // Update session activity asynchronously (fire and forget for performance)
+                        // Create a new scope to get a separate DbContext instance to avoid concurrency issues
                         _ = Task.Run(async () =>
                         {
                             try
                             {
-                                await sessionService.UpdateSessionActivityAsync(sessionToken);
+                                using (var scope = _serviceProvider.CreateScope())
+                                {
+                                    var sessionService = scope.ServiceProvider.GetRequiredService<ISessionService>();
+                                    await sessionService.UpdateSessionActivityAsync(sessionToken);
+                                }
                             }
                             catch (Exception ex)
                             {
