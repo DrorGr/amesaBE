@@ -253,16 +253,9 @@ namespace AmesaBackend.Auth.Services
         {
             try
             {
-                // Check if the table exists and is accessible
-                if (!await _context.Database.CanConnectAsync())
-                {
-                    _logger.LogError("Database connection failed when retrieving verification status for user {UserId}", userId);
-                    return new IdentityVerificationStatusDto
-                    {
-                        VerificationStatus = "not_started"
-                    };
-                }
-
+                // Removed CanConnectAsync() check - it causes DbContext thread safety issues
+                // The query will fail gracefully if the database is unavailable
+                
                 var document = await _context.UserIdentityDocuments
                     .FirstOrDefaultAsync(d => d.UserId == userId);
 
