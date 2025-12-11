@@ -170,8 +170,7 @@ namespace AmesaBackend.Auth.Controllers
                 _logger.LogInformation("[DEBUG] UpdatePreferences:before-query userId={UserId}", userId);
                 // #endregion
                 
-                // Use AsNoTracking initially to avoid DbContext concurrency issues
-                // We'll attach the entity if we need to update it
+                // Check if preferences exist (use AsNoTracking for the check only)
                 var existingPreferences = await _context.UserPreferences
                     .AsNoTracking()
                     .FirstOrDefaultAsync(up => up.UserId == userId);
@@ -206,6 +205,45 @@ namespace AmesaBackend.Auth.Controllers
                         throw;
                     }
                     // #endregion
+                    
+                    // Double-check that preferences weren't created between the check and now (race condition)
+                    var doubleCheckPreferences = await _context.UserPreferences
+                        .FirstOrDefaultAsync(up => up.UserId == userId);
+                    
+                    if (doubleCheckPreferences != null)
+                    {
+                        // Another request created preferences, update instead
+                        _logger.LogInformation("[DEBUG] UpdatePreferences:race-condition-detected, updating existing preferences userId={UserId}", userId);
+                        doubleCheckPreferences.PreferencesJson = preferencesJson;
+                        doubleCheckPreferences.Version = request.Version ?? doubleCheckPreferences.Version;
+                        doubleCheckPreferences.UpdatedAt = DateTime.UtcNow;
+                        doubleCheckPreferences.UpdatedBy = userId.ToString()!;
+                        
+                        await _context.SaveChangesAsync();
+                        
+                        // Sync notification preferences
+                        if (_notificationSyncService != null)
+                        {
+                            try
+                            {
+                                await _notificationSyncService.SyncNotificationPreferencesAsync(
+                                    userId.Value, preferencesJson);
+                            }
+                            catch (Exception syncEx)
+                            {
+                                _logger.LogWarning(syncEx,
+                                    "Failed to sync notification preferences for user {UserId}. Preferences saved in Auth service.",
+                                    userId);
+                            }
+                        }
+                        
+                        return Ok(new ApiResponse<UserPreferencesDto>
+                        {
+                            Success = true,
+                            Data = MapToDto(doubleCheckPreferences),
+                            Message = "Preferences updated successfully"
+                        });
+                    }
                     
                     var newPreferences = new UserPreferences
                     {
@@ -288,18 +326,33 @@ namespace AmesaBackend.Auth.Controllers
                     }
                     // #endregion
                     
+                    // Since UpdatedAt is a concurrency token, we need to read the entity with tracking
+                    // to get the original UpdatedAt value, then update it
+                    var trackedPreferences = await _context.UserPreferences
+                        .FirstOrDefaultAsync(up => up.UserId == userId);
+                    
+                    if (trackedPreferences == null)
+                    {
+                        // This shouldn't happen, but handle it gracefully
+                        _logger.LogWarning("[DEBUG] UpdatePreferences:tracked-entity-not-found userId={UserId}", userId);
+                        return NotFound(new ApiResponse<UserPreferencesDto>
+                        {
+                            Success = false,
+                            Message = "Preferences not found"
+                        });
+                    }
+                    
                     // Update the entity properties
-                    existingPreferences.PreferencesJson = preferencesJson;
-                    existingPreferences.Version = request.Version ?? existingPreferences.Version;
-                    existingPreferences.UpdatedAt = DateTime.UtcNow;
-                    existingPreferences.UpdatedBy = userId.ToString()!;
+                    trackedPreferences.PreferencesJson = preferencesJson;
+                    trackedPreferences.Version = request.Version ?? trackedPreferences.Version;
+                    trackedPreferences.UpdatedAt = DateTime.UtcNow;
+                    trackedPreferences.UpdatedBy = userId.ToString()!;
 
                     // #region agent log
-                    _logger.LogInformation("[DEBUG] UpdatePreferences:before-SaveChangesAsync-update existingPreferences.UserId={UserId}", existingPreferences.UserId);
+                    _logger.LogInformation("[DEBUG] UpdatePreferences:before-SaveChangesAsync-update trackedPreferences.UserId={UserId}", trackedPreferences.UserId);
                     // #endregion
                     
-                    // Use Update() to mark the entity as modified (handles both tracked and untracked entities)
-                    _context.UserPreferences.Update(existingPreferences);
+                    // Save changes - EF Core will handle the concurrency token check
                     await _context.SaveChangesAsync();
                     
                     // #region agent log
@@ -328,8 +381,113 @@ namespace AmesaBackend.Auth.Controllers
                     return Ok(new ApiResponse<UserPreferencesDto>
                     {
                         Success = true,
-                        Data = MapToDto(existingPreferences),
+                        Data = MapToDto(trackedPreferences),
                         Message = "Preferences updated successfully"
+                    });
+                }
+            }
+            catch (DbUpdateConcurrencyException concurrencyEx)
+            {
+                // Handle concurrency conflicts (UpdatedAt concurrency token)
+                var userIdForRetry = GetCurrentUserId();
+                _logger.LogWarning(concurrencyEx, 
+                    "[DEBUG] UpdatePreferences:concurrency-conflict userId={UserId}. Retrying with fresh data.",
+                    userIdForRetry);
+                
+                // Retry once with fresh data
+                try
+                {
+                    if (userIdForRetry == null)
+                    {
+                        return Unauthorized(new ApiResponse<UserPreferencesDto>
+                        {
+                            Success = false,
+                            Message = "User not authenticated"
+                        });
+                    }
+                    
+                    // Validate request is still available
+                    if (request == null)
+                    {
+                        return BadRequest(new ApiResponse<UserPreferencesDto>
+                        {
+                            Success = false,
+                            Message = "Request body is required"
+                        });
+                    }
+                    
+                    var freshPreferences = await _context.UserPreferences
+                        .FirstOrDefaultAsync(up => up.UserId == userIdForRetry);
+                    
+                    if (freshPreferences == null)
+                    {
+                        return NotFound(new ApiResponse<UserPreferencesDto>
+                        {
+                            Success = false,
+                            Message = "Preferences not found after concurrency conflict"
+                        });
+                    }
+                    
+                    string preferencesJson;
+                    try
+                    {
+                        if (request.Preferences.ValueKind == JsonValueKind.Undefined || request.Preferences.ValueKind == JsonValueKind.Null)
+                        {
+                            return BadRequest(new ApiResponse<UserPreferencesDto>
+                            {
+                                Success = false,
+                                Message = "Preferences field is required and cannot be null or undefined"
+                            });
+                        }
+                        preferencesJson = request.Preferences.GetRawText();
+                    }
+                    catch (Exception jsonEx)
+                    {
+                        _logger.LogError(jsonEx, "Error parsing preferences JSON in retry");
+                        throw;
+                    }
+                    freshPreferences.PreferencesJson = preferencesJson;
+                    freshPreferences.Version = request.Version ?? freshPreferences.Version;
+                    freshPreferences.UpdatedAt = DateTime.UtcNow;
+                    freshPreferences.UpdatedBy = userIdForRetry.ToString()!;
+                    
+                    await _context.SaveChangesAsync();
+                    
+                    // Sync notification preferences
+                    if (_notificationSyncService != null)
+                    {
+                        try
+                        {
+                            await _notificationSyncService.SyncNotificationPreferencesAsync(
+                                userIdForRetry.Value, preferencesJson);
+                        }
+                        catch (Exception syncEx)
+                        {
+                            _logger.LogWarning(syncEx,
+                                "Failed to sync notification preferences for user {UserId} after retry.",
+                                userIdForRetry);
+                        }
+                    }
+                    
+                    return Ok(new ApiResponse<UserPreferencesDto>
+                    {
+                        Success = true,
+                        Data = MapToDto(freshPreferences),
+                        Message = "Preferences updated successfully (after retry)"
+                    });
+                }
+                catch (Exception retryEx)
+                {
+                    _logger.LogError(retryEx, "Error retrying preferences update after concurrency conflict");
+                    return StatusCode(500, new ApiResponse<UserPreferencesDto>
+                    {
+                        Success = false,
+                        Message = "An error occurred while updating preferences (concurrency conflict)",
+                        Error = new ErrorResponse
+                        {
+                            Code = "CONCURRENCY_ERROR",
+                            Message = "Preferences were modified by another request. Please try again."
+                        }
                     });
                 }
             }
@@ -382,9 +540,8 @@ namespace AmesaBackend.Auth.Controllers
                     });
                 }
 
-                // Use AsNoTracking to avoid DbContext concurrency issues
+                // Read with tracking to handle concurrency token properly
                 var existingPreferences = await _context.UserPreferences
-                    .AsNoTracking()
                     .FirstOrDefaultAsync(up => up.UserId == userId);
 
                 var defaultPreferences = CreateDefaultPreferences(userId.Value);
@@ -399,9 +556,7 @@ namespace AmesaBackend.Auth.Controllers
                     existingPreferences.Version = defaultPreferences.Version;
                     existingPreferences.UpdatedAt = DateTime.UtcNow;
                     existingPreferences.UpdatedBy = userId.ToString()!;
-                    
-                    // Use Update() to mark the entity as modified since we used AsNoTracking()
-                    _context.UserPreferences.Update(existingPreferences);
+                    // Entity is already tracked, no need to call Update()
                 }
 
                 await _context.SaveChangesAsync();
@@ -414,6 +569,66 @@ namespace AmesaBackend.Auth.Controllers
                     Data = MapToDto(existingPreferences ?? defaultPreferences),
                     Message = "Preferences reset to defaults successfully"
                 });
+            }
+            catch (DbUpdateConcurrencyException concurrencyEx)
+            {
+                var userId = GetCurrentUserId();
+                _logger.LogWarning(concurrencyEx, 
+                    "Concurrency conflict while resetting preferences for user {UserId}. Retrying.",
+                    userId);
+                
+                // Retry once with fresh data
+                try
+                {
+                    if (userId == null)
+                    {
+                        return Unauthorized(new ApiResponse<UserPreferencesDto>
+                        {
+                            Success = false,
+                            Message = "User not authenticated"
+                        });
+                    }
+                    
+                    var freshPreferences = await _context.UserPreferences
+                        .FirstOrDefaultAsync(up => up.UserId == userId);
+                    
+                    var defaultPreferences = CreateDefaultPreferences(userId.Value);
+                    
+                    if (freshPreferences == null)
+                    {
+                        _context.UserPreferences.Add(defaultPreferences);
+                    }
+                    else
+                    {
+                        freshPreferences.PreferencesJson = defaultPreferences.PreferencesJson;
+                        freshPreferences.Version = defaultPreferences.Version;
+                        freshPreferences.UpdatedAt = DateTime.UtcNow;
+                        freshPreferences.UpdatedBy = userId.ToString()!;
+                    }
+                    
+                    await _context.SaveChangesAsync();
+                    
+                    return Ok(new ApiResponse<UserPreferencesDto>
+                    {
+                        Success = true,
+                        Data = MapToDto(freshPreferences ?? defaultPreferences),
+                        Message = "Preferences reset to defaults successfully (after retry)"
+                    });
+                }
+                catch (Exception retryEx)
+                {
+                    _logger.LogError(retryEx, "Error retrying preferences reset after concurrency conflict");
+                    return StatusCode(500, new ApiResponse<UserPreferencesDto>
+                    {
+                        Success = false,
+                        Message = "An error occurred while resetting preferences (concurrency conflict)",
+                        Error = new ErrorResponse
+                        {
+                            Code = "CONCURRENCY_ERROR",
+                            Message = "Preferences were modified by another request. Please try again."
+                        }
+                    });
+                }
             }
             catch (Exception ex)
             {

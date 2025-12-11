@@ -64,7 +64,7 @@ namespace AmesaBackend.Auth.Controllers
         }
 
         [HttpGet("google")]
-        public IActionResult GoogleLogin()
+        public async Task<IActionResult> GoogleLogin()
         {
             try
             {
@@ -89,7 +89,35 @@ namespace AmesaBackend.Auth.Controllers
                             Details = new Dictionary<string, object>
                             {
                                 { "provider", "Google" },
-                                { "missing", string.IsNullOrWhiteSpace(googleClientId) ? "ClientId" : "ClientSecret" }
+                                { "missing", string.IsNullOrWhiteSpace(googleClientId) ? "ClientId" : "ClientSecret" },
+                                { "secretId", _configuration["Authentication:Google:SecretId"] ?? "amesa-google_people_API" }
+                            }
+                        }
+                    });
+                }
+
+                // Verify that the authentication scheme is registered
+                // If AddGoogleOAuth didn't register the scheme (e.g., due to missing credentials at startup),
+                // Challenge() will throw an InvalidOperationException
+                var authSchemeProvider = HttpContext.RequestServices.GetRequiredService<IAuthenticationSchemeProvider>();
+                var googleScheme = await authSchemeProvider.GetSchemeAsync(GoogleDefaults.AuthenticationScheme);
+                
+                if (googleScheme == null)
+                {
+                    _logger.LogError("Google OAuth authentication scheme is not registered. This usually means credentials were not loaded at startup.");
+                    return StatusCode(500, new ApiResponse<object>
+                    {
+                        Success = false,
+                        Error = new ErrorResponse
+                        {
+                            Code = "OAUTH_SCHEME_NOT_REGISTERED",
+                            Message = "Google OAuth authentication scheme is not registered. Please verify AWS Secrets Manager secret 'amesa-google_people_API' exists and contains valid ClientId and ClientSecret.",
+                            Details = new Dictionary<string, object>
+                            {
+                                { "provider", "Google" },
+                                { "secretId", _configuration["Authentication:Google:SecretId"] ?? "amesa-google_people_API" },
+                                { "hasClientId", !string.IsNullOrWhiteSpace(googleClientId) },
+                                { "hasClientSecret", !string.IsNullOrWhiteSpace(googleClientSecret) }
                             }
                         }
                     });
@@ -113,14 +141,47 @@ namespace AmesaBackend.Auth.Controllers
                 
                 return Challenge(properties, GoogleDefaults.AuthenticationScheme);
             }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("No authenticationScheme", StringComparison.OrdinalIgnoreCase) || 
+                                                         ex.Message.Contains("authentication scheme", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogError(ex, "Google OAuth authentication scheme not registered. Exception: {ExceptionType}, Message: {Message}", 
+                    ex.GetType().Name, ex.Message);
+                return StatusCode(500, new ApiResponse<object>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "OAUTH_SCHEME_NOT_REGISTERED",
+                        Message = "Google OAuth authentication scheme is not registered. Please verify AWS Secrets Manager secret 'amesa-google_people_API' exists and contains valid ClientId and ClientSecret.",
+                        Details = new Dictionary<string, object>
+                        {
+                            { "provider", "Google" },
+                            { "secretId", _configuration["Authentication:Google:SecretId"] ?? "amesa-google_people_API" },
+                            { "exception_type", ex.GetType().Name },
+                            { "exception_message", ex.Message }
+                        }
+                    }
+                });
+            }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error initiating Google OAuth. Exception: {ExceptionType}, Message: {Message}", 
-                    ex.GetType().Name, ex.Message);
-                return Redirect(BuildErrorRedirectUrl("OAUTH_INIT_FAILED", "Google", new Dictionary<string, object>
+                _logger.LogError(ex, "Error initiating Google OAuth. Exception: {ExceptionType}, Message: {Message}, StackTrace: {StackTrace}", 
+                    ex.GetType().Name, ex.Message, ex.StackTrace);
+                return StatusCode(500, new ApiResponse<object>
                 {
-                    { "exception_type", ex.GetType().Name }
-                }));
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "OAUTH_INIT_FAILED",
+                        Message = "An error occurred while initiating Google OAuth login.",
+                        Details = new Dictionary<string, object>
+                        {
+                            { "provider", "Google" },
+                            { "exception_type", ex.GetType().Name },
+                            { "exception_message", ex.Message }
+                        }
+                    }
+                });
             }
         }
 

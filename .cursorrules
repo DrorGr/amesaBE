@@ -11,11 +11,83 @@ AmesaBE is the backend API for the Amesa lottery management system. Built with .
 - **MetaData/**: Cross-cutting docs, scripts, and configs
 
 ## Repository Structure
-- **AmesaBackend**: Main .NET 8.0 API project → Docker + ECS
-- **AmesaBackend.Tests**: Unit and integration tests
-- **AmesaBackend.DatabaseSeeder**: Database seeding tool (excluded from repository, in .gitignore)
-- **Related Repos**: amesaFE (Frontend), amesaDevOps (Infrastructure)
+
+### Microservice Projects (8 Services + Supporting Projects)
+1. **AmesaBackend.Auth** - Authentication & user management service
+   - ECS Service: `amesa-auth-service`
+   - Database Schema: `amesa_auth`
+   - Key Features: JWT authentication, OAuth (Google, Meta), ID verification, user preferences
+
+2. **AmesaBackend.Lottery** - Lottery & favorites management service
+   - ECS Service: `amesa-lottery-service`
+   - Database Schema: `amesa_lottery`
+   - Key Features: Houses, tickets, draws, watchlist, participant caps
+
+3. **AmesaBackend.Payment** - Payment processing service
+   - ECS Service: `amesa-payment-service`
+   - Database Schema: `amesa_payment`
+   - Key Features: Stripe integration, products, transactions, payment methods
+
+4. **AmesaBackend.Notification** - Multi-channel notification service
+   - ECS Service: `amesa-notification-service`
+   - Database Schema: `amesa_notification`
+   - Key Features: Email, SMS, WebPush, Telegram, notification preferences
+
+5. **AmesaBackend.Content** - Content management service
+   - ECS Service: `amesa-content-service`
+   - Database Schema: `amesa_content`
+   - Key Features: Translations, content management, languages
+
+6. **AmesaBackend.LotteryResults** - Lottery results service
+   - ECS Service: `amesa-lottery-results-service`
+   - Database Schema: `amesa_lottery_results`
+   - Key Features: Draw results, QR codes, prize delivery
+
+7. **AmesaBackend.Analytics** - Analytics service
+   - ECS Service: `amesa-analytics-service`
+   - Database Schema: `amesa_analytics`
+   - Key Features: User sessions, activity logs, analytics tracking
+
+8. **AmesaBackend.Admin** - Admin panel (Blazor Server)
+   - ECS Service: `amesa-admin-service`
+   - Key Features: Admin dashboard, content management, user management
+
+### Supporting Projects
+- **AmesaBackend.Shared** - Shared library for all microservices
+  - Contains: Authentication, Caching, Events, Middleware, Models, REST clients, Extensions
+  - Used by: All microservices
+  - Key Components:
+    - Authentication: JWT token management, cryptography
+    - Caching: Redis cache abstraction (ICache interface)
+    - Events: EventBridge publisher for event-driven architecture
+    - Middleware: Error handling, logging, security headers, service-to-service auth
+    - Contracts: ApiResponse, ApiException, validation errors
+    - REST: HTTP request service for inter-service communication
+    - Tracing: AWS X-Ray integration
+
+- **AmesaBackend.Lottery.Design** - EF Core design-time tooling
+  - Purpose: Entity Framework migrations tooling for Lottery service
+  - Not deployed as a service
+
+- **AmesaBackend.Tests** - Unit and integration tests
+  - Test Framework: xUnit with FluentAssertions, Bogus, AutoFixture
+  - Coverage: Unit tests, integration tests, security tests
+  - Test Helpers: InMemoryCache, TestDataBuilder, WebApplicationFixture
+
+- **AmesaBackend.DatabaseSeeder** - Database seeding tool
+  - Status: Excluded from repository (in .gitignore)
+  - Purpose: Manual database seeding for test data
+
+- **AmesaBackend** - Legacy main project (may contain shared code)
+  - Note: Some services may reference this for shared models/services
+
+### Related Repositories
+- **amesaFE**: Frontend (Angular) → https://github.com/DrorGr/amesaFE
+- **amesaDevOps**: Infrastructure as Code repository
+
+### Scripts and Infrastructure
 - **Scripts**: All SQL and PowerShell scripts in `MetaData/Scripts/` folder
+- **Infrastructure**: Terraform, deployment scripts in `BE/Infrastructure/`
 
 ## Technology Stack
 - **Backend**: .NET 8.0, ASP.NET Core, Entity Framework Core
@@ -24,18 +96,82 @@ AmesaBE is the backend API for the Amesa lottery management system. Built with .
 - **Real-time**: SignalR for live lottery updates
 - **Authentication**: JWT Bearer tokens (API), Email/Password (Admin Panel)
 - **Payment**: Stripe integration
-- **Caching**: Redis (planned)
+- **Caching**: Redis (StackExchange.Redis v2.7.33) - Required for Auth, Lottery, Content, Payment services
 - **Infrastructure**: AWS (ECS Fargate, ECR, ALB, Aurora)
 - **CI/CD**: GitHub Actions
 - **Version Control**: Git with GitHub repository
 - **Package Management**: NuGet
 
-## Current Status (2025-12-05)
+## Database Schemas
+All microservices use PostgreSQL schemas for data isolation:
+- **amesa_auth** - Authentication service schema
+  - Tables: users, user_sessions, user_preferences, user_identity_documents, system_configurations, etc.
+- **amesa_lottery** - Lottery service schema
+  - Tables: houses, house_images, lottery_tickets, lottery_draws, user_watchlist, ticket_reservations
+  - Views: lottery_participants (optimized participant counting)
+- **amesa_payment** - Payment service schema
+  - Tables: transactions, user_payment_methods, products, product_links, transaction_items, payment_audit_logs
+- **amesa_notification** - Notification service schema
+  - Tables: user_notifications, notification_templates, notification_deliveries, user_channel_preferences, push_subscriptions, telegram_user_links, notification_queue, notification_types, etc.
+- **amesa_content** - Content service schema
+  - Tables: translations, languages, content, content_categories, content_media
+- **amesa_lottery_results** - Lottery results service schema
+  - Tables: lottery_results, lottery_result_history, prize_deliveries
+- **amesa_analytics** - Analytics service schema
+  - Tables: user_sessions, user_activity_logs
+- **public** - Some shared tables (e.g., translations may use public schema)
+
+## External Service Integrations
+- **AWS Services**:
+  - **AWS Rekognition** (AWSSDK.Rekognition v3.7.400) - ID verification, face detection, OCR
+  - **AWS SES** - Email delivery for notifications
+  - **AWS SNS** - SMS notifications and mobile push
+  - **AWS Secrets Manager** (AWSSDK.SecretsManager v3.7.400) - Secure credential storage
+  - **AWS S3** (AWSSDK.S3 v3.7.400) - File storage
+  - **AWS EventBridge** (AWSSDK.EventBridge v3.7.400) - Event-driven architecture
+  - **AWS X-Ray** - Distributed tracing
+- **Payment Processing**:
+  - **Stripe** - Payment processing (via StripeService)
+- **Authentication**:
+  - **Google OAuth** (Microsoft.AspNetCore.Authentication.Google v8.0.0) - Google sign-in
+  - **Meta/Facebook OAuth** (Microsoft.AspNetCore.Authentication.Facebook v8.0.0) - Facebook sign-in
+  - **Google reCAPTCHA Enterprise** (Google.Cloud.RecaptchaEnterprise.V1 v2.2.0) - Bot protection
+- **Real-time Communication**:
+  - **SignalR** - WebSocket/LongPolling for real-time updates (LotteryHub, NotificationHub)
+- **Notifications**:
+  - **Telegram Bot API** - Telegram notification channel
+  - **WebPush API** - Browser push notifications
+- **Utilities**:
+  - **QR Code Generation** (QRCoder v1.6.0) - QR codes for lottery results
+  - **OTP Generation** (Otp.NET v1.3.0) - Two-factor authentication
+  - **Polly** (v8.4.2) - Resilience and retry policies
+  - **AutoMapper** (v12.0.1) - Object-to-object mapping
+  - **BCrypt** (BCrypt.Net-Next v4.0.3) - Password hashing
+  - **Serilog** (v8.0.0) - Structured logging
+
+## Key Dependencies
+### Core Framework
+- **Microsoft.AspNetCore.OpenApi** v8.0.0 - OpenAPI/Swagger support
+- **Microsoft.EntityFrameworkCore** v8.0.0 - ORM
+- **Microsoft.EntityFrameworkCore.Design** v8.0.0 - EF Core tooling
+- **Npgsql.EntityFrameworkCore.PostgreSQL** v8.0.0 - PostgreSQL provider
+- **Microsoft.AspNetCore.Authentication.JwtBearer** v8.0.0 - JWT authentication
+
+### Shared Library (AmesaBackend.Shared)
+- **StackExchange.Redis** v2.7.33 - Redis client
+- **Microsoft.Extensions.Caching.StackExchangeRedis** v8.0.0 - Redis caching
+- **System.IdentityModel.Tokens.Jwt** v7.0.3 - JWT token handling
+- **Microsoft.IdentityModel.Tokens** v7.0.3 - Token validation
+- **Newtonsoft.Json** v13.0.3 - JSON serialization
+- **Serilog** suite - Structured logging
+
+## Current Status (2025-01-25)
 - **Repository**: https://github.com/DrorGr/amesaBE
 - **Main branch**: Stable, deployed with Multi-Channel Notification System ✅
 - **Admin Panel**: Blazor Server admin panel deployed to production ✅
-- **Meta OAuth Integration**: ✅ **CONFIGURED AND READY** - Meta/Facebook OAuth fully integrated with AWS Secrets Manager (2025-12-02)
-- **Multi-Channel Notification System**: ✅ **IMPLEMENTED AND DEPLOYED** - Production-ready, ALB routing configured (2025-12-01)
+- **Authentication Security Audit**: ✅ **COMPLETE** - Final deep audit completed, all critical and high-priority issues resolved, production-ready
+- **Meta OAuth Integration**: ✅ **CONFIGURED AND READY** - Meta/Facebook OAuth fully integrated with AWS Secrets Manager
+- **Multi-Channel Notification System**: ✅ **IMPLEMENTED AND DEPLOYED** - Production-ready, ALB routing configured
 - **Database**: Fully seeded with comprehensive test data ✅
 - **Translations**: 4 languages supported (EN, ES, FR, PL) - 507 keys each ✅ (148 new notification translations added)
 - **User Preferences**: Complete CRUD API implemented ✅
@@ -46,16 +182,18 @@ AmesaBE is the backend API for the Amesa lottery management system. Built with .
 - **Database Seeder**: Excluded from repository (in .gitignore) ✅
 - **Notification Service**: amesa-notification-service - ACTIVE, 1/1 tasks, HEALTHY ✅
 - **ALB Routing**: Priority 93 (/api/v1/notifications), Priority 95 (/api/v1/notifications/*), Priority 96 (/health/notifications) ✅
-- **Notification Endpoints**: ✅ **ADDED** - Mark as read and delete endpoints implemented (2025-12-05)
+- **Notification Endpoints**: ✅ **ADDED** - Mark as read and delete endpoints implemented
   - `PUT /api/v1/notifications/{id}/read` - Mark notification as read
   - `PUT /api/v1/notifications/read-all` - Mark all notifications as read
   - `DELETE /api/v1/notifications/{id}` - Delete notification
 - **Backend Tests**: 97 passed, 0 failed, 5 skipped ✅ (test failures don't block deployment)
 - **CI/CD Workflow**: Updated to allow test failures without blocking deployment ✅
-- **Payment Service**: ✅ **STABILIZATION FIXES APPLIED** - All startup errors resolved (Stripe secrets JSON, IRateLimitService registration, Redis connection string) - Tested locally, pushed to main (2025-12-01)
-- **ECS Deployment**: ✅ **FIXED** - Missing SSM parameter `/amesa/prod/ServiceAuth/ApiKey` created, lottery service now running (2025-12-05)
+- **Payment Service**: ✅ **STABILIZATION FIXES APPLIED** - All startup errors resolved (Stripe secrets JSON, IRateLimitService registration, Redis connection string) - Tested locally, pushed to main
+- **ECS Deployment**: ✅ **FIXED** - Missing SSM parameter `/amesa/prod/ServiceAuth/ApiKey` created, lottery service now running
 
 ## Environment Configuration
+
+**Note**: See root `.cursorrules` for complete environment URLs table and infrastructure details.
 
 ### Local Development
 - **Backend**: http://localhost:5000
@@ -72,6 +210,9 @@ AmesaBE is the backend API for the Amesa lottery management system. Built with .
 - **Deployment**: Auto on push to main branch
 
 ## AWS Infrastructure
+
+**Note**: See root `.cursorrules` for complete infrastructure summary.
+
 - **Region**: eu-north-1 (Stockholm)
 - **Account**: 129394705401
 - **ECR Repository**: amesabe
@@ -83,12 +224,21 @@ AmesaBE is the backend API for the Amesa lottery management system. Built with .
 ## API Structure
 
 ### Core Endpoints
-- **Health**: `/health` - Service health check
-- **Auth**: `/api/v1/auth/*` - Authentication and user management
-- **Houses**: `/api/v1/houses/*` - Lottery properties and tickets
-- **Translations**: `/api/v1/translations/*` - Internationalization
-- **Lottery Results**: `/api/v1/lottery-results/*` - Draw results
-- **Notifications**: `/api/v1/notifications/*` - User notifications (mark as read, delete) ✅ NEW
+- **Health**: `/health` - Service health check (all services)
+- **Auth**: `/api/v1/auth/*` - Authentication and user management (amesa-auth-service)
+- **OAuth**: `/api/v1/oauth/*` - OAuth authentication (Google, Meta) (amesa-auth-service)
+- **Houses**: `/api/v1/houses/*` - Lottery properties and tickets (amesa-lottery-service)
+- **Tickets**: `/api/v1/tickets/*` - Lottery ticket operations (amesa-lottery-service)
+- **Lottery**: `/api/v1/lottery/*` - Lottery operations (amesa-lottery-service)
+- **Translations**: `/api/v1/translations/*` - Internationalization (amesa-content-service)
+- **Content**: `/api/v1/content/*` - Content management (amesa-content-service)
+- **Lottery Results**: `/api/v1/lottery-results/*` or `/api/v1/lotteryresults/*` - Draw results (amesa-lottery-results-service)
+- **Notifications**: `/api/v1/notifications/*` - User notifications (mark as read, delete) (amesa-notification-service) ✅ NEW
+- **Payments**: `/api/v1/payment/*` or `/api/v1/payments/*` - Payment processing (amesa-payment-service)
+- **Products**: `/api/v1/products/*` - Product management (amesa-payment-service)
+- **Analytics**: `/api/v1/analytics/*` - Analytics tracking (amesa-analytics-service)
+- **Admin Panel**: `/admin/*` - Blazor Server admin interface (amesa-admin-service)
+- **Blazor SignalR**: `/_blazor/*` - Blazor Server SignalR hub (amesa-admin-service)
 
 ### OAuth Endpoints
 - **Google OAuth**: 
@@ -107,8 +257,50 @@ AmesaBE is the backend API for the Amesa lottery management system. Built with .
 - **Documentation**: See `ADMIN_PANEL_GUIDE.md`, `ADMIN_PANEL_DEPLOYED_SUCCESS.md`
 
 ### Real-time Hubs (SignalR)
-- **LotteryHub**: Live lottery updates, ticket purchases
-- **NotificationHub**: Real-time notifications
+- **LotteryHub** (`/ws/lottery`):
+  - **Service**: `amesa-lottery-service`
+  - **Location**: `BE/AmesaBackend.Lottery/Hubs/LotteryHub.cs`
+  - **Events Broadcasted**:
+    - `OnLotteryUpdate` - House status, ticket sales, participation updates
+    - `OnFavoriteUpdate` - Watchlist changes (added/removed)
+    - `OnEntryStatusChange` - Ticket entry status changes
+    - `OnDrawReminder` - Lottery draw countdown reminders
+    - `OnRecommendation` - House recommendations
+    - `InventoryUpdated` - Real-time ticket inventory updates
+    - `TicketPurchased` - Ticket purchase notifications
+    - `CountdownUpdated` - Lottery countdown updates
+    - `LotteryDrawStarted` - Draw start notifications
+    - `LotteryDrawCompleted` - Draw completion notifications
+  - **User Groups**: Automatically managed in `OnConnectedAsync()` based on user ID
+  - **Authorization**: `[Authorize]` attribute (JWT Bearer token required)
+  - **Transport**: LongPolling (CloudFront compatibility, WebSocket not supported)
+  
+- **NotificationHub** (`/ws/notifications`):
+  - **Service**: `amesa-notification-service`
+  - **Location**: `BE/AmesaBackend.Notification/Hubs/NotificationHub.cs`
+  - **Events Broadcasted**:
+    - `OnNotification` - User notifications (email, SMS, WebPush, Telegram)
+    - `OnUserStatusUpdate` - User online/offline status
+  - **User Groups**: Automatically managed in `OnConnectedAsync()` based on user ID
+  - **Authorization**: `[Authorize]` attribute (JWT Bearer token required)
+  - **Transport**: LongPolling (CloudFront compatibility, WebSocket not supported)
+  
+- **Connection Configuration**:
+  - **CloudFront Timeout**: 60 seconds (OriginReadTimeout) for LongPolling support
+  - **ALB Routing**: 
+    - Priority 5: `/ws/lottery/*` → `amesa-lottery-service-tg`
+    - Priority 6: `/ws/notifications/*` → `amesa-notification-service-tg`
+  - **Reconnection**: Automatic with exponential backoff (frontend handles)
+
+### API Versioning Strategy
+- **Current Version**: `v1` (all endpoints use `/api/v1/` prefix)
+- **Versioning Approach**: URL path versioning (e.g., `/api/v1/user/preferences`, `/api/v1/auth/login`)
+- **Backward Compatibility**: Breaking changes require new version (e.g., `v2`)
+- **Deprecation Policy**: 
+  - Old versions maintained for a grace period
+  - Deprecation warnings in response headers when applicable
+- **Route Attribute**: `[Route("api/v1/...")]` on controllers
+- **Example**: `[Route("api/v1/user/[controller]")]` on `UserPreferencesController`
 
 ## Coding Standards
 
@@ -131,20 +323,144 @@ AmesaBE is the backend API for the Amesa lottery management system. Built with .
 - Rate limiting and throttling
 
 ### Security
-- JWT Bearer authentication
+- JWT Bearer authentication (Microsoft.AspNetCore.Authentication.JwtBearer v8.0.0)
 - Role-based authorization
 - CORS configuration
-- Security headers middleware
+- Security headers middleware (SecurityHeadersMiddleware in Shared)
 - Input sanitization
-- SQL injection prevention (parameterized queries)
+- SQL injection prevention (parameterized queries, EF Core)
 - Secrets management via AWS Secrets Manager
+- Service-to-service authentication (ServiceToServiceAuthMiddleware)
+  - API key stored in SSM Parameter Store: `/amesa/prod/ServiceAuth/ApiKey`
+- Account lockout and rate limiting
+- Password breach checking
+- Refresh token rotation
+- Session management with device tracking
+- OAuth token caching
+- reCAPTCHA Enterprise integration
 
 ### Database
 - PostgreSQL in production (Aurora Serverless v2)
 - SQLite for local development
 - Entity Framework Core migrations
 - Connection pooling and retry logic
-- Database seeding for initial data
+- Database seeding for initial data (manual via DatabaseSeeder)
+- **Schema Organization**: Each microservice uses its own PostgreSQL schema
+  - Schemas: amesa_auth, amesa_lottery, amesa_payment, amesa_notification, amesa_content, amesa_lottery_results, amesa_analytics
+- **Database Contexts**: Each service has its own DbContext
+  - AuthDbContext (amesa_auth schema)
+  - LotteryDbContext (amesa_lottery schema)
+  - PaymentDbContext (amesa_payment schema)
+  - NotificationDbContext (amesa_notification schema)
+  - ContentDbContext (amesa_content schema)
+  - LotteryResultsDbContext (amesa_lottery_results schema)
+  - AnalyticsDbContext (amesa_analytics schema) (manual via DatabaseSeeder)
+
+### Code Patterns and Conventions
+- **Naming Conventions**:
+  - Controllers: PascalCase with "Controller" suffix (e.g., `AuthController`)
+  - Services: PascalCase with "Service" suffix (e.g., `AuthService`)
+  - Interfaces: PascalCase with "I" prefix (e.g., `IAuthService`)
+  - DTOs: PascalCase with "Dto" suffix (e.g., `LoginRequestDto`)
+  - Models: PascalCase (e.g., `User`, `LotteryTicket`)
+- **File Organization**:
+  - One class per file
+  - Match file name to class name
+  - Organize by feature/domain (Controllers/, Services/, Models/, DTOs/)
+- **Dependency Injection**:
+  - Use constructor injection
+  - Register services in `Program.cs` or configuration classes
+  - Prefer interfaces over concrete types
+- **Async/Await**:
+  - Use `async Task` or `async Task<T>` for all I/O operations
+  - Avoid `async void` (except event handlers)
+  - Use `ConfigureAwait(false)` in library code
+- **Error Handling**:
+  - Use `ApiResponse<T>` wrapper for all API responses
+  - Throw `ApiException` for business logic errors
+  - Use middleware for global error handling
+- **Logging**:
+  - Use Serilog for structured logging
+  - Log levels: Debug, Information, Warning, Error, Fatal
+  - Include correlation IDs for request tracing
+- **API Design**:
+  - RESTful endpoints with `/api/v1/` prefix
+  - Use HTTP verbs correctly (GET, POST, PUT, DELETE)
+  - Return appropriate HTTP status codes
+  - Include XML documentation comments
+- **Security**:
+  - Use `[Authorize]` attributes on controllers/actions
+  - Validate all input with Data Annotations or FluentValidation
+  - Use parameterized queries (EF Core handles this)
+  - Never log sensitive data (passwords, tokens, PII)
+
+## Key Configuration Files
+Each microservice has its own set of configuration files:
+
+### Application Configuration
+- **`appsettings.json`** - Base configuration (one per service)
+  - Connection strings, AWS settings, service URLs
+  - Environment variables injected at runtime
+- **`appsettings.Development.json`** - Development configuration
+  - Local database connections
+  - Development service URLs
+  - Debug logging settings
+- **`Program.cs`** - Service startup and dependency injection
+  - Each service has its own Program.cs
+  - Configuration extracted to dedicated classes (e.g., `AuthenticationConfiguration.cs`, `ServiceConfiguration.cs`)
+  - Middleware registration
+  - Health check endpoints
+  - SignalR hub registration (where applicable)
+
+### Database Configuration
+- **DbContext Classes** - Database context configuration (one per service)
+  - `AmesaBackend.Auth/Data/AuthDbContext.cs` - Auth service (amesa_auth schema)
+  - `AmesaBackend.Lottery/Data/LotteryDbContext.cs` - Lottery service (amesa_lottery schema)
+  - `AmesaBackend.Payment/Data/PaymentDbContext.cs` - Payment service (amesa_payment schema)
+  - `AmesaBackend.Notification/Data/NotificationDbContext.cs` - Notification service (amesa_notification schema)
+  - `AmesaBackend.Content/Data/ContentDbContext.cs` - Content service (amesa_content schema)
+  - `AmesaBackend.LotteryResults/Data/LotteryResultsDbContext.cs` - Lottery results service (amesa_lottery_results schema)
+  - `AmesaBackend.Analytics/Data/AnalyticsDbContext.cs` - Analytics service (amesa_analytics schema)
+  - Each DbContext uses schema-specific connection strings and retry policies
+
+### Container Configuration
+- **`Dockerfile`** - Container build configuration (one per service)
+  - `AmesaBackend.Auth/Dockerfile`
+  - `AmesaBackend.Lottery/Dockerfile`
+  - `AmesaBackend.Payment/Dockerfile`
+  - `AmesaBackend.Notification/Dockerfile`
+  - `AmesaBackend.Content/Dockerfile`
+  - `AmesaBackend.LotteryResults/Dockerfile`
+  - `AmesaBackend.Analytics/Dockerfile`
+  - `AmesaBackend.Admin/Dockerfile`
+  - Base image: `mcr.microsoft.com/dotnet/aspnet:8.0`
+  - Multi-stage builds for optimization
+  - Port: 8080 (HTTP)
+  - Non-root user: `app` for security
+
+### Deployment Configuration
+- **ECS Task Definitions** - Service deployment configuration
+  - Located in `BE/Infrastructure/` or AWS ECS console
+  - Each service has its own task definition
+  - Environment variables injected from AWS Parameter Store
+  - Secrets from AWS Secrets Manager
+  - Health check configuration
+- **GitHub Workflows** - CI/CD configuration
+  - `BE/.github/workflows/build-and-deploy.yml` - Main deployment workflow
+    - Builds all 8 microservices
+    - Pushes Docker images to ECR
+    - Deploys to ECS Fargate
+  - `BE/.github/workflows/test.yml` - Test workflow
+    - Runs unit and integration tests
+    - Code quality checks
+
+### Shared Configuration
+- **`AmesaBackend.Shared/`** - Shared library configuration
+  - Common DTOs, interfaces, middleware
+  - AWS SDK configurations
+  - Redis cache configuration
+  - EventBridge publisher configuration
+  - JWT token validation configuration
 
 ## Project Structure Guidelines
 
@@ -155,10 +471,20 @@ AmesaBE is the backend API for the Amesa lottery management system. Built with .
 - Proper model validation
 
 ### Services
-- Interface-based service pattern
+- Interface-based service pattern (IServiceName interfaces)
 - Scoped/Singleton lifetime management
 - Async methods for I/O operations
 - Dependency injection
+- **Service Organization**: Each microservice has its own Services folder
+  - Services implement interfaces (IServiceName pattern)
+  - Services handle business logic
+  - Services use DbContext for data access
+  - Services can call other services via HTTP (HttpRequestService) or EventBridge
+  - **Shared Services**: Common services in AmesaBackend.Shared
+    - JwtTokenManager - JWT token generation/validation
+    - StackRedisCache - Redis caching abstraction
+    - EventBridgePublisher - Event publishing
+    - HttpRequestService - Inter-service HTTP communication
 
 ### DTOs
 - Separate request/response models
@@ -166,17 +492,34 @@ AmesaBE is the backend API for the Amesa lottery management system. Built with .
 - Validation attributes
 
 ### Middleware
-- Error handling middleware (global exception handler)
-- Request logging middleware
-- Security headers middleware
-- Authentication/authorization middleware
+- Error handling middleware (global exception handler) - ErrorHandlerMiddleware
+- Request logging middleware - RequestResponseLoggingMiddleware, AMESASerilogScopedLoggingMiddleware
+- Security headers middleware - SecurityHeadersMiddleware
+- Authentication/authorization middleware - JWT Bearer, ServiceToServiceAuthMiddleware
+- **Middleware Location**: Shared middleware in `AmesaBackend.Shared/Middleware/`
+  - ErrorHandling/ErrorHandlerMiddleware.cs
+  - Logging/RequestResponseLoggingMiddleware.cs
+  - Logging/AMESASerilogScopedLoggingMiddleware.cs
+  - SecurityHeadersMiddleware.cs
+  - ServiceToServiceAuthMiddleware.cs
+- **Service-Specific Middleware**: Some services have their own middleware
+  - Auth: OriginHeaderValidationMiddleware, EmailVerificationMiddleware, SecurityAuditMiddleware, IpTrackingMiddleware, SessionActivityMiddleware
 
 ## Docker Configuration
 - **Base Image**: mcr.microsoft.com/dotnet/aspnet:8.0
 - **Port**: 8080 (HTTP)
-- **Health Check**: `/health` endpoint
+- **Health Check**: `/health` endpoint (all services)
 - **Non-root user**: app user for security
 - **Multi-stage build**: Separate build and runtime stages
+- **Dockerfiles**: Each microservice has its own Dockerfile
+  - `AmesaBackend.Auth/Dockerfile`
+  - `AmesaBackend.Lottery/Dockerfile`
+  - `AmesaBackend.Payment/Dockerfile`
+  - `AmesaBackend.Notification/Dockerfile`
+  - `AmesaBackend.Content/Dockerfile`
+  - `AmesaBackend.LotteryResults/Dockerfile`
+  - `AmesaBackend.Analytics/Dockerfile`
+  - `AmesaBackend.Admin/Dockerfile`
 
 ## Deployment Flow
 
@@ -234,9 +577,12 @@ aws ecs update-service --cluster Amesa --service amesa-lottery-service --force-n
 
 ### GitHub Secrets Required
 - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
-- `PROD_ECS_CLUSTER`, `PROD_ECS_SERVICE`
+- `PROD_ECS_CLUSTER` (Amesa)
 - `PROD_DB_CONNECTION_STRING`
 - `PROD_JWT_SECRET_KEY`
+- **Note**: ECS services are deployed individually, not as a single service
+- **ECR Repository**: `amesabe` (shared repository for all services)
+- **Image Tags**: `prod-{sha}`, `latest`, `prod-latest`
 
 ## Common Commands
 
@@ -276,6 +622,24 @@ dotnet ef database update PreviousMigrationName --project AmesaBackend
 dotnet ef migrations script --project AmesaBackend
 ```
 
+### Migration Patterns
+- **EF Core Migrations**:
+  - **Generation**: `dotnet ef migrations add <MigrationName> --project <ProjectName>`
+  - **Application**: `dotnet ef database update --project <ProjectName>`
+  - **Location**: `Migrations/` folder in each service project (e.g., `BE/AmesaBackend.Auth/Migrations/`)
+  - **Naming**: Timestamp-based (e.g., `20251115215123_InitialCreate.cs`)
+  - **Files**: Migration class, Designer file, and ModelSnapshot
+- **Manual SQL Migrations**:
+  - **Use Case**: Complex migrations, data transformations, or schema changes requiring manual SQL
+  - **Location**: `Infrastructure/DatabaseSetup/` or service-specific migration scripts
+  - **Execution**: Via `DatabaseSetup` project or direct SQL execution
+- **Production Migration Checklist**:
+  - Backup database before migration
+  - Test migration on staging environment
+  - Review generated SQL script (`dotnet ef migrations script`)
+  - Apply migration during maintenance window if required
+  - Verify migration success and rollback plan
+
 ### Docker Operations
 ```bash
 # Build Docker image
@@ -296,11 +660,13 @@ docker-compose up
 # List ECS services
 aws ecs list-services --cluster Amesa --region eu-north-1
 
-# Describe ECS service
-aws ecs describe-services --cluster Amesa --services amesa-backend-service --region eu-north-1
+# Describe specific ECS service
+aws ecs describe-services --cluster Amesa --services amesa-auth-service --region eu-north-1
+aws ecs describe-services --cluster Amesa --services amesa-lottery-service --region eu-north-1
 
-# View service logs
-aws logs tail /ecs/amesa-backend --follow --region eu-north-1
+# View service logs (service-specific log groups)
+aws logs tail /ecs/amesa-auth-service --follow --region eu-north-1
+aws logs tail /ecs/amesa-lottery-service --follow --region eu-north-1
 
 # List ECR images
 aws ecr describe-images --repository-name amesabe --region eu-north-1
@@ -321,16 +687,37 @@ git log --oneline -5
 git checkout main
 ```
 
+### Testing Patterns
+- **Framework**: xUnit for all backend tests
+- **Test Organization**:
+  - **Unit Tests**: Test individual services, repositories, and business logic in isolation
+  - **Integration Tests**: Test service interactions, database operations, and external integrations
+  - **Security Tests**: Test authentication, authorization, rate limiting, and security headers
+  - **Location**: `BE/AmesaBackend.Tests/` with subdirectories for test types
+- **Test Helpers**:
+  - **TestDataBuilder**: Fluent builder pattern for creating test data (User, House, LotteryTicket)
+    - Uses `Bogus` library for fake data generation
+    - Location: `BE/AmesaBackend.Tests/TestHelpers/TestDataBuilder.cs`
+    - Example: `TestDataBuilder.User().WithEmail("test@example.com").Build()`
+  - **InMemoryCache**: In-memory implementation of `ICache` interface for testing
+    - Replaces Redis in tests
+    - Location: `BE/AmesaBackend.Tests/TestHelpers/InMemoryCache.cs`
+    - Uses `ConcurrentDictionary` with expiration logic
+  - **WebApplicationFixture**: Test fixture for integration tests with in-memory database
+- **Mocking Strategy**:
+  - **Framework**: Moq for mocking interfaces and dependencies
+  - **In-Memory Database**: SQLite in-memory for integration tests (replaces PostgreSQL)
+  - **Mock Services**: External services (SNS, SES, Stripe, etc.) are mocked in unit tests
+- **Test Data**:
+  - **Fake Data**: Bogus library for generating realistic test data
+  - **Builders**: Fluent builder pattern for complex object creation
+  - **Fixtures**: Reusable test data fixtures for common scenarios
+
 ## Context Files to Maintain
 
 ### In This Repository (BE/):
-- `CONTEXT_QUICK_REFERENCE.md` - Backend quick reference
-- `CURRENT_WORK.md` - Backend current tasks and status
-- `CURRENT_STATUS_SUMMARY.md` - Backend latest status overview
-- `DEPLOYMENT_STATUS_REPORT.md` - Backend deployment status
-- `TROUBLESHOOTING.md` - Backend troubleshooting
-- `API-Design.md` - API endpoint documentation
-- `README.md` - Project documentation
+- Note: Repository-specific context files are optional. Current status is maintained in `.cursorrules`.
+- `README.md` - Project documentation (if exists)
 
 ### In Monorepo MetaData/ (Cross-cutting):
 - `../MetaData/Documentation/AWS_INFRASTRUCTURE_DETAILS.md` - Infrastructure details
@@ -352,7 +739,7 @@ git checkout main
    - Review `MetaData/Documentation/Payments/PAYMENT_SYSTEM_IMPLEMENTATION.md` - Payment system documentation
    - Review `MetaData/Documentation/Database/SCHEMA_REFERENCE.md` - Database structure
    - Review `MetaData/Documentation/TROUBLESHOOTING.md` - Common issues and solutions
-   - Check "Recent Changes" and "Recent Major Work" sections
+   - Check "Recent Changes" sections
 2. **Understand current backend status** before starting any work:
    - Review "Current Status" section
    - Check deployment status and environment configuration
@@ -383,10 +770,10 @@ git checkout main
    - Fix any build errors before pushing to repository
    - This prevents CI/CD failures and broken deployments
 3. **Update context files IMMEDIATELY upon task completion**:
-   - Update `BE/.cursorrules` "Recent Major Work" section
+   - Update `BE/.cursorrules` "Recent Changes" section
    - Update root `.cursorrules` "Recent Changes" section
    - Update `CONTEXT_QUICK_REFERENCE.md` if applicable
-   - Document in "Recent Major Work" with:
+   - Document in "Recent Changes" with:
      - ✅ Status indicators
      - Clear descriptions of what was fixed/implemented
      - Technical details for future reference
@@ -416,16 +803,335 @@ git checkout main
 │                 │    │                  │    │                 │
 │ Angular 20.2.1  │    │ .NET 8.0         │    │ Aurora PostgreSQL│
 │ S3 + CloudFront │    │ ECS Fargate      │    │ Serverless v2   │
-└─────────────────┘    │ Docker + ALB     │    └─────────────────┘
-                       │ SignalR Hubs     │
+└─────────────────┘    │ Docker + ALB     │    │ (8 Schemas)     │
+                       │ SignalR Hubs     │    └─────────────────┘
+                       │ 8 Microservices  │
+                       │ EventBridge      │
                        └──────────────────┘
 ```
 
+### Microservices Architecture
+All 8 microservices are independently deployable:
+- Each service has its own Dockerfile and ECS task definition
+- Each service uses its own PostgreSQL schema
+- Services communicate via:
+  - HTTP/REST (via ALB path-based routing)
+  - EventBridge (event-driven architecture)
+  - Service-to-service authentication (API key)
+- Shared library (`AmesaBackend.Shared`) provides common functionality
+- Redis caching (where required) for performance
+
 ### Request Flow
 ```
-Client → CloudFront /api/* → ALB → ECS Task → .NET API → Aurora PostgreSQL
-                                              → SignalR Hub → WebSocket Connection
+Client → CloudFront /api/* → ALB (path-based routing) → ECS Task (microservice) → .NET API → Aurora PostgreSQL (schema-specific)
+                                              → SignalR Hub → LongPolling Connection
+                                              → EventBridge → Other Services
 ```
+
+### Inter-Service Communication
+- **HTTP/REST**: Services call each other via ALB using service-to-service authentication
+- **EventBridge**: Event-driven communication for async operations
+  - Event bus: `amesa-event-bus`
+  - Event publisher: `EventBridgePublisher` in Shared library
+  - Event schemas: Defined in `AmesaBackend.Shared/Events/EventSchemas.cs`
+- **Service-to-Service Auth**: API key authentication via `ServiceToServiceAuthMiddleware`
+  - API key stored in: `/amesa/prod/ServiceAuth/ApiKey` (SSM Parameter Store)
+
+## Cross-Cutting Concerns
+
+### Rate Limiting
+- **Service**: `RateLimitService` (Redis-backed, circuit breaker protected)
+- **Implementation**: Atomic increment-and-check pattern (prevents race conditions)
+- **Cache Key Pattern**: `ratelimit:{key}` (Redis keys)
+- **Fail-Open Behavior**: Default (allows requests if Redis fails), configurable to fail-closed
+- **Circuit Breaker**: Protected by `CircuitBreakerService` (5 failures in 30 seconds threshold)
+
+**Rate Limiting Rules**:
+
+| Endpoint | Limit | Window | Key Pattern | Scope |
+|----------|-------|--------|-------------|-------|
+| Registration | 5 attempts | 1 hour | `registration:{ip}` | Per IP |
+| Login | 5 attempts | 15 minutes | `login:{email}` | Per email |
+| Resend Verification | 3 attempts | 1 hour | `resend-verification:{email}` | Per email |
+| Forgot Password | 3 attempts | 1 hour | `password-reset:{email}` | Per email |
+| Reset Password (Token) | 5 attempts | 1 hour | `password-reset-attempt:{token}` | Per token |
+| Reset Password (IP) | 10 attempts | 1 hour | `password-reset-ip:{ip}` | Per IP |
+| OAuth Exchange | 10 attempts | 15 minutes | `oauth-exchange:{ip}` | Per IP |
+| Two-Factor Verify | 10 attempts | 1 minute | `2fa-verify:{userId}` | Per user |
+| Account Deletion | 3 attempts | 1 hour | `account-deletion:{userId}` | Per user |
+| Payment Processing | Variable | Variable | `payment:{userId}` | Service-specific |
+| Payment Method Creation | 5 per hour | 1 hour | `payment-method:{userId}` | Per user |
+| Transaction Queries | 100 per hour | 1 hour | `transaction-query:{userId}` | Per user |
+
+### Circuit Breaker Patterns
+- **Service**: `CircuitBreakerService` (Polly v8.4.2)
+- **Configuration**:
+  - Failure Threshold: 5 failures
+  - Duration of Break: 30 seconds
+  - Sampling Duration: 30 seconds
+- **Operations Protected**:
+  - `RateLimit_Redis` - Rate limiting Redis operations
+  - `AccountLockout_Redis` - Account lockout Redis operations
+- **Fail-Open Behavior**: Default (allows operations if circuit breaker opens)
+- **Fail-Closed Configuration**: Configurable via `SecuritySettings:{Service}FailClosed`
+- **Metrics**: Success/failure counters, periodic logging, high failure rate alerting
+
+### Health Check Implementations
+- **Generic Health Endpoint**: `/health` (all services)
+  - Returns: `{ "status": "Healthy|Degraded|Unhealthy" }`
+  - Used by: ALB target groups for health monitoring
+  - Checks: Basic service availability
+- **Service-Specific Health Checks**:
+  - `/health/notifications` - Notification service detailed health
+    - Checks: `basic`, `email`, `sms`, `webpush`, `telegram`
+    - Status Codes: 200 (Healthy/Degraded), 503 (Unhealthy)
+    - Dependencies: Database, Redis, AWS SES, SNS, external services
+- **Health Check Response Format**:
+  ```json
+  {
+    "status": "Healthy|Degraded|Unhealthy",
+    "checks": {
+      "basic": { "status": "Healthy", "description": "Service is running" },
+      "database": { "status": "Healthy", "description": "Database connection OK" },
+      "redis": { "status": "Healthy", "description": "Redis connection OK" }
+    }
+  }
+  ```
+
+### Error Handling Patterns
+- **Global Error Handler**: `ErrorHandlerMiddleware` (shared middleware)
+- **Error Response Format**: `StandardApiResponse<object>` with `StandardErrorResponse`
+  ```json
+  {
+    "success": false,
+    "error": {
+      "code": "ERROR_CODE",
+      "message": "Human-readable message",
+      "details": {}
+    }
+  }
+  ```
+- **Error Code Mapping**:
+  - `ApiException` (validation) → `VALIDATION_ERROR`
+  - `ApiException` (other) → `API_ERROR` or `ReferenceErrorCode`
+  - `CustomFaultException` → Status code string
+  - `UnauthorizedAccessException` → `AUTHENTICATION_ERROR`
+  - `KeyNotFoundException` → `NOT_FOUND`
+  - `DbException` → `DATABASE_ERROR`
+  - Default → `INTERNAL_ERROR`
+- **Error Logging**: All errors logged with context (sessionId, request body, stack trace)
+- **Exception Details**: Configurable via `RestExceptionDetails:showExceptionDetails` (default: false)
+
+### Caching Strategies
+- **Redis Cache**: Distributed cache via `ICache` interface (StackExchange.Redis)
+- **Cache Key Patterns**:
+  - Houses: `houses_*` (pattern-based invalidation)
+  - Translations: `translation_{language}_{key}`
+  - User preferences: `user_prefs_{userId}`
+  - Email verification: `email_verified:{userId}` (5 min TTL)
+  - Rate limiting: `ratelimit:{key}`
+  - Account lockout: `account_locked:{email}` (15 min TTL)
+- **Cache TTL Values**:
+  - Houses list: 5 minutes (in-memory), 30 minutes (localStorage frontend)
+  - Individual houses: 5 minutes (in-memory), 1 hour (localStorage frontend)
+  - Translations: 1 hour
+  - Email verification status: 5 minutes
+  - Rate limiting: Variable (matches rate limit window)
+- **Cache Invalidation**:
+  - Time-based: TTL expiration
+  - Event-based: EventBridge events trigger cache invalidation
+  - Manual: Service-specific cache invalidation methods
+- **Fail-Open Strategy**: Services continue with database fallback if Redis fails
+- **Services Using Redis**: Auth, Lottery, Content, Payment (required in production)
+
+### Security Headers
+- **Middleware**: `SecurityHeadersMiddleware` (shared middleware)
+- **Headers Set**:
+  - `X-Frame-Options: DENY` - Prevents clickjacking
+  - `X-Content-Type-Options: nosniff` - Prevents MIME type sniffing
+  - `X-XSS-Protection: 1; mode=block` - XSS protection
+  - `Referrer-Policy: strict-origin-when-cross-origin` - Referrer policy
+  - `Permissions-Policy: geolocation=(), microphone=(), camera=()` - Feature permissions
+  - `Content-Security-Policy` - CSP policy (configured for SignalR WebSocket support)
+  - `Strict-Transport-Security` - HSTS (HTTPS only, production)
+- **Applied To**: All microservices via shared middleware
+
+### CORS Configuration
+- **Configuration**: Per-service CORS configuration in `Program.cs`
+- **Allowed Origins**: Environment-specific (production CloudFront URL, localhost for dev)
+- **Allowed Methods**: GET, POST, PUT, DELETE, OPTIONS, PATCH
+- **Allowed Headers**: Content-Type, Authorization, X-Requested-With
+- **Credentials**: Supported (cookies, authorization headers)
+
+### Request/Response Logging
+- **Middleware**: 
+  - `RequestResponseLoggingMiddleware` - Basic request/response logging
+  - `AMESASerilogScopedLoggingMiddleware` - Structured logging with Serilog
+- **What Gets Logged**:
+  - Request: Method, path, query params, headers (sanitized), body (sanitized)
+  - Response: Status code, headers, body (sanitized)
+  - Context: User ID, session ID, IP address, timestamp
+- **PII Sanitization**: Passwords, tokens, sensitive data removed from logs
+- **Log Levels**: Debug, Information, Warning, Error, Fatal
+- **Log Retention**: CloudWatch logs (configurable retention period)
+
+### Retry Policies
+- **HTTP Client Retries**: Polly-based retry policies for inter-service communication
+- **Retry Configuration**:
+  - Max Retries: 3 (configurable)
+  - Backoff Strategy: Exponential backoff (1s, 2s, 4s)
+  - Retryable Errors: Transient network errors, timeout errors, 5xx server errors
+  - Non-Retryable Errors: 4xx client errors (except 429 rate limit)
+- **EventBridge Retries**: 
+  - Max Retries: 3 (configurable via `EventBridge:MaxRetries`)
+  - Retry tracking in Redis cache
+  - Prevents infinite retries
+- **Frontend Retry**: Automatic retry with exponential backoff for network errors (via `RetryService`)
+
+### Secrets Management
+- **AWS Secrets Manager**: Used for sensitive credentials in production
+  - **OAuth Secrets** (Auth Service):
+    - Google OAuth: `amesa-google_people_API` (contains `ClientId`, `ClientSecret`, `RecaptchaSiteKey`, `RecaptchaProjectId`, `RecaptchaMinScore`)
+    - Meta OAuth: `amesa-meta-oauth` (contains `AppId`, `AppSecret`)
+    - Loading method: `LoadOAuthSecretsFromAws()` extension method in `AwsSecretsConfiguration.cs`
+    - Format: JSON objects with property names matching configuration keys
+    - Region: Configurable via `Aws:Region` config or `AWS_REGION` env var (default: `eu-north-1`)
+  - **Notification Secrets** (Notification Service):
+    - Loading method: `LoadNotificationSecretsFromAws()` extension method
+    - Location: `BE/AmesaBackend.Notification/Configuration/AwsSecretsConfiguration.cs`
+  - **Payment Secrets** (Payment Service):
+    - Loading method: `LoadPaymentSecretsFromAws()` extension method
+    - Location: `BE/AmesaBackend.Payment/Configuration/PaymentSecretsConfiguration.cs`
+  - **Error Handling**: Graceful degradation - logs warnings if secrets not found, continues with local config
+  - **Production Only**: Secrets loading only occurs in production environment (`IsProduction()` check)
+- **AWS SSM Parameter Store**: Used for service-to-service authentication
+  - **Service Auth API Key**: `/amesa/prod/ServiceAuth/ApiKey`
+  - **Usage**: Injected via ECS task definition secrets (e.g., `lottery-task-def.json`, `payment-task-def.json`)
+  - **JWT Secret Key**: Also loaded from SSM Parameter Store via ECS task definition
+- **Secret Formats**:
+  - JSON format for complex secrets (OAuth credentials)
+  - Plain text for simple secrets (API keys, JWT secrets)
+- **Loading Pattern**: Extension methods on `IConfigurationBuilder` that add secrets to in-memory configuration collection
+
+### Database Connection Patterns
+- **Connection Pooling** (PostgreSQL/Npgsql):
+  - **MaxPoolSize**: 100 connections
+  - **MinPoolSize**: 10 connections
+  - **ConnectionLifetime**: 300 seconds (5 minutes)
+  - **CommandTimeout**: 30 seconds
+  - **ConnectionTimeout**: 15 seconds
+  - Configuration: Set via `NpgsqlConnectionStringBuilder` in `Program.cs` (e.g., `BE/AmesaBackend.Notification/Program.cs`)
+- **EF Core Retry Policies**:
+  - **Max Retries**: 3 attempts
+  - **Max Retry Delay**: 30 seconds
+  - **Error Codes**: All transient errors (null `errorCodesToAdd` means all)
+  - Configuration: `EnableRetryOnFailure()` in `UseNpgsql()` options
+  - Location: Configured per service in `Program.cs` database setup
+- **Transaction Management**:
+  - **Default Isolation Level**: READ COMMITTED (PostgreSQL default)
+  - **Explicit Transactions**: Used for multi-step operations (e.g., ticket purchases, payment processing)
+  - **Transaction Scope**: Typically scoped to service method execution
+- **Connection String Sourcing**:
+  - Primary: Environment variable `ConnectionStrings__DefaultConnection` or `ConnectionStrings:DefaultConnection` in config
+  - Fallback: `appsettings.json` `ConnectionStrings:DefaultConnection`
+  - Schema-Specific: Each service uses its own schema (e.g., `amesa_auth`, `amesa_lottery`, `amesa_notification`)
+- **Development vs Production**:
+  - Development: SQLite with file-based database (`appsettings.Development.json`)
+  - Production: Aurora PostgreSQL Serverless v2 with connection pooling
+
+### Monitoring & Observability
+- **CloudWatch Logs**:
+  - **Log Groups**: `/ecs/{service-name}` (e.g., `/ecs/amesa-auth-service`, `/ecs/amesa-lottery-service`)
+  - **Logging Framework**: Serilog with CloudWatch sink
+  - **Log Levels**: Information, Warning, Error, Critical
+  - **Retention**: Configurable per log group (typically 30 days)
+  - **Structured Logging**: JSON format with context (request ID, user ID, session ID)
+- **CloudWatch Metrics**:
+  - **Service**: `CloudWatchMetricsService` (e.g., in Notification service)
+  - **Custom Metrics**: Application-specific metrics (e.g., notification send counts, error rates)
+  - **Auto Metrics**: ECS service metrics (CPU, memory, network) and ALB metrics (request count, latency, error rates)
+  - **Namespace**: Service-specific namespaces (e.g., `Amesa/Notification`)
+  - **CloudWatch Client**: `IAmazonCloudWatch` singleton registered per service
+- **AWS X-Ray** (Distributed Tracing):
+  - **Status**: Currently commented out/removed in microservices (see `Program.cs` files)
+  - **Previous Implementation**: `XRayExtensions` class for distributed tracing setup
+  - **Note**: Tracing may be re-enabled in future for production observability
+- **Health Checks**:
+  - **Generic Endpoint**: `/health` (standard ASP.NET Core health checks)
+  - **Service-Specific**: `/health/notifications`, `/health/captcha`, etc.
+  - **Checks**: Database connectivity, external service availability (SNS, SES, etc.)
+  - **Response Format**: JSON with status (`Healthy`, `Degraded`, `Unhealthy`) and details
+- **SNS Alerts**:
+  - **Topic**: `AmesaAlerts` (configured in AWS infrastructure)
+  - **Usage**: Critical error notifications, system alerts
+  - **Integration**: Via AWS SDK `IAmazonSimpleNotificationService`
+
+### Validation Patterns
+- **Data Annotations**: Primary validation method on DTOs
+  - `[Required]` - Field is required
+  - `[EmailAddress]` - Email format validation
+  - `[StringLength(min, max)]` - String length validation
+  - `[Range(min, max)]` - Numeric range validation
+  - `[RegularExpression]` - Pattern matching
+- **Custom Validators**:
+  - `PasswordValidatorService` - Password strength validation
+    - Minimum 8 characters
+    - At least one uppercase letter
+    - At least one lowercase letter
+    - At least one digit
+    - At least one special character
+    - Not in common passwords list (100+ weak passwords)
+    - Password history check (last 5 passwords, configurable)
+    - Breach checking (optional, via `IPasswordBreachService`)
+- **Model State Validation**: Automatic validation via `[ApiController]` attribute
+- **Business Rule Validation**: Custom validation in services (e.g., participant cap checks)
+
+### Background Services
+- **SessionCleanupService** (Auth Service):
+  - Purpose: Clean up expired user sessions
+  - Schedule: Periodic cleanup (configurable interval)
+  - Location: `BE/AmesaBackend.Auth/Services/SessionCleanupService.cs`
+  
+- **PasswordHistoryCleanupService** (Auth Service):
+  - Purpose: Clean up old password history records
+  - Schedule: Periodic cleanup (configurable interval)
+  - Location: `BE/AmesaBackend.Auth/BackgroundServices/PasswordHistoryCleanupService.cs`
+  
+- **NotificationQueueProcessor** (Notification Service):
+  - Purpose: Process queued notifications from database
+  - Schedule: Continuous processing with configurable delay
+  - Location: `BE/AmesaBackend.Notification/Services/NotificationQueueProcessor.cs`
+  
+- **NotificationArchiveBackgroundService** (Notification Service):
+  - Purpose: Archive old notifications
+  - Schedule: Periodic archiving (configurable interval)
+  - Location: `BE/AmesaBackend.Notification/Services/NotificationArchiveBackgroundService.cs`
+  
+- **EventBridgeEventHandler** (Notification Service):
+  - Purpose: Handle EventBridge events for notifications
+  - Schedule: Event-driven (triggers on EventBridge events)
+  - Location: `BE/AmesaBackend.Notification/Handlers/EventBridgeEventHandler.cs`
+  
+- **LotteryCountdownService** (Lottery Service):
+  - Purpose: Calculate and broadcast lottery countdown updates
+  - Schedule: Updates every 1 second for active lotteries
+  - Location: `BE/AmesaBackend.Lottery/Services/LotteryCountdownService.cs`
+  - Broadcasts: `CountdownUpdated` events via SignalR
+  
+- **ReservationCleanupService** (Lottery Service):
+  - Purpose: Clean up expired ticket reservations
+  - Schedule: Periodic cleanup (configurable interval)
+  - Location: `BE/AmesaBackend.Lottery/Services/ReservationCleanupService.cs`
+  
+- **TicketQueueProcessorService** (Lottery Service):
+  - Purpose: Process queued ticket creation requests
+  - Schedule: Continuous processing with configurable delay
+  - Location: `BE/AmesaBackend.Lottery/Services/TicketQueueProcessorService.cs`
+  
+- **InventorySyncService** (Lottery Service):
+  - Purpose: Synchronize inventory data between services
+  - Schedule: Periodic sync (configurable interval)
+  - Location: `BE/AmesaBackend.Lottery/Services/InventorySyncService.cs`
 
 ## Business Context
 - **4Wins Model**: Property lottery platform
@@ -435,7 +1141,7 @@ Client → CloudFront /api/* → ALB → ECS Task → .NET API → Aurora Postgr
 - **Real-time Features**: Live lottery updates via SignalR
 - **Identity Verification**: KYC/AML compliance
 
-## Cursor Cost Optimization Refactoring - Backend Status (2025-12-01)
+## Cursor Cost Optimization Refactoring - Backend Status
 
 **Overall Progress**: Phases 1-3 Complete ✅ (Backend refactoring 100% complete)
 
@@ -502,7 +1208,7 @@ Client → CloudFront /api/* → ALB → ECS Task → .NET API → Aurora Postgr
 - **Frontend**: `loginWithGoogle()` method and Google login button
 
 **Meta OAuth** ✅
-- **Status**: Fully implemented, configured and ready for production (2025-12-02)
+- **Status**: Fully implemented, configured and ready for production
 - **AWS Secrets Manager**: Secret `amesa-meta-oauth`
 - **Secret ARN**: `arn:aws:secretsmanager:eu-north-1:129394705401:secret:amesa-meta-oauth-nd63xt`
 - **Backend Endpoints**: 
@@ -537,7 +1243,52 @@ Client → CloudFront /api/* → ALB → ECS Task → .NET API → Aurora Postgr
 - **OAuth Callback Component**: Frontend component handles all OAuth callbacks
 - **Database Schema**: `users` table has `auth_provider` (enum) and `provider_id` (string) columns
 
-## Recent Major Work (2025-12-05) - ECS DEPLOYMENT FIX: MISSING SSM PARAMETER
+## Recent Changes - AUTHENTICATION SECURITY AUDIT COMPLETE
+- ✅ **Final Deep Audit Complete** - Comprehensive security and code quality review of registration and login flows
+  - **Status**: ✅ **PRODUCTION READY** - All critical and high-priority issues resolved
+  - **Audit Results**:
+    - **Critical Issues**: 0 ✅ (All fixed)
+    - **High Priority Issues**: 0 ✅ (All fixed)
+    - **Medium Priority Issues**: 0 ✅ (All fixed)
+    - **Low Priority Issues**: 5 (Optional enhancements, not security vulnerabilities)
+  - **Verified Fixes**:
+    - ✅ Password verification null reference bug (Issue #1) - Fixed
+    - ✅ Email domain validation null reference (Issue #2) - Fixed
+    - ✅ Phone duplicate check race condition (Issue #3) - Fixed with row-level locking
+    - ✅ Configuration parsing without validation (Issue #4) - Fixed with `GetValue<T>()`
+    - ✅ Error message information leakage (Issue #5) - Fixed with generic messages
+    - ✅ OAuth soft-deleted user check (Issue #7) - Fixed
+    - ✅ RememberMe calculation inconsistency (Issue #10) - Fixed
+    - ✅ DateOfBirth validation edge case (Issue #14) - Fixed
+  - **Security Posture**: ✅ **EXCELLENT**
+    - Race condition protection with row-level locking
+    - Timing attack protection with artificial delays
+    - Enumeration prevention with generic error messages
+    - Comprehensive account status validation
+    - Device tracking and change detection
+    - Soft delete handling with grace period
+    - Transaction safety with proper rollback
+    - SQL injection prevention with parameterized queries
+  - **Code Quality**: ✅ **HIGH**
+    - Well-structured, maintainable code
+    - Comprehensive error handling
+    - Extensive security logging
+    - Proper transaction management
+    - Safe configuration parsing
+  - **Remaining Enhancements** (Low Priority, Optional):
+    - IP address parsing validation (X-Forwarded-For header)
+    - OAuth username generation validation
+    - Event publishing error handling (try-catch)
+    - Password history atomicity (non-critical)
+    - Transaction timeout documentation
+  - **Documentation Created**:
+    - `MetaData/Documentation/Authentication/FINAL_AUDIT_REPORT.md` - Complete audit report
+    - All previous audit findings documented and verified
+  - **Build Status**: ✅ **SUCCESS** (0 errors)
+  - **Status**: ✅ **PRODUCTION READY** - Code is secure, well-tested, and ready for deployment
+  - **Recommendation**: Deploy to production, continue monitoring, schedule periodic audits
+
+## Recent Changes - ECS DEPLOYMENT FIX: MISSING SSM PARAMETER
 - ✅ **ECS Deployment Fix: ServiceAuth API Key Parameter Created** - Fixed lottery service deployment failure
   - **Root Cause**: Missing SSM Parameter Store parameter `/amesa/prod/ServiceAuth/ApiKey` causing ECS task initialization failures
   - **Error**: `ResourceInitializationError: unable to pull secrets or registry auth: invalid ssm parameters: /amesa/prod/ServiceAuth/ApiKey`
@@ -571,7 +1322,7 @@ Client → CloudFront /api/* → ALB → ECS Task → .NET API → Aurora Postgr
     - `BE/lottery-task-def.json` - References the parameter
     - `BE/payment-task-def.json` - References the parameter
 
-## Recent Major Work (2025-12-02) - META OAUTH INTEGRATION
+## Recent Changes - META OAUTH INTEGRATION
 - ✅ **Meta OAuth Integration Complete** - Full Meta/Facebook OAuth authentication configured
   - **AWS Secrets Manager Setup**:
     - Created secret `amesa-meta-oauth` in eu-north-1 region
@@ -602,7 +1353,7 @@ Client → CloudFront /api/* → ALB → ECS Task → .NET API → Aurora Postgr
   - **Impact**: After deployment, users will be able to log in using "Continue with Meta" button
   - **Next Steps**: Deploy backend code to enable Meta OAuth functionality
 
-## Recent Major Work (2025-12-01) - PAYMENT SERVICE STABILIZATION FIXES
+## Recent Changes - PAYMENT SERVICE STABILIZATION FIXES
 - ✅ **Payment Service Stabilization** - Fixed all startup errors preventing service from stabilizing
   - **Root Cause**: Multiple issues causing service crashes and deployment failures
   - **Fixes Applied**:
@@ -633,7 +1384,7 @@ Client → CloudFront /api/* → ALB → ECS Task → .NET API → Aurora Postgr
   - **Status**: ✅ Fixed, tested locally, pushed to main - CI/CD will deploy with fixes
   - **Impact**: Payment service should now stabilize successfully in ECS with all startup errors resolved
 
-## Recent Major Work (2025-12-01) - CI/CD WORKFLOW UPDATE
+## Recent Changes - CI/CD WORKFLOW UPDATE
 - ✅ **CI/CD Workflow Updated** - Test failures no longer block deployment
   - **Root Cause**: 3 tests failing, blocking payment service deployment
   - **Fixes Applied**:
@@ -646,7 +1397,7 @@ Client → CloudFront /api/* → ALB → ECS Task → .NET API → Aurora Postgr
   - **Status**: ✅ Deployed - Payment service will deploy even with test failures
   - **Impact**: Enables deployment of payment system while test failures are addressed separately
 
-## Recent Major Work (2025-12-01) - TEST FIXES & COMPILATION ERROR RESOLUTION
+## Recent Changes - TEST FIXES & COMPILATION ERROR RESOLUTION
 - ✅ **PaymentIntegrationTests Fixed** - Fixed all compilation errors and test failures
   - Fixed `ProductService` method names (GetProductAsync, CalculatePriceAsync, DeactivateProductAsync)
   - Fixed `Product` model properties (ProductType instead of Type, removed UpdatedBy)
@@ -662,7 +1413,7 @@ Client → CloudFront /api/* → ALB → ECS Task → .NET API → Aurora Postgr
 - **Test Status**: 97 passed, 0 failed, 5 skipped (down from 3 failures)
 - **Commits**: `d2573dc` (compilation fixes), `925a66c` (test fixes)
 
-## Recent Major Work (2025-12-01) - MULTI-CHANNEL NOTIFICATION SYSTEM IMPLEMENTATION & DEPLOYMENT
+## Recent Changes - MULTI-CHANNEL NOTIFICATION SYSTEM IMPLEMENTATION & DEPLOYMENT
 - ✅ **Multi-Channel Notification System** - Complete implementation and deployment
   - **Backend Implementation**:
     - Created `NotificationOrchestrator` with SignalR integration, rate limiting via `IRateLimitService`, and caching
@@ -690,7 +1441,7 @@ Client → CloudFront /api/* → ALB → ECS Task → .NET API → Aurora Postgr
     - Fixed `NotificationOrchestratorTests`: Added `IRateLimitService` mock, fixed extern alias usage for `AuthApp`
     - Fixed `NotificationControllerIntegrationTests`: Skipped tests (endpoints in separate microservice), fixed `WebApplicationFixture.Client` property usage
     - Updated `GetRecordAsync` mock to match `ICache` interface signature
-    - All tests compiling: 97 passed, 0 failed, 5 skipped (updated 2025-12-01)
+    - All tests compiling: 97 passed, 0 failed, 5 skipped
   - **Code Fixes**:
     - Removed duplicate `app.MapHealthChecks("/health/notifications")` mapping in `Program.cs`
     - Fixed health check endpoint configuration
@@ -701,7 +1452,7 @@ Client → CloudFront /api/* → ALB → ECS Task → .NET API → Aurora Postgr
   - **Documentation**: See `MetaData/Documentation/Notifications/MULTI_CHANNEL_NOTIFICATIONS_GUIDE.md`
   - **Status**: ✅ Production-ready, deployed, and operational
 
-## Recent Major Work (2025-11-30) - FAVORITES FUNCTIONALITY FIX & REDIS REQUIREMENT IMPLEMENTATION
+## Recent Changes - FAVORITES FUNCTIONALITY FIX & REDIS REQUIREMENT IMPLEMENTATION
 - ✅ **Favorites Functionality Fixed** - Resolved missing UserPreferencesService registration in Lottery service
   - Added using statements for `AmesaBackend.Auth.Data` and `AmesaBackend.Auth.Services`
   - Registered `AuthDbContext` in Lottery service with same connection string and retry logic
@@ -723,7 +1474,7 @@ Client → CloudFront /api/* → ALB → ECS Task → .NET API → Aurora Postgr
   - Fixed async timing issues in cache tests
   - Tests now verify consistent responses (fail-open design)
 
-## Previous Major Work (2025-01-XX) - RECAPTCHA ENTERPRISE IMPROVEMENTS & SECURITY ENHANCEMENTS
+## Previous Changes - RECAPTCHA ENTERPRISE IMPROVEMENTS & SECURITY ENHANCEMENTS
 - ✅ **reCAPTCHA Enterprise Integration** - Switched from reCAPTCHA v3 to Enterprise API
 - ✅ **Google Cloud Authentication** - Service account JSON stored in AWS Secrets Manager, loaded at startup
 - ✅ **Retry Logic Implementation** - Exponential backoff (3 retries) for transient Google API errors
@@ -734,7 +1485,7 @@ Client → CloudFront /api/* → ALB → ECS Task → .NET API → Aurora Postgr
 - ✅ **ECS Task Definition Updates** - Google service account credentials configuration added
 - ✅ **Security Features Complete** - Rate limiting, account lockout, password validation, CAPTCHA, email verification, session management, audit logging
 
-## Previous Major Work (2025-01-XX) - LOTTERY FAVORITES DEPLOYMENT & DOCKER BUILD FIX
+## Previous Changes - LOTTERY FAVORITES DEPLOYMENT & DOCKER BUILD FIX
 - ✅ **Docker Build Error Fixed** - Resolved NETSDK1152 error for amesa-lottery-service
 - ✅ **Dockerfile Workaround** - Added temporary rename of Auth appsettings.json during publish
 - ✅ **Project Reference Updated** - Modified AmesaBackend.Lottery.csproj to handle referenced project content
@@ -743,7 +1494,7 @@ Client → CloudFront /api/* → ALB → ECS Task → .NET API → Aurora Postgr
 - ✅ **Migration Complete** - Database indexes, views, and translations added to production
 - ✅ **Ready for Testing** - All services deployed, endpoints ready for production verification
 
-## Previous Major Work (2025-11-21) - COMPLETE TRANSLATION SYSTEM OVERHAUL
+## Previous Changes - COMPLETE TRANSLATION SYSTEM OVERHAUL
 - ✅ **Complete Translation Coverage** - All 507 frontend translation keys identified and scripted
 - ✅ **Language Support Reduced** - Removed Hebrew and Arabic, now 4 languages (EN, ES, FR, PL)
 - ✅ **Comprehensive SQL Script** - `COMPLETE_ALL_507_TRANSLATIONS.sql` with all keys for all languages
@@ -751,7 +1502,7 @@ Client → CloudFront /api/* → ALB → ECS Task → .NET API → Aurora Postgr
 - ✅ **Database Seeder Excluded** - Seeder service added to .gitignore, removed from repository
 - ✅ **Translation Loader** - Enhanced UX with loader when switching languages
 
-## Previous Major Work (2025-11-21) - DATABASE SEEDING & TRANSLATION FIXES
+## Previous Changes - DATABASE SEEDING & TRANSLATION FIXES
 - ✅ **Database Fully Seeded** - Production database populated with comprehensive test data
 - ✅ **Translation System Fixed** - Resolved Entity Framework schema mapping issues  
 - ✅ **Polish Language Added** - Complete Polish translation support (6th language)
@@ -768,13 +1519,14 @@ Client → CloudFront /api/* → ALB → ECS Task → .NET API → Aurora Postgr
 - ✅ Configured database authentication
 
 ## 📚 **Session Documentation**
-**Latest Session**: [Database Seeding & Translation System Fix](../MetaData/Documentation/2025-11-21-Database-Seeding-And-Translations/README.md)
+**Latest Session**: Database Seeding & Translation System Fix (completed - see `MetaData/Documentation/README.md` for documentation structure)
 - Complete handoff documentation
 - Technical implementation details
 - Schema reference files
 - Safety measures and validation
 
 ---
-**Last Updated**: 2025-12-01 (Test Fixes & Compilation Error Resolution)
+**Last Updated**: 2025-01-25
+**Context Version**: 2.3.0 (Secrets management, database connection patterns, monitoring & observability, API versioning, testing patterns, and migration patterns documented)
 **Note**: This file should be updated whenever API design, database schema, deployment processes, or infrastructure changes.
 

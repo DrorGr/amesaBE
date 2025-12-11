@@ -406,6 +406,8 @@ secrets.json
 appsettings.*.json
 !appsettings.json
 !appsettings.Development.json
+stripe-secret*.json
+*secret*.json
 
 # Database Seeder Service (not for production deployment)
 AmesaBackend.DatabaseSeeder/

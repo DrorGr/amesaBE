@@ -163,6 +163,7 @@ namespace AmesaBackend.Auth.Data
                 entity.Ignore(e => e.IsDeleted);
                 // Configure foreign key without requiring User entity to be loaded
                 // This prevents EF Core from querying User table during SaveChangesAsync validation
+                // Restrict prevents deletion of user if preferences exist (user should be soft-deleted instead)
                 entity.HasOne(e => e.User)
                     .WithMany()
                     .HasForeignKey(e => e.UserId)
