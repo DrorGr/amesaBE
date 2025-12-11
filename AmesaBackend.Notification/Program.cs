@@ -205,6 +205,9 @@ builder.Services.AddSingleton<ITelegramBotClient>(sp =>
     return new TelegramBotClient(botToken);
 });
 
+// Add Circuit Breaker Service (required by RateLimitService)
+builder.Services.AddSingleton<ICircuitBreakerService, CircuitBreakerService>();
+
 // Rate limiting service (shared from Auth service)
 builder.Services.AddScoped<IRateLimitService, RateLimitService>();
 
