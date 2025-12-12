@@ -88,14 +88,19 @@ namespace AmesaBackend.Admin.Services
                     {
                         _logger.LogDebug("Querying database for admin user: {Email} (normalized: {NormalizedEmail})", email, normalizedEmail);
                         
-                        // Query with case-insensitive email comparison
-                        // Load active users first, then filter in memory to avoid ToLower() translation issues with PostgreSQL
-                        var activeUsers = await _adminDbContext.AdminUsers
-                            .Where(u => u.IsActive)
-                            .ToListAsync();
+                        // Use raw SQL query with proper parameterization to avoid EF Core translation issues
+                        // Query with explicit schema name and case-insensitive comparison
+                        var sql = @"
+                            SELECT id, email, username, password_hash, is_active, created_at, last_login_at 
+                            FROM amesa_admin.admin_users 
+                            WHERE LOWER(TRIM(email)) = {0} 
+                            AND is_active = true 
+                            LIMIT 1";
                         
-                        adminUser = activeUsers
-                            .FirstOrDefault(u => u.Email.ToLower().Trim() == normalizedEmail);
+                        adminUser = await _adminDbContext.AdminUsers
+                            .FromSqlRaw(sql, normalizedEmail)
+                            .AsNoTracking()
+                            .FirstOrDefaultAsync();
                         
                         if (adminUser == null)
                         {

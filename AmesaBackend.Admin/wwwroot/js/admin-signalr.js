@@ -16,7 +16,8 @@
         
         // Check if SignalR is available (wait for script to load)
         // Also check for SignalRLoaded flag set by _Layout.cshtml
-        if (typeof SignalR === 'undefined' && !window.SignalRLoaded) {
+        // SignalR must be defined AND the flag must be set (both conditions)
+        if (typeof SignalR === 'undefined' || !window.SignalRLoaded) {
             retryCount++;
             if (retryCount <= maxRetries) {
                 // Retry after a short delay if SignalR hasn't loaded yet
@@ -30,8 +31,8 @@
             }
         }
         
-        // Double-check SignalR is actually available
-        if (typeof SignalR === 'undefined') {
+        // Double-check SignalR is actually available (both conditions must be true)
+        if (typeof SignalR === 'undefined' || !window.SignalRLoaded) {
             console.warn('SignalR library not available, skipping initialization');
             isInitializing = false;
             return;
