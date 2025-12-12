@@ -27,12 +27,23 @@
     <script src="_framework/blazor.server.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@@microsoft/signalr@latest/dist/browser/signalr.min.js"></script>
     <script>
-        // Ensure SignalR is loaded before admin-signalr.js runs
-        window.addEventListener('load', function() {
-            if (typeof SignalR === 'undefined') {
-                console.error('SignalR library failed to load from CDN');
-            }
-        });
+        // SignalR loading verification - set flag when loaded
+        (function() {
+            const checkSignalR = setInterval(function() {
+                if (typeof SignalR !== 'undefined') {
+                    window.SignalRLoaded = true;
+                    clearInterval(checkSignalR);
+                }
+            }, 50);
+            
+            // Timeout after 5 seconds
+            setTimeout(function() {
+                clearInterval(checkSignalR);
+                if (typeof SignalR === 'undefined') {
+                    console.error('SignalR library failed to load from CDN after 5 seconds');
+                }
+            }, 5000);
+        })();
     </script>
     <script src="js/admin-signalr.js"></script>
 </body>

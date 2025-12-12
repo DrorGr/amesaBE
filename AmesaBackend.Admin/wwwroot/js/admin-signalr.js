@@ -15,11 +15,12 @@
         const signalRUrl = '/hub'; // Relative to base href /admin/, resolves to /admin/hub
         
         // Check if SignalR is available (wait for script to load)
-        if (typeof SignalR === 'undefined') {
+        // Also check for SignalRLoaded flag set by _Layout.cshtml
+        if (typeof SignalR === 'undefined' && !window.SignalRLoaded) {
             retryCount++;
             if (retryCount <= maxRetries) {
                 // Retry after a short delay if SignalR hasn't loaded yet
-                setTimeout(initializeSignalR, 100);
+                setTimeout(initializeSignalR, 150);
                 return;
             } else {
                 // Max retries reached - SignalR library failed to load
@@ -27,6 +28,13 @@
                 isInitializing = false;
                 return;
             }
+        }
+        
+        // Double-check SignalR is actually available
+        if (typeof SignalR === 'undefined') {
+            console.warn('SignalR library not available, skipping initialization');
+            isInitializing = false;
+            return;
         }
         
         // SignalR is available, mark as initializing
@@ -142,8 +150,14 @@
     // Use a single initialization point to prevent multiple calls
     function startInitialization() {
         if (!isInitialized && !isInitializing) {
-            // Wait a bit for SignalR script to load from CDN
-            setTimeout(initializeSignalR, 500);
+            // Check if SignalR script is already loaded
+            if (typeof SignalR !== 'undefined') {
+                initializeSignalR();
+            } else {
+                // Wait a bit for SignalR script to load from CDN
+                // Increased delay to 1000ms to account for slower CDN loads
+                setTimeout(initializeSignalR, 1000);
+            }
         }
     }
     

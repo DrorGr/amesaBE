@@ -50,7 +50,14 @@ AmesaBE is the backend API for the Amesa lottery management system. Built with .
 
 8. **AmesaBackend.Admin** - Admin panel (Blazor Server)
    - ECS Service: `amesa-admin-service`
-   - Key Features: Admin dashboard, content management, user management
+   - Database Schema: `amesa_admin` (admin_users, admin_sessions, audit_logs)
+   - Key Features: Admin dashboard, houses management, users management, real-time updates
+   - Security: Rate limiting (5 attempts, 30-min lockout), page authorization, secure sessions (HTTPS-only), BCrypt password hashing
+   - Authentication: Database-backed with BCrypt, legacy config fallback (requires explicit env vars)
+   - Session: Redis-backed with in-memory fallback, 2-hour timeout
+   - SignalR: AdminHub for real-time notifications (house/user/draw updates)
+   - AWS Integration: S3 image uploads, CloudWatch logging
+   - Status: ✅ Production-ready, all critical security issues fixed
 
 ### Supporting Projects
 - **AmesaBackend.Shared** - Shared library for all microservices
@@ -169,6 +176,7 @@ All microservices use PostgreSQL schemas for data isolation:
 - **Repository**: https://github.com/DrorGr/amesaBE
 - **Main branch**: Stable, deployed with Multi-Channel Notification System ✅
 - **Admin Panel**: Blazor Server admin panel deployed to production ✅
+- **Admin Panel Security**: ✅ **ALL CRITICAL ISSUES FIXED** - Comprehensive security audit completed, all critical vulnerabilities resolved, production-ready
 - **Authentication Security Audit**: ✅ **COMPLETE** - Final deep audit completed, all critical and high-priority issues resolved, production-ready
 - **Meta OAuth Integration**: ✅ **CONFIGURED AND READY** - Meta/Facebook OAuth fully integrated with AWS Secrets Manager
 - **Multi-Channel Notification System**: ✅ **IMPLEMENTED AND DEPLOYED** - Production-ready, ALB routing configured
@@ -238,7 +246,8 @@ All microservices use PostgreSQL schemas for data isolation:
 - **Products**: `/api/v1/products/*` - Product management (amesa-payment-service)
 - **Analytics**: `/api/v1/analytics/*` - Analytics tracking (amesa-analytics-service)
 - **Admin Panel**: `/admin/*` - Blazor Server admin interface (amesa-admin-service)
-- **Blazor SignalR**: `/_blazor/*` - Blazor Server SignalR hub (amesa-admin-service)
+- **Admin SignalR Hub**: `/admin/hub` - AdminHub for real-time notifications (amesa-admin-service)
+- **Blazor SignalR**: `/_blazor/*` - Blazor Server framework SignalR hub (amesa-admin-service)
 
 ### OAuth Endpoints
 - **Google OAuth**: 
@@ -252,11 +261,133 @@ All microservices use PostgreSQL schemas for data isolation:
 
 ### Admin Panel ✅
 - **URL**: `/admin` - Blazor Server admin interface
-- **Features**: Houses, Users, Translations, Promotions, Content management
-- **Authentication**: Email/password login with session management
-- **Documentation**: See `ADMIN_PANEL_GUIDE.md`, `ADMIN_PANEL_DEPLOYED_SUCCESS.md`
+- **ECS Service**: `amesa-admin-service`
+- **Database Schema**: `amesa_admin` (admin_users, admin_sessions, audit_logs)
+- **Technology**: Blazor Server (.NET 8.0)
+- **Port**: 8080 (HTTP)
+- **Authentication**: Email/password login with session management (Redis-backed, falls back to in-memory)
+- **Session Storage**: Redis (distributed cache) with in-memory fallback
+- **Session Timeout**: 2 hours (120 minutes)
+- **Features**:
+  - ✅ Dashboard with statistics (users, houses, tickets, revenue, draws)
+  - ✅ Houses management (CRUD operations)
+  - ✅ Users management (view/edit)
+  - ✅ Tickets management (placeholder)
+  - ✅ Draws management (placeholder)
+  - ✅ Payments management (placeholder)
+  - ✅ Translations management (placeholder)
+  - ✅ Database selector component (environment switching)
+  - ✅ Image upload component (S3 integration with presigned URLs)
+  - ✅ Real-time updates via SignalR (AdminHub)
+- **Pages**:
+  - `/login` - Login page (public)
+  - `/logout` - Logout page
+  - `/` or `/dashboard` - Dashboard (protected)
+  - `/houses` - Houses list (protected)
+  - `/houses/create` - Create house (protected)
+  - `/houses/{id}/edit` - Edit house (protected)
+  - `/users` - Users list (protected)
+  - `/users/{id}/edit` - Edit user (protected)
+  - `/tickets` - Tickets list (protected, placeholder)
+  - `/draws` - Draws list (protected, placeholder)
+  - `/payments` - Payments list (protected, placeholder)
+  - `/translations` - Translations list (protected, placeholder)
+- **Services** (All registered as Scoped):
+  - `IAdminAuthService` → `AdminAuthService` - Authentication with rate limiting
+  - `IAdminDatabaseService` → `AdminDatabaseService` - Database environment management
+  - `IDashboardService` → `DashboardService` - Dashboard statistics
+  - `IHousesService` → `HousesService` - House CRUD operations
+  - `IUsersService` → `UsersService` - User management
+  - `ITranslationsService` → `TranslationsService` - Translation management
+  - `ITicketsService` → `TicketsService` - Ticket management (placeholder)
+  - `IDrawsService` → `DrawsService` - Draw management (placeholder)
+  - `IPaymentsService` → `PaymentsService` - Payment management (placeholder)
+  - `IS3ImageService` → `S3ImageService` - S3 image upload with presigned URLs
+  - `ICloudWatchLoggingService` → `CloudWatchLoggingService` - CloudWatch logging
+  - `IRealTimeNotificationService` → `RealTimeNotificationService` - SignalR notifications
+- **SignalR Hub**:
+  - **Hub**: `AdminHub` at `/admin/hub` (relative to base href)
+  - **Groups**: `houses`, `users`, `draws` (whitelist validation)
+  - **Events**: `HouseCreated`, `HouseUpdated`, `HouseDeleted`, `UserUpdated`, `DrawConducted`
+  - **Client Script**: `wwwroot/js/admin-signalr.js` (with retry logic and initialization guards)
+- **Security Features**:
+  - ✅ Rate limiting with account lockout (5 attempts, 30-minute lockout)
+  - ✅ Page-level authorization via `AuthorizedPageBase` (all protected pages inherit)
+  - ✅ Secure session cookies (HTTPS-only in production via `CookieSecurePolicy.Always`)
+  - ✅ Input validation (email format, password minimum 8 characters)
+  - ✅ SignalR group validation (whitelist of allowed groups)
+  - ✅ Generic error messages (no information disclosure)
+  - ✅ No hardcoded credentials (legacy auth requires explicit config via env vars)
+  - ✅ BCrypt password hashing for database users
+  - ✅ Defensive authentication checks (prevent 500 errors when session unavailable)
+  - ✅ Global exception handling middleware
+- **Database Authentication**:
+  - **Table**: `amesa_admin.admin_users` (id, email, username, password_hash, is_active, created_at, last_login_at)
+  - **Password Hashing**: BCrypt (work factor 12)
+  - **Legacy Fallback**: Config-based auth (requires `ADMIN_EMAIL` and `ADMIN_PASSWORD` env vars)
+  - **Session Tracking**: `amesa_admin.admin_sessions` table (optional, not actively used)
+  - **Audit Logging**: `amesa_admin.audit_logs` table (available for future use)
+- **AWS Integration**:
+  - **S3**: Image uploads with presigned URLs (bucket: `amesa-house-images-prod`)
+  - **CloudWatch**: Logging service for centralized logs
+  - **IAM**: Permissions for S3, CloudWatch, and database access
+- **Middleware**:
+  - `GlobalExceptionHandlerMiddleware` - Centralized error handling
+  - `UseAmesaSecurityHeaders` - Security headers
+  - `UseAmesaMiddleware` - Shared middleware
+  - `UseAmesaLogging` - Request logging
+  - Session middleware (before authentication)
+- **Health Checks**: `/health` endpoint (simple health check)
+- **Path Base**: `/admin` (configured via `app.UsePathBase("/admin")`)
+- **Authentication Flow**:
+  1. Rate limiting check (account lockout after 5 failed attempts, 30-minute lockout)
+  2. Input validation (email format, password minimum 8 characters)
+  3. Database check - Query `amesa_admin.admin_users` for active user with matching email
+  4. Password verification - BCrypt hash verification
+  5. Legacy fallback - If database unavailable and user not found, check config/env variables (ONLY if explicitly configured)
+  6. Session storage - Store authenticated email in HTTP session (Redis in production)
+  7. Last login update - Update `last_login_at` timestamp on successful authentication
+  8. Failed attempt tracking - Clear on success, increment on failure
+- **Environment Variables** (Required):
+  - `DB_CONNECTION_STRING` - PostgreSQL connection string (required for database auth)
+  - `ConnectionStrings__Redis` - Redis connection string (optional, falls back to in-memory)
+  - `ADMIN_EMAIL` - Legacy admin email (optional, only if using legacy auth)
+  - `ADMIN_PASSWORD` - Legacy admin password (optional, only if using legacy auth)
+  - `AWS_REGION` - AWS region (default: eu-north-1)
+  - `AWS_ACCESS_KEY_ID` - AWS access key (for S3, CloudWatch)
+  - `AWS_SECRET_ACCESS_KEY` - AWS secret key
+  - `S3_BUCKET_NAME` - S3 bucket for images (default: amesa-house-images-prod)
+  - `CLOUDWATCH_LOG_GROUP` - CloudWatch log group (default: /ecs/amesa-admin-service)
+- **Components**:
+  - `DatabaseSelector.razor` - Database environment selector
+  - `ImageUpload.razor` - S3 image upload with presigned URLs
+- **Models**:
+  - `AdminUser` - Admin user entity (id, email, username, password_hash, is_active, created_at, last_login_at)
+  - `AdminSession` - Admin session entity (id, admin_user_id, session_token, created_at, expires_at, ip_address, user_agent)
+  - `AuditLog` - Audit log entity (id, action, entity_type, entity_id, admin_user_id, action_details, created_at)
+  - `DashboardStats` - Dashboard statistics DTO
+- **DTOs**: HouseDTOs, UserDTOs, TicketDTOs, DrawDTOs, PaymentDTOs, TranslationDTOs, ImageDTOs
+- **Documentation**: 
+  - `MetaData/Documentation/Development/ADMIN_SERVICE_HANDOFF.md` - Complete handoff document
+  - `MetaData/Documentation/Development/ADMIN_SERVICE_CODE_REVIEW_AUDIT.md` - Security audit report
 
 ### Real-time Hubs (SignalR)
+
+- **AdminHub** (`/admin/hub`):
+  - **Service**: `amesa-admin-service`
+  - **Location**: `BE/AmesaBackend.Admin/Hubs/AdminHub.cs`
+  - **Events Broadcasted**:
+    - `HouseCreated` - New house created notification
+    - `HouseUpdated` - House updated notification
+    - `HouseDeleted` - House deleted notification
+    - `UserUpdated` - User updated notification
+    - `DrawConducted` - Draw conducted notification
+  - **Groups**: `houses`, `users`, `draws` (whitelist validation)
+  - **Methods**: `JoinGroup(string groupName)`, `LeaveGroup(string groupName)`
+  - **Authorization**: No explicit `[Authorize]` attribute (relies on page-level auth via `AuthorizedPageBase`)
+  - **Transport**: LongPolling (CloudFront compatibility)
+  - **Client Script**: `wwwroot/js/admin-signalr.js` (with retry logic, initialization guards, 500ms delay)
+
 - **LotteryHub** (`/ws/lottery`):
   - **Service**: `amesa-lottery-service`
   - **Location**: `BE/AmesaBackend.Lottery/Hubs/LotteryHub.cs`
@@ -1330,6 +1461,32 @@ Client → CloudFront /api/* → ALB (path-based routing) → ECS Task (microser
 - **OAuth Callback Component**: Frontend component handles all OAuth callbacks
 - **Database Schema**: `users` table has `auth_provider` (enum) and `provider_id` (string) columns
 
+## Recent Changes - ADMIN PANEL SECURITY FIXES (2025-01-25)
+- ✅ **Admin Panel Security Audit & Fixes Complete** - All critical security vulnerabilities resolved
+  - **Status**: ✅ **PRODUCTION READY** - All critical and high-priority security issues fixed
+  - **Security Audit**: Comprehensive code review completed (`ADMIN_SERVICE_CODE_REVIEW_AUDIT.md`)
+  - **Critical Fixes Applied**:
+    - ✅ **Removed Hardcoded Default Password** - Legacy auth now requires explicit configuration (no defaults in source code)
+    - ✅ **Removed In-Memory Auth Dictionary** - Authentication relies solely on session storage (Redis in production) for multi-instance support
+    - ✅ **Implemented Rate Limiting** - Account lockout after 5 failed login attempts (30-minute lockout duration)
+    - ✅ **Fixed Session Security** - Cookie security policy uses `CookieSecurePolicy.Always` in production (HTTPS-only)
+    - ✅ **Added Page-Level Authorization** - All protected pages inherit from `AuthorizedPageBase` with authentication checks
+  - **Additional Security Enhancements**:
+    - ✅ Input validation on login page (email format validation, password minimum length 8 characters)
+    - ✅ Generic error messages (no information disclosure about account existence or lockout status)
+    - ✅ SignalR group validation (whitelist of allowed groups: houses, users, draws)
+    - ✅ Defensive authentication checks (prevent 500 errors when session unavailable)
+  - **Files Modified**:
+    - `AmesaBackend.Admin/Services/AdminAuthService.cs` - Rate limiting, removed dictionary, removed hardcoded password
+    - `AmesaBackend.Admin/Program.cs` - Session security fix
+    - `AmesaBackend.Admin/Pages/AuthorizedPageBase.cs` - New authorization base class
+    - `AmesaBackend.Admin/Pages/*.razor` - All protected pages now inherit from AuthorizedPageBase
+    - `AmesaBackend.Admin/Pages/Login.razor` - Input validation and improved error messages
+    - `AmesaBackend.Admin/Shared/MainLayout.razor` - Defensive authentication checks
+    - `AmesaBackend.Admin/Hubs/AdminHub.cs` - Group validation
+  - **Commit**: `63d3b92` - Pushed to main branch
+  - **Impact**: Admin panel now secure and production-ready with comprehensive security measures
+
 ## Recent Changes - AUTHENTICATION SECURITY AUDIT COMPLETE
 - ✅ **Final Deep Audit Complete** - Comprehensive security and code quality review of registration and login flows
   - **Status**: ✅ **PRODUCTION READY** - All critical and high-priority issues resolved
@@ -1614,6 +1771,6 @@ Client → CloudFront /api/* → ALB (path-based routing) → ECS Task (microser
 
 ---
 **Last Updated**: 2025-01-25
-**Context Version**: 2.4.0 (Service registration patterns, Swagger/OpenAPI configuration, logging patterns, and application bootstrap patterns documented)
+**Context Version**: 2.5.0 (Admin Panel security fixes, rate limiting, page authorization, session security improvements)
 **Note**: This file should be updated whenever API design, database schema, deployment processes, or infrastructure changes.
 

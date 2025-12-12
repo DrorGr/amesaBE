@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using AmesaBackend.Admin.Data;
 using AmesaBackend.Admin.Models;
 using BCrypt.Net;
@@ -31,12 +32,30 @@ namespace AmesaBackend.Admin.Services
             IHttpContextAccessor httpContextAccessor, 
             IConfiguration configuration, 
             ILogger<AdminAuthService> logger,
-            AdminDbContext? adminDbContext = null)
+            IServiceProvider serviceProvider)
         {
             _httpContextAccessor = httpContextAccessor;
             _configuration = configuration;
             _logger = logger;
-            _adminDbContext = adminDbContext; // Allow null - will fallback to legacy auth
+            
+            // Try to get AdminDbContext from service provider (may be null if connection string not configured)
+            try
+            {
+                _adminDbContext = serviceProvider.GetService<AdminDbContext>();
+                if (_adminDbContext == null)
+                {
+                    _logger.LogWarning("AdminDbContext is not registered - database authentication will be unavailable. Check DB_CONNECTION_STRING environment variable.");
+                }
+                else
+                {
+                    _logger.LogDebug("AdminDbContext successfully resolved from service provider");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to resolve AdminDbContext from service provider");
+                _adminDbContext = null;
+            }
         }
 
         public async Task<bool> AuthenticateAsync(string email, string password)
@@ -69,12 +88,25 @@ namespace AmesaBackend.Admin.Services
                     {
                         adminUser = await _adminDbContext.AdminUsers
                             .FirstOrDefaultAsync(u => u.Email.ToLower() == normalizedEmail && u.IsActive);
+                        
+                        if (adminUser == null)
+                        {
+                            _logger.LogDebug("Admin user not found in database for email: {Email} (normalized: {NormalizedEmail})", email, normalizedEmail);
+                        }
+                        else
+                        {
+                            _logger.LogDebug("Admin user found in database for email: {Email}, is_active: {IsActive}", email, adminUser.IsActive);
+                        }
                     }
                     catch (Exception dbEx)
                     {
-                        _logger.LogWarning(dbEx, "Failed to query database for admin user {Email}", email);
+                        _logger.LogError(dbEx, "Database error while querying admin user {Email}: {Message}", email, dbEx.Message);
                         // Continue to legacy auth fallback only if explicitly configured
                     }
+                }
+                else
+                {
+                    _logger.LogWarning("AdminDbContext is null - database authentication unavailable for email: {Email}", email);
                 }
 
                 bool authenticated = false;
@@ -89,29 +121,44 @@ namespace AmesaBackend.Admin.Services
                         return false;
                     }
 
-                    var passwordValid = BCrypt.Net.BCrypt.Verify(password.Trim(), adminUser.PasswordHash);
+                    _logger.LogDebug("Verifying password for admin user {Email}, hash length: {HashLength}", email, adminUser.PasswordHash?.Length ?? 0);
                     
-                    if (passwordValid)
+                    try
                     {
-                        authenticated = true;
+                        var passwordToVerify = password.Trim();
+                        var passwordValid = BCrypt.Net.BCrypt.Verify(passwordToVerify, adminUser.PasswordHash);
                         
-                        // Update last login time
-                        if (_adminDbContext != null)
+                        _logger.LogDebug("BCrypt verification result for {Email}: {IsValid}", email, passwordValid);
+                        
+                        if (passwordValid)
                         {
-                            try
+                            authenticated = true;
+                            
+                            // Update last login time
+                            if (_adminDbContext != null)
                             {
-                                adminUser.LastLoginAt = DateTime.UtcNow;
-                                await _adminDbContext.SaveChangesAsync();
-                            }
-                            catch (Exception saveEx)
-                            {
-                                _logger.LogWarning(saveEx, "Failed to update last login time for user {Email}, but authentication succeeded", email);
+                                try
+                                {
+                                    adminUser.LastLoginAt = DateTime.UtcNow;
+                                    await _adminDbContext.SaveChangesAsync();
+                                    _logger.LogDebug("Updated last login time for user {Email}", email);
+                                }
+                                catch (Exception saveEx)
+                                {
+                                    _logger.LogWarning(saveEx, "Failed to update last login time for user {Email}, but authentication succeeded", email);
+                                }
                             }
                         }
+                        else
+                        {
+                            _logger.LogWarning("Invalid password for admin user: {Email} (password hash verification failed)", email);
+                            RecordFailedAttempt(normalizedEmail);
+                            return false;
+                        }
                     }
-                    else
+                    catch (Exception bcryptEx)
                     {
-                        _logger.LogWarning("Invalid password for admin user: {Email}", email);
+                        _logger.LogError(bcryptEx, "BCrypt verification exception for user {Email}: {Message}", email, bcryptEx.Message);
                         RecordFailedAttempt(normalizedEmail);
                         return false;
                     }

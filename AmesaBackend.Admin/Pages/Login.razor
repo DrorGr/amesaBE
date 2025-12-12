@@ -22,46 +22,48 @@
                         </div>
                     }
 
-                    <div class="mb-3">
-                        <label for="email" class="form-label">
-                            <i class="fas fa-envelope"></i> Email Address
-                        </label>
-                        <input type="email" id="email" class="form-control form-control-lg @(emailError ? "is-invalid" : "")" 
-                               value="@email" @oninput="@(e => { email = e.Value?.ToString() ?? ""; emailError = false; })"
-                               placeholder="Enter your email" required />
-                        @if (emailError)
-                        {
-                            <div class="invalid-feedback">Please enter a valid email address.</div>
-                        }
-                    </div>
-
-                    <div class="mb-4">
-                        <label for="password" class="form-label">
-                            <i class="fas fa-lock"></i> Password
-                        </label>
-                        <input type="password" id="password" class="form-control form-control-lg @(passwordError ? "is-invalid" : "")" 
-                               value="@password" @oninput="@(e => { password = e.Value?.ToString() ?? ""; passwordError = false; })"
-                               placeholder="••••••••" required minlength="8" />
-                        @if (passwordError)
-                        {
-                            <div class="invalid-feedback">Password must be at least 8 characters long.</div>
-                        }
-                    </div>
-
-                    <div class="d-grid">
-                        <button type="button" class="btn btn-primary btn-lg" disabled="@isLoading" @onclick="HandleLogin">
-                            @if (isLoading)
+                    <form @onsubmit="HandleLogin" @onsubmit:preventDefault="true">
+                        <div class="mb-3">
+                            <label for="email" class="form-label">
+                                <i class="fas fa-envelope"></i> Email Address
+                            </label>
+                            <input type="email" id="email" class="form-control form-control-lg @(emailError ? "is-invalid" : "")" 
+                                   value="@email" @oninput="@(e => { email = e.Value?.ToString() ?? ""; emailError = false; })"
+                                   placeholder="Enter your email" required autocomplete="email" />
+                            @if (emailError)
                             {
-                                <span class="spinner-border spinner-border-sm me-2"></span>
-                                <span>Signing in...</span>
+                                <div class="invalid-feedback">Please enter a valid email address.</div>
                             }
-                            else
+                        </div>
+
+                        <div class="mb-4">
+                            <label for="password" class="form-label">
+                                <i class="fas fa-lock"></i> Password
+                            </label>
+                            <input type="password" id="password" class="form-control form-control-lg @(passwordError ? "is-invalid" : "")" 
+                                   value="@password" @oninput="@(e => { password = e.Value?.ToString() ?? ""; passwordError = false; })"
+                                   placeholder="••••••••" required minlength="8" autocomplete="current-password" />
+                            @if (passwordError)
                             {
-                                <i class="fas fa-sign-in-alt me-2"></i>
-                                <span>Sign In</span>
+                                <div class="invalid-feedback">Password must be at least 8 characters long.</div>
                             }
-                        </button>
-                    </div>
+                        </div>
+
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary btn-lg" disabled="@isLoading">
+                                @if (isLoading)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2"></span>
+                                    <span>Signing in...</span>
+                                }
+                                else
+                                {
+                                    <i class="fas fa-sign-in-alt me-2"></i>
+                                    <span>Sign In</span>
+                                }
+                            </button>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>
@@ -107,7 +109,7 @@
 
         try
         {
-            var success = await AuthService.AuthenticateAsync(email, password);
+            var success = await AuthService.AuthenticateAsync(email.Trim(), password);
 
             if (success)
             {
