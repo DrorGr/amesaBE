@@ -42,9 +42,21 @@ namespace AmesaBackend.Admin.Services
             {
                 _logger.LogInformation("Login attempt for email: {Email}", email);
 
-                // Try to find admin user in database
-                var adminUser = await _adminDbContext.AdminUsers
-                    .FirstOrDefaultAsync(u => u.Email.ToLower() == email.ToLower().Trim() && u.IsActive);
+                // Try to find admin user in database (if DbContext is available)
+                AdminUser? adminUser = null;
+                if (_adminDbContext != null)
+                {
+                    try
+                    {
+                        adminUser = await _adminDbContext.AdminUsers
+                            .FirstOrDefaultAsync(u => u.Email.ToLower() == email.ToLower().Trim() && u.IsActive);
+                    }
+                    catch (Exception dbEx)
+                    {
+                        _logger.LogWarning(dbEx, "Failed to query database for admin user {Email}, falling back to legacy auth", email);
+                        // Continue to legacy auth fallback
+                    }
+                }
 
                 if (adminUser == null)
                 {
