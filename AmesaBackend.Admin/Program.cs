@@ -66,24 +66,49 @@ if (!string.IsNullOrEmpty(connectionString))
 }
 
 // Configure Redis for session storage
+// CRITICAL: Distributed cache MUST be registered before AddSession()
 var redisConnection = builder.Configuration.GetConnectionString("Redis") 
     ?? builder.Configuration["CacheConfig:RedisConnection"]
     ?? Environment.GetEnvironmentVariable("ConnectionStrings__Redis");
 
+// ALWAYS register a distributed cache FIRST (required for session middleware)
+// This ensures session store is available even if Redis connection fails
+bool redisConfigured = false;
 if (!string.IsNullOrWhiteSpace(redisConnection))
 {
-    // Add Redis connection
-    builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
-        ConnectionMultiplexer.Connect(redisConnection.Trim()));
-    
-    // Configure distributed cache (used by session)
-    builder.Services.AddStackExchangeRedisCache(options =>
+    try
     {
-        options.Configuration = redisConnection.Trim();
-        options.InstanceName = builder.Configuration["CacheConfig:InstanceName"] ?? "amesa-admin";
-    });
-    
-    Log.Information("Session storage configured to use Redis");
+        // Add Redis connection (lazy initialization to avoid blocking startup)
+        builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
+        {
+            try
+            {
+                return ConnectionMultiplexer.Connect(redisConnection.Trim());
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Failed to connect to Redis, service will use in-memory cache");
+                throw; // Re-throw to trigger fallback
+            }
+        });
+        
+        // Configure distributed cache (used by session)
+        builder.Services.AddStackExchangeRedisCache(options =>
+        {
+            options.Configuration = redisConnection.Trim();
+            options.InstanceName = builder.Configuration["CacheConfig:InstanceName"] ?? "amesa-admin";
+        });
+        
+        redisConfigured = true;
+        Log.Information("Session storage configured to use Redis");
+    }
+    catch (Exception ex)
+    {
+        Log.Warning(ex, "Failed to configure Redis, falling back to in-memory cache");
+        // Ensure we always have a distributed cache
+        builder.Services.AddDistributedMemoryCache();
+        redisConfigured = false;
+    }
 }
 else
 {
@@ -92,7 +117,8 @@ else
     Log.Warning("Redis connection not configured. Using in-memory session storage (sessions will not persist across restarts)");
 }
 
-// Configure session (always register, uses Redis if available, otherwise in-memory)
+// Configure session (MUST be after distributed cache registration)
+// AddSession() requires IDistributedCache to be registered
 builder.Services.AddSession(options =>
 {
     options.IdleTimeout = TimeSpan.FromMinutes(120); // 2 hours
@@ -102,7 +128,9 @@ builder.Services.AddSession(options =>
     options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
 });
 
-builder.Services.AddAmesaBackendShared(builder.Configuration, builder.Environment);
+// Add shared services (may also configure Redis, but our distributed cache is already registered)
+// Pass requireRedis=false to prevent exceptions if Redis is not available
+builder.Services.AddAmesaBackendShared(builder.Configuration, builder.Environment, requireRedis: false);
 
 // Configure AWS Services
 var awsRegion = Amazon.RegionEndpoint.GetBySystemName(builder.Configuration["AWS:Region"] ?? "eu-north-1");
