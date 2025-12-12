@@ -126,11 +126,16 @@
         }, 5000);
     }
 
-    // Initialize when DOM is ready
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initializeSignalR);
+    // Initialize when window is fully loaded (ensures all scripts are loaded)
+    if (document.readyState === 'complete') {
+        // Page already loaded, wait a bit for SignalR script to initialize
+        setTimeout(initializeSignalR, 200);
     } else {
-        initializeSignalR();
+        // Wait for window load event to ensure all scripts are loaded
+        window.addEventListener('load', function() {
+            // Give SignalR script a moment to initialize
+            setTimeout(initializeSignalR, 200);
+        });
     }
 
     // Cleanup on page unload

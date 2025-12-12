@@ -3,7 +3,13 @@
 @inject IAdminAuthService AuthService
 @inject NavigationManager Navigation
 
-@if (!AuthService.IsAuthenticated())
+@{
+    var currentPath = Navigation.Uri.Replace(Navigation.BaseUri, "").TrimStart('/');
+    var isLoginPage = currentPath.Equals("login", StringComparison.OrdinalIgnoreCase) || 
+                      currentPath.Equals("admin/login", StringComparison.OrdinalIgnoreCase);
+}
+
+@if (!AuthService.IsAuthenticated() && !isLoginPage)
 {
     <div class="container mt-5">
         <div class="row justify-content-center">
