@@ -26,18 +26,26 @@
                         <label for="email" class="form-label">
                             <i class="fas fa-envelope"></i> Email Address
                         </label>
-                        <input type="email" id="email" class="form-control form-control-lg" 
-                               value="@email" @oninput="@(e => email = e.Value?.ToString() ?? "")"
-                               placeholder="Enter your email" />
+                        <input type="email" id="email" class="form-control form-control-lg @(emailError ? "is-invalid" : "")" 
+                               value="@email" @oninput="@(e => { email = e.Value?.ToString() ?? ""; emailError = false; })"
+                               placeholder="Enter your email" required />
+                        @if (emailError)
+                        {
+                            <div class="invalid-feedback">Please enter a valid email address.</div>
+                        }
                     </div>
 
                     <div class="mb-4">
                         <label for="password" class="form-label">
                             <i class="fas fa-lock"></i> Password
                         </label>
-                        <input type="password" id="password" class="form-control form-control-lg" 
-                               value="@password" @oninput="@(e => password = e.Value?.ToString() ?? "")"
-                               placeholder="••••••••" />
+                        <input type="password" id="password" class="form-control form-control-lg @(passwordError ? "is-invalid" : "")" 
+                               value="@password" @oninput="@(e => { password = e.Value?.ToString() ?? ""; passwordError = false; })"
+                               placeholder="••••••••" required minlength="8" />
+                        @if (passwordError)
+                        {
+                            <div class="invalid-feedback">Password must be at least 8 characters long.</div>
+                        }
                     </div>
 
                     <div class="d-grid">
@@ -65,11 +73,37 @@
     private string password = string.Empty;
     private string? errorMessage;
     private bool isLoading = false;
+    private bool emailError = false;
+    private bool passwordError = false;
 
     private async Task HandleLogin()
     {
         isLoading = true;
         errorMessage = null;
+        emailError = false;
+        passwordError = false;
+
+        // Client-side validation
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            emailError = true;
+            isLoading = false;
+            return;
+        }
+
+        if (!IsValidEmail(email))
+        {
+            emailError = true;
+            isLoading = false;
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(password) || password.Length < 8)
+        {
+            passwordError = true;
+            isLoading = false;
+            return;
+        }
 
         try
         {
@@ -81,16 +115,32 @@
             }
             else
             {
+                // SECURITY: Generic error message - don't reveal if email exists or account is locked
                 errorMessage = "Invalid email or password. Please try again.";
             }
         }
         catch (Exception ex)
         {
-            errorMessage = $"Login failed: {ex.Message}";
+            // SECURITY: Log detailed error server-side, show generic message to client
+            // Detailed error is logged by AdminAuthService
+            errorMessage = "An error occurred during login. Please try again.";
         }
         finally
         {
             isLoading = false;
+        }
+    }
+
+    private bool IsValidEmail(string email)
+    {
+        try
+        {
+            var addr = new System.Net.Mail.MailAddress(email);
+            return addr.Address == email;
+        }
+        catch
+        {
+            return false;
         }
     }
 }

@@ -1,9 +1,9 @@
 @page "/users/{id:guid}/edit"
+@inherits AuthorizedPageBase
 @using AmesaBackend.Admin.Services
 @using AmesaBackend.Admin.DTOs
 @using AmesaBackend.Auth.Models
 @inject IUsersService UsersService
-@inject NavigationManager Navigation
 
 <PageTitle>Edit User - Amesa Admin</PageTitle>
 

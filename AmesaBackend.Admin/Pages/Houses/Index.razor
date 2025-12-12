@@ -1,8 +1,8 @@
 @page "/houses"
+@inherits AuthorizedPageBase
 @using AmesaBackend.Admin.Services
 @using AmesaBackend.Admin.DTOs
 @inject IHousesService HousesService
-@inject NavigationManager Navigation
 @inject IJSRuntime JSRuntime
 
 <PageTitle>Houses - Amesa Admin</PageTitle>

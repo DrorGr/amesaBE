@@ -1,9 +1,9 @@
 @page "/houses/{id:guid}/edit"
+@inherits AuthorizedPageBase
 @using AmesaBackend.Admin.Services
 @using AmesaBackend.Admin.DTOs
 @using AmesaBackend.Admin.Components
 @inject IHousesService HousesService
-@inject NavigationManager Navigation
 
 <PageTitle>Edit House - Amesa Admin</PageTitle>
 

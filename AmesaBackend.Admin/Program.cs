@@ -65,7 +65,13 @@ if (!string.IsNullOrEmpty(connectionString))
         ConfigureDbContext(options, connectionString, "amesa_notification", builder.Environment));
     
     builder.Services.AddDbContext<AdminDbContext>(options =>
-        ConfigureDbContext(options, connectionString, "amesa_admin", builder.Environment));
+        ConfigureDbContext(options, connectionString, "amesa_admin", builder.Environment), ServiceLifetime.Scoped);
+}
+else
+{
+    // If no connection string, register AdminDbContext as null/optional
+    // AdminAuthService will fallback to legacy config-based auth
+    Log.Warning("Database connection string is not configured. Admin authentication will use legacy config-based auth only.");
 }
 
 // Configure Redis for session storage
@@ -127,8 +133,11 @@ builder.Services.AddSession(options =>
     options.IdleTimeout = TimeSpan.FromMinutes(120); // 2 hours
     options.Cookie.HttpOnly = true;
     options.Cookie.IsEssential = true;
-    options.Cookie.SameSite = SameSiteMode.Strict;
-    options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+    options.Cookie.SameSite = SameSiteMode.Lax; // Better CSRF protection while allowing navigation
+    // SECURITY: Always use HTTPS in production (behind ALB/CloudFront)
+    options.Cookie.SecurePolicy = builder.Environment.IsDevelopment() 
+        ? CookieSecurePolicy.SameAsRequest 
+        : CookieSecurePolicy.Always;
 });
 
 // Add shared services (may also configure Redis, but our distributed cache is already registered)

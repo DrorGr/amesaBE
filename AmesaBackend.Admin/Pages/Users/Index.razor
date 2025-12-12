@@ -1,9 +1,9 @@
 @page "/users"
+@inherits AuthorizedPageBase
 @using AmesaBackend.Admin.Services
 @using AmesaBackend.Admin.DTOs
 @using AmesaBackend.Auth.Models
 @inject IUsersService UsersService
-@inject NavigationManager Navigation
 
 <PageTitle>Users - Amesa Admin</PageTitle>
 

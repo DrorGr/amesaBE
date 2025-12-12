@@ -1,11 +1,11 @@
 using Microsoft.AspNetCore.Http;
-using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 using AmesaBackend.Admin.Data;
 using AmesaBackend.Admin.Models;
 using BCrypt.Net;
 using AmesaBackend.Auth.Services;
+using System.Collections.Concurrent;
 
 namespace AmesaBackend.Admin.Services
 {
@@ -14,33 +14,52 @@ namespace AmesaBackend.Admin.Services
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly IConfiguration _configuration;
         private readonly ILogger<AdminAuthService> _logger;
-        private readonly AdminDbContext _adminDbContext;
-        private static readonly ConcurrentDictionary<string, AuthData> _authenticatedUsers = new();
+        private readonly AdminDbContext? _adminDbContext;
         
-        private class AuthData
+        // Rate limiting: track failed login attempts
+        private static readonly ConcurrentDictionary<string, FailedLoginAttempt> _failedAttempts = new();
+        private const int MaxFailedAttempts = 5;
+        private const int LockoutDurationMinutes = 30;
+        
+        private class FailedLoginAttempt
         {
-            public string Email { get; set; } = string.Empty;
-            public DateTime LoginTime { get; set; }
-            public DateTime ExpiresAt { get; set; }
+            public int Count { get; set; }
+            public DateTime? LockedUntil { get; set; }
         }
 
         public AdminAuthService(
             IHttpContextAccessor httpContextAccessor, 
             IConfiguration configuration, 
             ILogger<AdminAuthService> logger,
-            AdminDbContext adminDbContext)
+            AdminDbContext? adminDbContext = null)
         {
             _httpContextAccessor = httpContextAccessor;
             _configuration = configuration;
             _logger = logger;
-            _adminDbContext = adminDbContext;
+            _adminDbContext = adminDbContext; // Allow null - will fallback to legacy auth
         }
 
         public async Task<bool> AuthenticateAsync(string email, string password)
         {
             try
             {
-                _logger.LogInformation("Login attempt for email: {Email}", email);
+                _logger.LogDebug("Login attempt for email: {Email}", email);
+
+                // Check for account lockout
+                var normalizedEmail = email.ToLower().Trim();
+                if (IsAccountLocked(normalizedEmail))
+                {
+                    _logger.LogWarning("Login attempt for locked account: {Email}", email);
+                    return false;
+                }
+
+                // Validate input
+                if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
+                {
+                    _logger.LogWarning("Login attempt with empty email or password");
+                    RecordFailedAttempt(normalizedEmail);
+                    return false;
+                }
 
                 // Try to find admin user in database (if DbContext is available)
                 AdminUser? adminUser = null;
@@ -49,56 +68,99 @@ namespace AmesaBackend.Admin.Services
                     try
                     {
                         adminUser = await _adminDbContext.AdminUsers
-                            .FirstOrDefaultAsync(u => u.Email.ToLower() == email.ToLower().Trim() && u.IsActive);
+                            .FirstOrDefaultAsync(u => u.Email.ToLower() == normalizedEmail && u.IsActive);
                     }
                     catch (Exception dbEx)
                     {
-                        _logger.LogWarning(dbEx, "Failed to query database for admin user {Email}, falling back to legacy auth", email);
-                        // Continue to legacy auth fallback
+                        _logger.LogWarning(dbEx, "Failed to query database for admin user {Email}", email);
+                        // Continue to legacy auth fallback only if explicitly configured
                     }
                 }
 
-                if (adminUser == null)
+                bool authenticated = false;
+
+                if (adminUser != null)
                 {
-                    _logger.LogWarning("Admin user not found or inactive for email: {Email}", email);
-                    
-                    // Fallback to legacy config-based authentication for backward compatibility
-                    var adminEmail = Environment.GetEnvironmentVariable("ADMIN_EMAIL") ?? 
-                                    _configuration["AdminSettings:Email"] ?? 
-                                    "admin@amesa.com";
-                    
-                    var adminPassword = Environment.GetEnvironmentVariable("ADMIN_PASSWORD") ?? 
-                                       _configuration["AdminSettings:Password"] ?? 
-                                       "Admin123!";
-
-                    var emailMatch = email.ToLower().Trim() == adminEmail.ToLower().Trim();
-                    var passwordMatch = password?.Trim() == adminPassword?.Trim();
-
-                    if (emailMatch && passwordMatch)
+                    // Verify password using BCrypt
+                    if (string.IsNullOrEmpty(adminUser.PasswordHash))
                     {
-                        _logger.LogInformation("Authenticated using legacy config-based credentials for email: {Email}", email);
-                        return await SetAuthenticationSuccess(email);
+                        _logger.LogWarning("Admin user {Email} has no password hash", email);
+                        RecordFailedAttempt(normalizedEmail);
+                        return false;
                     }
 
-                    _logger.LogWarning("Authentication failed for email: {Email} - User not found in database and legacy credentials don't match", email);
-                    return false;
+                    var passwordValid = BCrypt.Net.BCrypt.Verify(password.Trim(), adminUser.PasswordHash);
+                    
+                    if (passwordValid)
+                    {
+                        authenticated = true;
+                        
+                        // Update last login time
+                        if (_adminDbContext != null)
+                        {
+                            try
+                            {
+                                adminUser.LastLoginAt = DateTime.UtcNow;
+                                await _adminDbContext.SaveChangesAsync();
+                            }
+                            catch (Exception saveEx)
+                            {
+                                _logger.LogWarning(saveEx, "Failed to update last login time for user {Email}, but authentication succeeded", email);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Invalid password for admin user: {Email}", email);
+                        RecordFailedAttempt(normalizedEmail);
+                        return false;
+                    }
                 }
-
-                // Verify password using BCrypt
-                var passwordValid = BCrypt.Net.BCrypt.Verify(password?.Trim(), adminUser.PasswordHash);
-                
-                if (!passwordValid)
+                else
                 {
-                    _logger.LogWarning("Invalid password for admin user: {Email}", email);
-                    return false;
+                    // Fallback to legacy config-based authentication ONLY if explicitly configured
+                    // SECURITY: Do not use hardcoded defaults
+                    var adminEmail = Environment.GetEnvironmentVariable("ADMIN_EMAIL") 
+                        ?? _configuration["AdminSettings:Email"];
+                    
+                    var adminPassword = Environment.GetEnvironmentVariable("ADMIN_PASSWORD") 
+                        ?? _configuration["AdminSettings:Password"];
+
+                    // Only allow legacy auth if both email and password are explicitly configured
+                    if (!string.IsNullOrWhiteSpace(adminEmail) && !string.IsNullOrWhiteSpace(adminPassword))
+                    {
+                        var emailMatch = normalizedEmail == adminEmail.ToLower().Trim();
+                        var passwordMatch = password.Trim() == adminPassword.Trim();
+
+                        if (emailMatch && passwordMatch)
+                        {
+                            _logger.LogInformation("Authenticated using legacy config-based credentials for email: {Email}", email);
+                            authenticated = true;
+                        }
+                        else
+                        {
+                            _logger.LogWarning("Authentication failed for email: {Email} - Legacy credentials don't match", email);
+                            RecordFailedAttempt(normalizedEmail);
+                            return false;
+                        }
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Authentication failed for email: {Email} - User not found and legacy auth not configured", email);
+                        RecordFailedAttempt(normalizedEmail);
+                        return false;
+                    }
                 }
 
-                // Update last login time
-                adminUser.LastLoginAt = DateTime.UtcNow;
-                await _adminDbContext.SaveChangesAsync();
+                if (authenticated)
+                {
+                    // Clear failed attempts on successful login
+                    ClearFailedAttempts(normalizedEmail);
+                    _logger.LogInformation("Admin user {Email} authenticated successfully", email);
+                    return await SetAuthenticationSuccess(email);
+                }
 
-                _logger.LogInformation("Admin user {Email} authenticated successfully", email);
-                return await SetAuthenticationSuccess(email);
+                return false;
             }
             catch (Exception ex)
             {
@@ -108,77 +170,101 @@ namespace AmesaBackend.Admin.Services
         }
 
         private async Task<bool> SetAuthenticationSuccess(string email)
+        {
+            // Store email in session for authentication tracking
+            // SECURITY: Rely solely on session storage (Redis in production) for multi-instance support
+            var httpContext = _httpContextAccessor.HttpContext;
+            if (httpContext?.Session != null)
+            {
+                try
                 {
-                    CleanupExpiredEntries();
-                    
-                    var expiresAt = DateTime.UtcNow.AddHours(2);
-                    var authData = new AuthData
-                    {
-                        Email = email,
-                        LoginTime = DateTime.UtcNow,
-                        ExpiresAt = expiresAt
-                    };
-                    
-                    _authenticatedUsers.AddOrUpdate(email.ToLower(), authData, (key, oldValue) => authData);
-                    _logger.LogInformation("User {Email} authenticated successfully", email);
-                    
-                    // Store email in session for current user tracking
-                    var httpContext = _httpContextAccessor.HttpContext;
-                    if (httpContext?.Session != null)
-                    {
-                        try
-                        {
-                            // Ensure session is available
-                            await httpContext.Session.LoadAsync();
-                            httpContext.Session.SetString("AdminEmail", email);
-                            await httpContext.Session.CommitAsync();
-                            _logger.LogDebug("Session stored for user {Email}", email);
-                        }
-                        catch (Exception sessionEx)
-                        {
-                            _logger.LogWarning(sessionEx, "Failed to store session for user {Email}, but authentication succeeded", email);
-                            // Continue even if session fails - the in-memory dictionary will work
-                        }
-                    }
-                    else
-                    {
-                        _logger.LogWarning("HttpContext or Session is null for user {Email}", email);
-                    }
-                    
+                    // Ensure session is available
+                    await httpContext.Session.LoadAsync();
+                    httpContext.Session.SetString("AdminEmail", email);
+                    httpContext.Session.SetString("AdminLoginTime", DateTime.UtcNow.ToString("O"));
+                    await httpContext.Session.CommitAsync();
+                    _logger.LogDebug("Session stored for user {Email}", email);
+                }
+                catch (Exception sessionEx)
+                {
+                    _logger.LogError(sessionEx, "Failed to store session for user {Email}", email);
+                    // Session failure is critical - authentication cannot proceed without session
+                    return false;
+                }
+            }
+            else
+            {
+                _logger.LogError("HttpContext or Session is null for user {Email}", email);
+                return false;
+            }
+            
+            return true;
+        }
+
+        private bool IsAccountLocked(string normalizedEmail)
+        {
+            if (_failedAttempts.TryGetValue(normalizedEmail, out var attempt))
+            {
+                if (attempt.LockedUntil.HasValue && attempt.LockedUntil.Value > DateTime.UtcNow)
+                {
                     return true;
                 }
-        
-        private static void CleanupExpiredEntries()
-        {
-            var expiredKeys = _authenticatedUsers
-                .Where(kvp => kvp.Value.ExpiresAt < DateTime.UtcNow)
-                .Select(kvp => kvp.Key)
-                .ToList();
-                
-            foreach (var key in expiredKeys)
-            {
-                _authenticatedUsers.TryRemove(key, out _);
+                // Lockout expired, clear it
+                if (attempt.LockedUntil.HasValue && attempt.LockedUntil.Value <= DateTime.UtcNow)
+                {
+                    _failedAttempts.TryRemove(normalizedEmail, out _);
+                }
             }
+            return false;
+        }
+
+        private void RecordFailedAttempt(string normalizedEmail)
+        {
+            var attempt = _failedAttempts.AddOrUpdate(
+                normalizedEmail,
+                new FailedLoginAttempt { Count = 1 },
+                (key, existing) =>
+                {
+                    existing.Count++;
+                    if (existing.Count >= MaxFailedAttempts)
+                    {
+                        existing.LockedUntil = DateTime.UtcNow.AddMinutes(LockoutDurationMinutes);
+                        _logger.LogWarning("Account {Email} locked due to {Count} failed login attempts", normalizedEmail, existing.Count);
+                    }
+                    return existing;
+                }
+            );
+        }
+
+        private void ClearFailedAttempts(string normalizedEmail)
+        {
+            _failedAttempts.TryRemove(normalizedEmail, out _);
         }
 
         public bool IsAuthenticated()
         {
-            CleanupExpiredEntries();
-            
-            // Check session for authenticated user
-            var httpContext = _httpContextAccessor.HttpContext;
-            if (httpContext?.Session != null)
+            // SECURITY: Rely solely on session storage for authentication state
+            // Session timeout is handled by ASP.NET Core session middleware
+            try
             {
-                var sessionEmail = httpContext.Session.GetString("AdminEmail");
-                if (!string.IsNullOrEmpty(sessionEmail))
+                var httpContext = _httpContextAccessor.HttpContext;
+                if (httpContext?.Session != null)
                 {
-                    // Verify the session email is still in authenticated users
-                    if (_authenticatedUsers.TryGetValue(sessionEmail.ToLower(), out var authData) && 
-                        authData.ExpiresAt > DateTime.UtcNow)
+                    // Check if session is available (may not be loaded yet)
+                    if (httpContext.Session.IsAvailable)
                     {
-                        return true;
+                        var sessionEmail = httpContext.Session.GetString("AdminEmail");
+                        if (!string.IsNullOrEmpty(sessionEmail))
+                        {
+                            return true;
+                        }
                     }
                 }
+            }
+            catch (Exception ex)
+            {
+                // Log but don't throw - authentication check should never crash the page
+                _logger.LogWarning(ex, "Failed to check session authentication");
             }
             
             return false;
@@ -186,22 +272,19 @@ namespace AmesaBackend.Admin.Services
 
         public string? GetCurrentAdminEmail()
         {
-            CleanupExpiredEntries();
-            
             // Get email from session
-            var httpContext = _httpContextAccessor.HttpContext;
-            if (httpContext?.Session != null)
+            try
             {
-                var sessionEmail = httpContext.Session.GetString("AdminEmail");
-                if (!string.IsNullOrEmpty(sessionEmail))
+                var httpContext = _httpContextAccessor.HttpContext;
+                if (httpContext?.Session != null && httpContext.Session.IsAvailable)
                 {
-                    // Verify the session email is still valid
-                    if (_authenticatedUsers.TryGetValue(sessionEmail.ToLower(), out var authData) && 
-                        authData.ExpiresAt > DateTime.UtcNow)
-                    {
-                        return sessionEmail;
-                    }
+                    return httpContext.Session.GetString("AdminEmail");
                 }
+            }
+            catch (Exception ex)
+            {
+                // Log but don't throw - email retrieval should never crash the page
+                _logger.LogWarning(ex, "Failed to get session email");
             }
             
             return null;
@@ -209,16 +292,25 @@ namespace AmesaBackend.Admin.Services
 
         public async Task SignOutAsync()
         {
-            // Remove current user from authenticated users
+            // Clear session data
             var httpContext = _httpContextAccessor.HttpContext;
             if (httpContext?.Session != null)
             {
-                var sessionEmail = httpContext.Session.GetString("AdminEmail");
-                if (!string.IsNullOrEmpty(sessionEmail))
+                try
                 {
-                    _authenticatedUsers.TryRemove(sessionEmail.ToLower(), out _);
+                    var sessionEmail = httpContext.Session.GetString("AdminEmail");
+                    if (!string.IsNullOrEmpty(sessionEmail))
+                    {
+                        ClearFailedAttempts(sessionEmail.ToLower());
+                    }
+                    httpContext.Session.Remove("AdminEmail");
+                    httpContext.Session.Remove("AdminLoginTime");
+                    await httpContext.Session.CommitAsync();
                 }
-                httpContext.Session.Remove("AdminEmail");
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to clear session during sign out");
+                }
             }
             
             await Task.CompletedTask;

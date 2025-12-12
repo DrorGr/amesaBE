@@ -7,9 +7,21 @@
     var currentPath = Navigation.Uri.Replace(Navigation.BaseUri, "").TrimStart('/');
     var isLoginPage = currentPath.Equals("login", StringComparison.OrdinalIgnoreCase) || 
                       currentPath.Equals("admin/login", StringComparison.OrdinalIgnoreCase);
+    
+    // Safely check authentication - never throw exceptions during render
+    bool isAuthenticated = false;
+    try
+    {
+        isAuthenticated = AuthService.IsAuthenticated();
+    }
+    catch
+    {
+        // If authentication check fails, assume not authenticated
+        isAuthenticated = false;
+    }
 }
 
-@if (!AuthService.IsAuthenticated() && !isLoginPage)
+@if (!isAuthenticated && !isLoginPage)
 {
     <div class="container mt-5">
         <div class="row justify-content-center">
@@ -21,7 +33,7 @@
                         </h3>
                         <p class="text-center text-muted">Please log in to access the admin panel.</p>
                         <div class="text-center">
-                            <a href="/admin/login" class="btn btn-primary">
+                            <a href="/login" class="btn btn-primary">
                                 <i class="fas fa-sign-in-alt"></i> Login
                             </a>
                         </div>
@@ -39,7 +51,21 @@ else
                 <div class="position-sticky pt-3">
                     <div class="text-center mb-4">
                         <h4><i class="fas fa-crown"></i> Amesa Admin</h4>
-                        <small class="d-block mt-2">@AuthService.GetCurrentAdminEmail()</small>
+                        @{
+                            var adminEmail = "";
+                            try
+                            {
+                                adminEmail = AuthService.GetCurrentAdminEmail() ?? "";
+                            }
+                            catch
+                            {
+                                adminEmail = "";
+                            }
+                        }
+                        @if (!string.IsNullOrEmpty(adminEmail))
+                        {
+                            <small class="d-block mt-2">@adminEmail</small>
+                        }
                         <div class="mt-3">
                             <DatabaseSelector />
                         </div>
@@ -47,7 +73,7 @@ else
                     <hr />
                     <ul class="nav flex-column">
                         <li class="nav-item">
-                            <a class="nav-link" href="/admin">
+                            <a class="nav-link" href="/">
                                 <i class="fas fa-tachometer-alt me-2"></i> Dashboard
                             </a>
                         </li>
@@ -58,32 +84,32 @@ else
                     </h6>
                     <ul class="nav flex-column">
                         <li class="nav-item">
-                            <a class="nav-link" href="/admin/houses">
+                            <a class="nav-link" href="/houses">
                                 <i class="fas fa-home me-2"></i> Houses
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="/admin/users">
+                            <a class="nav-link" href="/users">
                                 <i class="fas fa-users me-2"></i> Users
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="/admin/tickets">
+                            <a class="nav-link" href="/tickets">
                                 <i class="fas fa-ticket-alt me-2"></i> Tickets
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="/admin/draws">
+                            <a class="nav-link" href="/draws">
                                 <i class="fas fa-dice me-2"></i> Draws
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="/admin/payments">
+                            <a class="nav-link" href="/payments">
                                 <i class="fas fa-euro-sign me-2"></i> Payments
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="/admin/translations">
+                            <a class="nav-link" href="/translations">
                                 <i class="fas fa-language me-2"></i> Translations
                             </a>
                         </li>
@@ -91,7 +117,7 @@ else
                     <hr />
                     <ul class="nav flex-column">
                         <li class="nav-item">
-                            <a class="nav-link" href="/admin/logout">
+                            <a class="nav-link" href="/logout">
                                 <i class="fas fa-sign-out-alt me-2"></i> Logout
                             </a>
                         </li>
