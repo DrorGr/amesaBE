@@ -124,6 +124,7 @@ builder.Services.AddScoped<IS3ImageService, S3ImageService>();
 builder.Services.AddScoped<ICloudWatchLoggingService, CloudWatchLoggingService>();
 builder.Services.AddScoped<IRealTimeNotificationService, RealTimeNotificationService>();
 
+// Configure health checks (simple endpoint that returns healthy if service is running)
 builder.Services.AddHealthChecks();
 
 var app = builder.Build();
@@ -157,12 +158,13 @@ app.UseSession();
 app.UseAuthentication();
 app.UseAuthorization();
 
+// Health check endpoint (before other routes)
+app.MapHealthChecks("/health");
+
 app.MapRazorPages();
 app.MapBlazorHub();
 app.MapHub<AdminHub>("/admin/hub");
 app.MapFallbackToPage("/_Host");
-
-app.MapHealthChecks("/health");
 
 Log.Information("Starting Amesa Admin Service");
 await app.RunAsync();
