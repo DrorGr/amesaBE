@@ -5,9 +5,11 @@
     function initializeSignalR() {
         const signalRUrl = '/hub'; // Relative to base href /admin/, resolves to /admin/hub
         
-        // Check if SignalR is available
-        if (typeof signalR === 'undefined') {
-            console.warn('SignalR library not loaded. Real-time updates will not work.');
+        // Check if SignalR is available (wait for script to load)
+        if (typeof SignalR === 'undefined') {
+            console.warn('SignalR library not loaded. Waiting for script to load...');
+            // Retry after a short delay if SignalR hasn't loaded yet
+            setTimeout(initializeSignalR, 100);
             return;
         }
 

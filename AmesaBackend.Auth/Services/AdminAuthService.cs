@@ -47,6 +47,14 @@ namespace AmesaBackend.Auth.Services
                     };
                     
                     _authenticatedUsers.AddOrUpdate(email.ToLower(), authData, (key, oldValue) => authData);
+                    
+                    // Store email in session for current user tracking
+                    var httpContext = _httpContextAccessor.HttpContext;
+                    if (httpContext?.Session != null)
+                    {
+                        httpContext.Session.SetString("AdminEmail", email);
+                    }
+                    
                     return true;
                 }
 
@@ -74,19 +82,63 @@ namespace AmesaBackend.Auth.Services
         public bool IsAuthenticated()
         {
             CleanupExpiredEntries();
-            return _authenticatedUsers.Any(kvp => kvp.Value.ExpiresAt > DateTime.UtcNow);
+            
+            // Check session for authenticated user
+            var httpContext = _httpContextAccessor.HttpContext;
+            if (httpContext?.Session != null)
+            {
+                var sessionEmail = httpContext.Session.GetString("AdminEmail");
+                if (!string.IsNullOrEmpty(sessionEmail))
+                {
+                    // Verify the session email is still in authenticated users
+                    if (_authenticatedUsers.TryGetValue(sessionEmail.ToLower(), out var authData) && 
+                        authData.ExpiresAt > DateTime.UtcNow)
+                    {
+                        return true;
+                    }
+                }
+            }
+            
+            return false;
         }
 
         public string? GetCurrentAdminEmail()
         {
             CleanupExpiredEntries();
-            var validAuth = _authenticatedUsers.FirstOrDefault(kvp => kvp.Value.ExpiresAt > DateTime.UtcNow);
-            return validAuth.Value?.Email;
+            
+            // Get email from session
+            var httpContext = _httpContextAccessor.HttpContext;
+            if (httpContext?.Session != null)
+            {
+                var sessionEmail = httpContext.Session.GetString("AdminEmail");
+                if (!string.IsNullOrEmpty(sessionEmail))
+                {
+                    // Verify the session email is still valid
+                    if (_authenticatedUsers.TryGetValue(sessionEmail.ToLower(), out var authData) && 
+                        authData.ExpiresAt > DateTime.UtcNow)
+                    {
+                        return sessionEmail;
+                    }
+                }
+            }
+            
+            return null;
         }
 
         public async Task SignOutAsync()
         {
-            _authenticatedUsers.Clear();
+            // Remove current user from authenticated users
+            var httpContext = _httpContextAccessor.HttpContext;
+            if (httpContext?.Session != null)
+            {
+                var sessionEmail = httpContext.Session.GetString("AdminEmail");
+                if (!string.IsNullOrEmpty(sessionEmail))
+                {
+                    _authenticatedUsers.TryRemove(sessionEmail.ToLower(), out _);
+                }
+                httpContext.Session.Remove("AdminEmail");
+            }
+            
             await Task.CompletedTask;
         }
     }
