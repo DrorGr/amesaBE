@@ -1,0 +1,37 @@
+@page "/translations"
+@using AmesaBackend.Admin.Services
+@inject ITranslationsService TranslationsService
+@inject NavigationManager Navigation
+
+<PageTitle>Translations - Amesa Admin</PageTitle>
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h1 class="display-5">
+                <i class="fas fa-language"></i> Translations Management
+            </h1>
+            <p class="text-muted">Manage translation keys and values</p>
+        </div>
+    </div>
+
+    <div class="alert alert-info">
+        <i class="fas fa-info-circle"></i> 
+        <strong>Coming Soon:</strong> Full translation management functionality is under development.
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <p class="text-muted">Translation management features will be available here.</p>
+        </div>
+    </div>
+</div>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        // TODO: Implement translation listing
+        await Task.CompletedTask;
+    }
+}
+

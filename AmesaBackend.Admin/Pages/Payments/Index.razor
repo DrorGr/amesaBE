@@ -1,0 +1,37 @@
+@page "/payments"
+@using AmesaBackend.Admin.Services
+@inject IPaymentsService PaymentsService
+@inject NavigationManager Navigation
+
+<PageTitle>Payments - Amesa Admin</PageTitle>
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h1 class="display-5">
+                <i class="fas fa-euro-sign"></i> Payments Management
+            </h1>
+            <p class="text-muted">View and manage payment transactions</p>
+        </div>
+    </div>
+
+    <div class="alert alert-info">
+        <i class="fas fa-info-circle"></i> 
+        <strong>Coming Soon:</strong> Full payment management functionality is under development.
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <p class="text-muted">Payment management features will be available here.</p>
+        </div>
+    </div>
+</div>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        // TODO: Implement payment listing
+        await Task.CompletedTask;
+    }
+}
+
