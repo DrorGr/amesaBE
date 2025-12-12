@@ -37,14 +37,26 @@ namespace AmesaBackend.Auth.Services
                                    _configuration["AdminSettings:Password"] ?? 
                                    "Admin123!";
 
-                _logger.LogDebug("Login attempt for email: {Email}, Expected email: {AdminEmail}", email, adminEmail);
-                _logger.LogDebug("Password provided: {HasPassword}, Expected password length: {PasswordLength}", !string.IsNullOrEmpty(password), adminPassword?.Length ?? 0);
+                _logger.LogInformation("Login attempt for email: {Email}, Expected email: {AdminEmail}", email, adminEmail);
+                _logger.LogInformation("Password provided: {HasPassword}, Expected password length: {PasswordLength}", !string.IsNullOrEmpty(password), adminPassword?.Length ?? 0);
 
-                // Compare email (case-insensitive) and password (case-sensitive)
+                // Compare email (case-insensitive) and password (case-sensitive, trimmed)
                 var emailMatch = email.ToLower().Trim() == adminEmail.ToLower().Trim();
-                var passwordMatch = password == adminPassword;
+                var passwordMatch = password?.Trim() == adminPassword?.Trim();
 
-                _logger.LogDebug("Email match: {EmailMatch}, Password match: {PasswordMatch}", emailMatch, passwordMatch);
+                _logger.LogInformation("Email match: {EmailMatch}, Password match: {PasswordMatch}", emailMatch, passwordMatch);
+                
+                if (!emailMatch)
+                {
+                    _logger.LogWarning("Email mismatch: Provided '{ProvidedEmail}' (normalized: '{NormalizedProvided}') != Expected '{ExpectedEmail}' (normalized: '{NormalizedExpected}')", 
+                        email, email.ToLower().Trim(), adminEmail, adminEmail.ToLower().Trim());
+                }
+                
+                if (!passwordMatch)
+                {
+                    _logger.LogWarning("Password mismatch: Provided length {ProvidedLength}, Expected length {ExpectedLength}", 
+                        password?.Length ?? 0, adminPassword?.Length ?? 0);
+                }
 
                 if (emailMatch && passwordMatch)
                 {
