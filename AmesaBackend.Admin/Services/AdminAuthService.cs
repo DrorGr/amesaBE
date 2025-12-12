@@ -5,8 +5,9 @@ using Microsoft.EntityFrameworkCore;
 using AmesaBackend.Admin.Data;
 using AmesaBackend.Admin.Models;
 using BCrypt.Net;
+using AmesaBackend.Auth.Services;
 
-namespace AmesaBackend.Auth.Services
+namespace AmesaBackend.Admin.Services
 {
     public class AdminAuthService : IAdminAuthService
     {

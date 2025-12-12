@@ -159,7 +159,8 @@ public static class ServiceConfiguration
         
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IUserService, UserService>();
-        services.AddScoped<IAdminAuthService, AdminAuthService>();
+        // AdminAuthService moved to AmesaBackend.Admin project to avoid circular dependency
+        // services.AddScoped<IAdminAuthService, AdminAuthService>();
         // TODO: UserPreferencesService implementation missing
         // services.AddScoped<IUserPreferencesService, UserPreferencesService>();
         services.AddScoped<IConfigurationService, ConfigurationService>();
