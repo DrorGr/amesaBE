@@ -25,7 +25,9 @@
     </div>
 
     <script src="_framework/blazor.server.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@@microsoft/signalr@latest/dist/browser/signalr.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@@microsoft/signalr@latest/dist/browser/signalr.min.js" 
+            onload="window.SignalRLoaded = true; console.log('SignalR library loaded successfully');"
+            onerror="console.error('Failed to load SignalR library from CDN');"></script>
     <script>
         // SignalR loading verification - set flag when loaded
         (function() {
@@ -33,16 +35,17 @@
                 if (typeof SignalR !== 'undefined') {
                     window.SignalRLoaded = true;
                     clearInterval(checkSignalR);
+                    console.log('SignalR detected and loaded');
                 }
             }, 50);
             
-            // Timeout after 5 seconds
+            // Timeout after 10 seconds (increased for slower connections)
             setTimeout(function() {
                 clearInterval(checkSignalR);
-                if (typeof SignalR === 'undefined') {
-                    console.error('SignalR library failed to load from CDN after 5 seconds');
+                if (typeof SignalR === 'undefined' && !window.SignalRLoaded) {
+                    console.error('SignalR library failed to load from CDN after 10 seconds');
                 }
-            }, 5000);
+            }, 10000);
         })();
     </script>
     <script src="js/admin-signalr.js"></script>

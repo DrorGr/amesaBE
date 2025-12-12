@@ -86,8 +86,16 @@ namespace AmesaBackend.Admin.Services
                 {
                     try
                     {
-                        adminUser = await _adminDbContext.AdminUsers
-                            .FirstOrDefaultAsync(u => u.Email.ToLower() == normalizedEmail && u.IsActive);
+                        _logger.LogDebug("Querying database for admin user: {Email} (normalized: {NormalizedEmail})", email, normalizedEmail);
+                        
+                        // Query with case-insensitive email comparison
+                        // Load active users first, then filter in memory to avoid ToLower() translation issues with PostgreSQL
+                        var activeUsers = await _adminDbContext.AdminUsers
+                            .Where(u => u.IsActive)
+                            .ToListAsync();
+                        
+                        adminUser = activeUsers
+                            .FirstOrDefault(u => u.Email.ToLower().Trim() == normalizedEmail);
                         
                         if (adminUser == null)
                         {
@@ -95,12 +103,14 @@ namespace AmesaBackend.Admin.Services
                         }
                         else
                         {
-                            _logger.LogDebug("Admin user found in database for email: {Email}, is_active: {IsActive}", email, adminUser.IsActive);
+                            _logger.LogInformation("Admin user found in database for email: {Email}, is_active: {IsActive}, has_password_hash: {HasHash}", 
+                                email, adminUser.IsActive, !string.IsNullOrEmpty(adminUser.PasswordHash));
                         }
                     }
                     catch (Exception dbEx)
                     {
-                        _logger.LogError(dbEx, "Database error while querying admin user {Email}: {Message}", email, dbEx.Message);
+                        _logger.LogError(dbEx, "Database error while querying admin user {Email}. Exception type: {ExceptionType}, Message: {Message}, InnerException: {InnerException}, StackTrace: {StackTrace}", 
+                            email, dbEx.GetType().Name, dbEx.Message, dbEx.InnerException?.Message ?? "None", dbEx.StackTrace);
                         // Continue to legacy auth fallback only if explicitly configured
                     }
                 }
