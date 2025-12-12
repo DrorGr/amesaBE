@@ -38,6 +38,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AmesaBackend.Shared\AmesaBackend.Shared.csproj" />
+    <ProjectReference Include="..\AmesaBackend.Admin\AmesaBackend.Admin.csproj" />
   </ItemGroup>
 
   <ItemGroup>

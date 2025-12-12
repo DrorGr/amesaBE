@@ -1,6 +1,10 @@
 using Microsoft.AspNetCore.Http;
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
+using Microsoft.EntityFrameworkCore;
+using AmesaBackend.Admin.Data;
+using AmesaBackend.Admin.Models;
+using BCrypt.Net;
 
 namespace AmesaBackend.Auth.Services
 {
@@ -9,6 +13,7 @@ namespace AmesaBackend.Auth.Services
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly IConfiguration _configuration;
         private readonly ILogger<AdminAuthService> _logger;
+        private readonly AdminDbContext _adminDbContext;
         private static readonly ConcurrentDictionary<string, AuthData> _authenticatedUsers = new();
         
         private class AuthData
@@ -18,47 +23,78 @@ namespace AmesaBackend.Auth.Services
             public DateTime ExpiresAt { get; set; }
         }
 
-        public AdminAuthService(IHttpContextAccessor httpContextAccessor, IConfiguration configuration, ILogger<AdminAuthService> logger)
+        public AdminAuthService(
+            IHttpContextAccessor httpContextAccessor, 
+            IConfiguration configuration, 
+            ILogger<AdminAuthService> logger,
+            AdminDbContext adminDbContext)
         {
             _httpContextAccessor = httpContextAccessor;
             _configuration = configuration;
             _logger = logger;
+            _adminDbContext = adminDbContext;
         }
 
         public async Task<bool> AuthenticateAsync(string email, string password)
         {
             try
             {
-                var adminEmail = Environment.GetEnvironmentVariable("ADMIN_EMAIL") ?? 
-                                _configuration["AdminSettings:Email"] ?? 
-                                "admin@amesa.com";
-                
-                var adminPassword = Environment.GetEnvironmentVariable("ADMIN_PASSWORD") ?? 
-                                   _configuration["AdminSettings:Password"] ?? 
-                                   "Admin123!";
+                _logger.LogInformation("Login attempt for email: {Email}", email);
 
-                _logger.LogInformation("Login attempt for email: {Email}, Expected email: {AdminEmail}", email, adminEmail);
-                _logger.LogInformation("Password provided: {HasPassword}, Expected password length: {PasswordLength}", !string.IsNullOrEmpty(password), adminPassword?.Length ?? 0);
+                // Try to find admin user in database
+                var adminUser = await _adminDbContext.AdminUsers
+                    .FirstOrDefaultAsync(u => u.Email.ToLower() == email.ToLower().Trim() && u.IsActive);
 
-                // Compare email (case-insensitive) and password (case-sensitive, trimmed)
-                var emailMatch = email.ToLower().Trim() == adminEmail.ToLower().Trim();
-                var passwordMatch = password?.Trim() == adminPassword?.Trim();
-
-                _logger.LogInformation("Email match: {EmailMatch}, Password match: {PasswordMatch}", emailMatch, passwordMatch);
-                
-                if (!emailMatch)
+                if (adminUser == null)
                 {
-                    _logger.LogWarning("Email mismatch: Provided '{ProvidedEmail}' (normalized: '{NormalizedProvided}') != Expected '{ExpectedEmail}' (normalized: '{NormalizedExpected}')", 
-                        email, email.ToLower().Trim(), adminEmail, adminEmail.ToLower().Trim());
-                }
-                
-                if (!passwordMatch)
-                {
-                    _logger.LogWarning("Password mismatch: Provided length {ProvidedLength}, Expected length {ExpectedLength}", 
-                        password?.Length ?? 0, adminPassword?.Length ?? 0);
+                    _logger.LogWarning("Admin user not found or inactive for email: {Email}", email);
+                    
+                    // Fallback to legacy config-based authentication for backward compatibility
+                    var adminEmail = Environment.GetEnvironmentVariable("ADMIN_EMAIL") ?? 
+                                    _configuration["AdminSettings:Email"] ?? 
+                                    "admin@amesa.com";
+                    
+                    var adminPassword = Environment.GetEnvironmentVariable("ADMIN_PASSWORD") ?? 
+                                       _configuration["AdminSettings:Password"] ?? 
+                                       "Admin123!";
+
+                    var emailMatch = email.ToLower().Trim() == adminEmail.ToLower().Trim();
+                    var passwordMatch = password?.Trim() == adminPassword?.Trim();
+
+                    if (emailMatch && passwordMatch)
+                    {
+                        _logger.LogInformation("Authenticated using legacy config-based credentials for email: {Email}", email);
+                        return await SetAuthenticationSuccess(email);
+                    }
+
+                    _logger.LogWarning("Authentication failed for email: {Email} - User not found in database and legacy credentials don't match", email);
+                    return false;
                 }
 
-                if (emailMatch && passwordMatch)
+                // Verify password using BCrypt
+                var passwordValid = BCrypt.Net.BCrypt.Verify(password?.Trim(), adminUser.PasswordHash);
+                
+                if (!passwordValid)
+                {
+                    _logger.LogWarning("Invalid password for admin user: {Email}", email);
+                    return false;
+                }
+
+                // Update last login time
+                adminUser.LastLoginAt = DateTime.UtcNow;
+                await _adminDbContext.SaveChangesAsync();
+
+                _logger.LogInformation("Admin user {Email} authenticated successfully", email);
+                return await SetAuthenticationSuccess(email);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Exception during authentication for email: {Email}", email);
+                return false;
+            }
+        }
+
+        private async Task<bool> SetAuthenticationSuccess(string email)
                 {
                     CleanupExpiredEntries();
                     
@@ -98,16 +134,6 @@ namespace AmesaBackend.Auth.Services
                     
                     return true;
                 }
-
-                _logger.LogWarning("Authentication failed for email: {Email} - Email match: {EmailMatch}, Password match: {PasswordMatch}", email, emailMatch, passwordMatch);
-                return false;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Exception during authentication for email: {Email}", email);
-                return false;
-            }
-        }
         
         private static void CleanupExpiredEntries()
         {
