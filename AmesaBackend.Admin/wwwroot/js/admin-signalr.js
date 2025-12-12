@@ -3,7 +3,7 @@
     let connection = null;
 
     function initializeSignalR() {
-        const signalRUrl = '/admin/hub';
+        const signalRUrl = '/hub'; // Relative to base href /admin/, resolves to /admin/hub
         
         // Check if SignalR is available
         if (typeof signalR === 'undefined') {
