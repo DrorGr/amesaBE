@@ -14,29 +14,36 @@
         
         const signalRUrl = '/hub'; // Relative to base href /admin/, resolves to /admin/hub
         
-        // Check if SignalR is available (wait for script to load)
-        // Check both the global SignalR object and the SignalRLoaded flag
-        // SignalR might be defined but not fully initialized, so check both
-        var signalRAvailable = typeof SignalR !== 'undefined' && typeof SignalR.HubConnectionBuilder !== 'undefined';
+        // Check if SignalR is fully available (wait for script to load and initialize)
+        // SignalR must have HubConnectionBuilder available to be usable
+        var signalRAvailable = typeof SignalR !== 'undefined' && 
+                                typeof SignalR.HubConnectionBuilder !== 'undefined' &&
+                                typeof SignalR.HubConnectionBuilder.prototype !== 'undefined';
+        
+        // Also check the flag as a secondary indicator
         var signalRFlagSet = window.SignalRLoaded === true;
         
-        if (!signalRAvailable || !signalRFlagSet) {
+        // If SignalR is not fully available, retry
+        if (!signalRAvailable) {
             retryCount++;
             if (retryCount <= maxRetries) {
-                // Retry after a short delay if SignalR hasn't loaded yet
-                setTimeout(initializeSignalR, 200); // Increased delay for slower connections
+                // Retry after a delay - use exponential backoff
+                var delay = Math.min(200 * Math.pow(1.2, retryCount), 1000);
+                setTimeout(initializeSignalR, delay);
                 return;
             } else {
                 // Max retries reached - SignalR library failed to load
-                console.warn('SignalR library failed to load after ' + maxRetries + ' attempts. Available: ' + signalRAvailable + ', Flag: ' + signalRFlagSet + '. Real-time updates will not be available.');
+                console.warn('SignalR library failed to load after ' + maxRetries + ' attempts. SignalR available: ' + (typeof SignalR !== 'undefined') + ', HubConnectionBuilder: ' + (typeof SignalR !== 'undefined' && typeof SignalR.HubConnectionBuilder !== 'undefined') + ', Flag: ' + signalRFlagSet + '. Real-time updates will not be available.');
                 isInitializing = false;
                 return;
             }
         }
         
-        // Double-check SignalR is actually available with HubConnectionBuilder
-        if (typeof SignalR === 'undefined' || typeof SignalR.HubConnectionBuilder === 'undefined') {
-            console.warn('SignalR library not fully available (missing HubConnectionBuilder), skipping initialization');
+        // SignalR is available, proceed with initialization
+        if (!signalRFlagSet) {
+            // Set the flag if not already set (backup)
+            window.SignalRLoaded = true;
+        }
             isInitializing = false;
             return;
         }

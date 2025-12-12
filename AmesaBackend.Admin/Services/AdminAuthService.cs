@@ -88,17 +88,18 @@ namespace AmesaBackend.Admin.Services
                     {
                         _logger.LogDebug("Querying database for admin user: {Email} (normalized: {NormalizedEmail})", email, normalizedEmail);
                         
-                        // Use raw SQL query to avoid EF Core schema/alias translation issues
+                        // Use parameterized raw SQL query to avoid EF Core schema/alias translation issues
                         // Query with explicit schema name and case-insensitive comparison
-                        var sql = @"
+                        // Use FormattableString for proper parameterization
+                        FormattableString sql = $@"
                             SELECT id, email, username, password_hash, is_active, created_at, last_login_at 
                             FROM amesa_admin.admin_users 
-                            WHERE LOWER(TRIM(email)) = {0} 
+                            WHERE LOWER(TRIM(email)) = {normalizedEmail} 
                             AND is_active = true 
                             LIMIT 1";
                         
                         adminUser = await _adminDbContext.AdminUsers
-                            .FromSqlRaw(sql, normalizedEmail)
+                            .FromSqlInterpolated(sql)
                             .AsNoTracking()
                             .FirstOrDefaultAsync();
                         
