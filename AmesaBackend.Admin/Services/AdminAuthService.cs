@@ -88,7 +88,7 @@ namespace AmesaBackend.Admin.Services
                     {
                         _logger.LogDebug("Querying database for admin user: {Email} (normalized: {NormalizedEmail})", email, normalizedEmail);
                         
-                        // Use raw SQL query with proper parameterization to avoid EF Core translation issues
+                        // Use raw SQL query to avoid EF Core schema/alias translation issues
                         // Query with explicit schema name and case-insensitive comparison
                         var sql = @"
                             SELECT id, email, username, password_hash, is_active, created_at, last_login_at 

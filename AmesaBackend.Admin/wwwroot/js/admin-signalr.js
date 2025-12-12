@@ -15,25 +15,28 @@
         const signalRUrl = '/hub'; // Relative to base href /admin/, resolves to /admin/hub
         
         // Check if SignalR is available (wait for script to load)
-        // Also check for SignalRLoaded flag set by _Layout.cshtml
-        // SignalR must be defined AND the flag must be set (both conditions)
-        if (typeof SignalR === 'undefined' || !window.SignalRLoaded) {
+        // Check both the global SignalR object and the SignalRLoaded flag
+        // SignalR might be defined but not fully initialized, so check both
+        var signalRAvailable = typeof SignalR !== 'undefined' && typeof SignalR.HubConnectionBuilder !== 'undefined';
+        var signalRFlagSet = window.SignalRLoaded === true;
+        
+        if (!signalRAvailable || !signalRFlagSet) {
             retryCount++;
             if (retryCount <= maxRetries) {
                 // Retry after a short delay if SignalR hasn't loaded yet
-                setTimeout(initializeSignalR, 150);
+                setTimeout(initializeSignalR, 200); // Increased delay for slower connections
                 return;
             } else {
                 // Max retries reached - SignalR library failed to load
-                console.warn('SignalR library failed to load after ' + maxRetries + ' attempts. Real-time updates will not be available.');
+                console.warn('SignalR library failed to load after ' + maxRetries + ' attempts. Available: ' + signalRAvailable + ', Flag: ' + signalRFlagSet + '. Real-time updates will not be available.');
                 isInitializing = false;
                 return;
             }
         }
         
-        // Double-check SignalR is actually available (both conditions must be true)
-        if (typeof SignalR === 'undefined' || !window.SignalRLoaded) {
-            console.warn('SignalR library not available, skipping initialization');
+        // Double-check SignalR is actually available with HubConnectionBuilder
+        if (typeof SignalR === 'undefined' || typeof SignalR.HubConnectionBuilder === 'undefined') {
+            console.warn('SignalR library not fully available (missing HubConnectionBuilder), skipping initialization');
             isInitializing = false;
             return;
         }
