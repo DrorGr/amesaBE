@@ -4,15 +4,32 @@ EXPOSE 8080
 
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
+# Copy project files for all referenced projects
 COPY ["AmesaBackend.Admin/AmesaBackend.Admin.csproj", "AmesaBackend.Admin/"]
 COPY ["AmesaBackend.Shared/AmesaBackend.Shared.csproj", "AmesaBackend.Shared/"]
 COPY ["AmesaBackend.Auth/AmesaBackend.Auth.csproj", "AmesaBackend.Auth/"]
+COPY ["AmesaBackend.Lottery/AmesaBackend.Lottery.csproj", "AmesaBackend.Lottery/"]
+COPY ["AmesaBackend.Payment/AmesaBackend.Payment.csproj", "AmesaBackend.Payment/"]
+COPY ["AmesaBackend.Content/AmesaBackend.Content.csproj", "AmesaBackend.Content/"]
+COPY ["AmesaBackend.LotteryResults/AmesaBackend.LotteryResults.csproj", "AmesaBackend.LotteryResults/"]
+COPY ["AmesaBackend.Notification/AmesaBackend.Notification.csproj", "AmesaBackend.Notification/"]
 RUN dotnet restore "AmesaBackend.Admin/AmesaBackend.Admin.csproj"
+# Copy source code for all referenced projects
 COPY ["AmesaBackend.Admin/", "AmesaBackend.Admin/"]
 COPY ["AmesaBackend.Shared/", "AmesaBackend.Shared/"]
 COPY ["AmesaBackend.Auth/", "AmesaBackend.Auth/"]
-# Remove Auth's appsettings.json to avoid conflicts with Admin's appsettings.json
-RUN rm -f /src/AmesaBackend.Auth/appsettings.json /src/AmesaBackend.Auth/appsettings.*.json
+COPY ["AmesaBackend.Lottery/", "AmesaBackend.Lottery/"]
+COPY ["AmesaBackend.Payment/", "AmesaBackend.Payment/"]
+COPY ["AmesaBackend.Content/", "AmesaBackend.Content/"]
+COPY ["AmesaBackend.LotteryResults/", "AmesaBackend.LotteryResults/"]
+COPY ["AmesaBackend.Notification/", "AmesaBackend.Notification/"]
+# Remove appsettings.json files from referenced projects to avoid conflicts
+RUN rm -f /src/AmesaBackend.Auth/appsettings.json /src/AmesaBackend.Auth/appsettings.*.json \
+    /src/AmesaBackend.Lottery/appsettings.json /src/AmesaBackend.Lottery/appsettings.*.json \
+    /src/AmesaBackend.Payment/appsettings.json /src/AmesaBackend.Payment/appsettings.*.json \
+    /src/AmesaBackend.Content/appsettings.json /src/AmesaBackend.Content/appsettings.*.json \
+    /src/AmesaBackend.LotteryResults/appsettings.json /src/AmesaBackend.LotteryResults/appsettings.*.json \
+    /src/AmesaBackend.Notification/appsettings.json /src/AmesaBackend.Notification/appsettings.*.json
 RUN dotnet build "AmesaBackend.Admin/AmesaBackend.Admin.csproj" -c Release -o /app/build
 
 FROM build AS publish
