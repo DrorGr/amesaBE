@@ -36,6 +36,9 @@ builder.Host.UseSerilog();
 builder.Services.AddRazorPages();
 builder.Services.AddServerSideBlazor();
 
+// Add HttpContextAccessor for session access in services
+builder.Services.AddHttpContextAccessor();
+
 // Configure database connections for all schemas
 var connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING") 
     ?? builder.Configuration.GetConnectionString("DefaultConnection");
