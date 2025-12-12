@@ -33,8 +33,9 @@
         connection.on('HouseCreated', (data) => {
             console.log('House created:', data);
             showNotification(`New house created: ${data.Title}`, 'success');
-            // Refresh house list if on houses page
-            if (window.location.pathname.includes('/admin/houses')) {
+            // Refresh house list if on houses page (dynamic path check)
+            const currentPath = window.location.pathname;
+            if (currentPath.includes('/houses') || currentPath.endsWith('/admin/houses')) {
                 setTimeout(() => window.location.reload(), 2000);
             }
         });
@@ -42,8 +43,9 @@
         connection.on('HouseUpdated', (data) => {
             console.log('House updated:', data);
             showNotification(`House updated: ${data.Title}`, 'info');
-            // Refresh house list if on houses page
-            if (window.location.pathname.includes('/admin/houses')) {
+            // Refresh house list if on houses page (dynamic path check)
+            const currentPath = window.location.pathname;
+            if (currentPath.includes('/houses') || currentPath.endsWith('/admin/houses')) {
                 setTimeout(() => window.location.reload(), 2000);
             }
         });
@@ -51,8 +53,9 @@
         connection.on('HouseDeleted', (data) => {
             console.log('House deleted:', data);
             showNotification('House deleted', 'warning');
-            // Refresh house list if on houses page
-            if (window.location.pathname.includes('/admin/houses')) {
+            // Refresh house list if on houses page (dynamic path check)
+            const currentPath = window.location.pathname;
+            if (currentPath.includes('/houses') || currentPath.endsWith('/admin/houses')) {
                 setTimeout(() => window.location.reload(), 1000);
             }
         });
@@ -61,8 +64,9 @@
         connection.on('UserUpdated', (data) => {
             console.log('User updated:', data);
             showNotification(`User updated: ${data.Email}`, 'info');
-            // Refresh user list if on users page
-            if (window.location.pathname.includes('/admin/users')) {
+            // Refresh user list if on users page (dynamic path check)
+            const currentPath = window.location.pathname;
+            if (currentPath.includes('/users') || currentPath.endsWith('/admin/users')) {
                 setTimeout(() => window.location.reload(), 2000);
             }
         });
@@ -71,8 +75,9 @@
         connection.on('DrawConducted', (data) => {
             console.log('Draw conducted:', data);
             showNotification('Draw conducted', 'success');
-            // Refresh draws page if on draws page
-            if (window.location.pathname.includes('/admin/draws')) {
+            // Refresh draws page if on draws page (dynamic path check)
+            const currentPath = window.location.pathname;
+            if (currentPath.includes('/draws') || currentPath.endsWith('/admin/draws')) {
                 setTimeout(() => window.location.reload(), 2000);
             }
         });
