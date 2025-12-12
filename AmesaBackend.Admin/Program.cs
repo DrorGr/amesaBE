@@ -164,6 +164,11 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+// Configure path base for /admin routing from ALB
+// When ALB routes /admin/* to this service, we need to handle the path base
+app.UsePathBase("/admin");
+
 app.UseStaticFiles();
 
 // Enable X-Ray tracing if configured
@@ -191,7 +196,7 @@ app.MapHealthChecks("/health");
 
 app.MapRazorPages();
 app.MapBlazorHub();
-app.MapHub<AdminHub>("/admin/hub");
+app.MapHub<AdminHub>("/hub"); // Changed from /admin/hub since UsePathBase handles /admin prefix
 app.MapFallbackToPage("/_Host");
 
 Log.Information("Starting Amesa Admin Service");

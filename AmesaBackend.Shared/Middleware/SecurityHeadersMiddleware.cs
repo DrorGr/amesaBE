@@ -31,7 +31,14 @@ namespace AmesaBackend.Shared.Middleware
             
             // Content Security Policy (CSP) - adjust based on your needs
             // Note: SignalR WebSocket support (wss: ws:) is included for services that use SignalR
-            var csp = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.google.com https://www.gstatic.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://www.google.com wss: ws:; frame-ancestors 'none';";
+            // Added CDN sources for Bootstrap, Font Awesome, and SignalR
+            var csp = "default-src 'self'; " +
+                      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.google.com https://www.gstatic.com https://cdn.jsdelivr.net; " +
+                      "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; " +
+                      "img-src 'self' data: https:; " +
+                      "font-src 'self' data: https://cdnjs.cloudflare.com; " +
+                      "connect-src 'self' https://www.google.com wss: ws:; " +
+                      "frame-ancestors 'none';";
             context.Response.Headers.Append("Content-Security-Policy", csp);
             
             // Strict Transport Security (HSTS) - only add in production with HTTPS
