@@ -83,16 +83,24 @@ if (!string.IsNullOrWhiteSpace(redisConnection))
         options.InstanceName = builder.Configuration["CacheConfig:InstanceName"] ?? "amesa-admin";
     });
     
-    // Configure session to use Redis
-    builder.Services.AddSession(options =>
-    {
-        options.IdleTimeout = TimeSpan.FromMinutes(120); // 2 hours
-        options.Cookie.HttpOnly = true;
-        options.Cookie.IsEssential = true;
-        options.Cookie.SameSite = SameSiteMode.Strict;
-        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
-    });
+    Log.Information("Session storage configured to use Redis");
 }
+else
+{
+    // Fallback to in-memory distributed cache if Redis is not configured
+    builder.Services.AddDistributedMemoryCache();
+    Log.Warning("Redis connection not configured. Using in-memory session storage (sessions will not persist across restarts)");
+}
+
+// Configure session (always register, uses Redis if available, otherwise in-memory)
+builder.Services.AddSession(options =>
+{
+    options.IdleTimeout = TimeSpan.FromMinutes(120); // 2 hours
+    options.Cookie.HttpOnly = true;
+    options.Cookie.IsEssential = true;
+    options.Cookie.SameSite = SameSiteMode.Strict;
+    options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+});
 
 builder.Services.AddAmesaBackendShared(builder.Configuration, builder.Environment);
 
