@@ -13,11 +13,21 @@
     <PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="8.0.0" />
     <PackageReference Include="Serilog.AspNetCore" Version="8.0.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
+    <PackageReference Include="StackExchange.Redis" Version="2.7.33" />
+    <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="8.0.0" />
+    <PackageReference Include="AWSSDK.S3" Version="3.7.400.0" />
+    <PackageReference Include="AWSSDK.CloudWatch" Version="3.7.400.0" />
+    <PackageReference Include="AWSSDK.CloudWatchLogs" Version="3.7.400.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\AmesaBackend.Shared\AmesaBackend.Shared.csproj" />
     <ProjectReference Include="..\AmesaBackend.Auth\AmesaBackend.Auth.csproj" />
+    <ProjectReference Include="..\AmesaBackend.Lottery\AmesaBackend.Lottery.csproj" />
+    <ProjectReference Include="..\AmesaBackend.Payment\AmesaBackend.Payment.csproj" />
+    <ProjectReference Include="..\AmesaBackend.Content\AmesaBackend.Content.csproj" />
+    <ProjectReference Include="..\AmesaBackend.LotteryResults\AmesaBackend.LotteryResults.csproj" />
+    <ProjectReference Include="..\AmesaBackend.Notification\AmesaBackend.Notification.csproj" />
   </ItemGroup>
 
 </Project>

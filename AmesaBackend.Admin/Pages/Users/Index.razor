@@ -1,0 +1,271 @@
+@page "/admin/users"
+@using AmesaBackend.Admin.Services
+@using AmesaBackend.Admin.DTOs
+@using AmesaBackend.Auth.Models
+@inject IUsersService UsersService
+@inject NavigationManager Navigation
+
+<PageTitle>Users - Amesa Admin</PageTitle>
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h1 class="display-5">
+                <i class="fas fa-users"></i> Users Management
+            </h1>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Search</label>
+                    <input type="text" class="form-control" @bind="searchTerm" @bind:event="oninput" 
+                           placeholder="Search by email, username, name..." />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Status</label>
+                    <select class="form-select" @bind="statusFilter">
+                        <option value="">All Statuses</option>
+                        <option value="Active">Active</option>
+                        <option value="Suspended">Suspended</option>
+                        <option value="Inactive">Inactive</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Page Size</label>
+                    <select class="form-select" @bind="pageSize">
+                        <option value="10">10</option>
+                        <option value="20">20</option>
+                        <option value="50">50</option>
+                    </select>
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                    <button class="btn btn-secondary w-100" @onclick="LoadUsers">
+                        <i class="fas fa-search"></i> Search
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+    else if (users?.Items?.Any() == true)
+    {
+        <div class="card">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Email</th>
+                                <th>Username</th>
+                                <th>Name</th>
+                                <th>Phone</th>
+                                <th>Status</th>
+                                <th>Verification</th>
+                                <th>Created</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var user in users.Items)
+                            {
+                                <tr>
+                                    <td>
+                                        @user.Email
+                                        @if (user.EmailVerified)
+                                        {
+                                            <i class="fas fa-check-circle text-success" title="Email Verified"></i>
+                                        }
+                                    </td>
+                                    <td>@user.Username</td>
+                                    <td>@user.FirstName @user.LastName</td>
+                                    <td>
+                                        @user.Phone
+                                        @if (user.PhoneVerified)
+                                        {
+                                            <i class="fas fa-check-circle text-success" title="Phone Verified"></i>
+                                        }
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-@GetStatusBadgeClass(user.Status)">@user.Status</span>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-@GetVerificationBadgeClass(user.VerificationStatus)">@user.VerificationStatus</span>
+                                    </td>
+                                    <td>@user.CreatedAt.ToString("yyyy-MM-dd")</td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            <button class="btn btn-outline-primary" @onclick="() => ViewUser(user.Id)" title="View">
+                                                <i class="fas fa-eye"></i>
+                                            </button>
+                                            <button class="btn btn-outline-secondary" @onclick="() => EditUser(user.Id)" title="Edit">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            @if (user.Status == "Active")
+                                            {
+                                                <button class="btn btn-outline-warning" @onclick="() => SuspendUser(user.Id)" title="Suspend">
+                                                    <i class="fas fa-ban"></i>
+                                                </button>
+                                            }
+                                            else if (user.Status == "Suspended")
+                                            {
+                                                <button class="btn btn-outline-success" @onclick="() => ActivateUser(user.Id)" title="Activate">
+                                                    <i class="fas fa-check"></i>
+                                                </button>
+                                            }
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Pagination -->
+                @if (users.TotalPages > 1)
+                {
+                    <nav>
+                        <ul class="pagination justify-content-center">
+                            <li class="page-item @(currentPage == 1 ? "disabled" : "")">
+                                <button class="page-link" @onclick="() => ChangePage(currentPage - 1)">Previous</button>
+                            </li>
+                            @for (int i = 1; i <= users.TotalPages; i++)
+                            {
+                                <li class="page-item @(i == currentPage ? "active" : "")">
+                                    <button class="page-link" @onclick="() => ChangePage(i)">@i</button>
+                                </li>
+                            }
+                            <li class="page-item @(currentPage == users.TotalPages ? "disabled" : "")">
+                                <button class="page-link" @onclick="() => ChangePage(currentPage + 1)">Next</button>
+                            </li>
+                        </ul>
+                    </nav>
+                }
+
+                <div class="text-muted text-center mt-3">
+                    Showing @((currentPage - 1) * pageSize + 1) to @(Math.Min(currentPage * pageSize, users.TotalCount)) of @users.TotalCount users
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle"></i> No users found.
+        </div>
+    }
+</div>
+
+@code {
+    private PagedResult<UserDto>? users;
+    private bool isLoading = true;
+    private int currentPage = 1;
+    private int pageSize = 20;
+    private string? searchTerm;
+    private string? statusFilter;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUsers();
+    }
+
+    private async Task LoadUsers()
+    {
+        isLoading = true;
+        try
+        {
+            UserStatus? status = null;
+            if (!string.IsNullOrWhiteSpace(statusFilter) && Enum.TryParse<UserStatus>(statusFilter, out var parsedStatus))
+            {
+                status = parsedStatus;
+            }
+
+            users = await UsersService.GetUsersAsync(currentPage, pageSize, searchTerm, status);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading users: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task ChangePage(int page)
+    {
+        currentPage = page;
+        await LoadUsers();
+    }
+
+    private void ViewUser(Guid id)
+    {
+        Navigation.NavigateTo($"/admin/users/{id}");
+    }
+
+    private void EditUser(Guid id)
+    {
+        Navigation.NavigateTo($"/admin/users/{id}/edit");
+    }
+
+    private async Task SuspendUser(Guid id)
+    {
+        try
+        {
+            await UsersService.SuspendUserAsync(id);
+            await LoadUsers();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error suspending user: {ex.Message}");
+        }
+    }
+
+    private async Task ActivateUser(Guid id)
+    {
+        try
+        {
+            await UsersService.ActivateUserAsync(id);
+            await LoadUsers();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error activating user: {ex.Message}");
+        }
+    }
+
+    private string GetStatusBadgeClass(string status)
+    {
+        return status switch
+        {
+            "Active" => "success",
+            "Suspended" => "warning",
+            "Inactive" => "secondary",
+            _ => "secondary"
+        };
+    }
+
+    private string GetVerificationBadgeClass(string verificationStatus)
+    {
+        return verificationStatus switch
+        {
+            "IdentityVerified" => "success",
+            "Pending" => "warning",
+            "Rejected" => "danger",
+            "NotStarted" => "secondary",
+            _ => "secondary"
+        };
+    }
+}
+

@@ -1,4 +1,5 @@
 @inherits LayoutComponentBase
+@using AmesaBackend.Admin.Components
 @inject IAdminAuthService AuthService
 @inject NavigationManager Navigation
 
@@ -33,12 +34,51 @@ else
                     <div class="text-center mb-4">
                         <h4><i class="fas fa-crown"></i> Amesa Admin</h4>
                         <small class="d-block mt-2">@AuthService.GetCurrentAdminEmail()</small>
+                        <div class="mt-3">
+                            <DatabaseSelector />
+                        </div>
                     </div>
                     <hr />
                     <ul class="nav flex-column">
                         <li class="nav-item">
                             <a class="nav-link" href="/admin">
                                 <i class="fas fa-tachometer-alt me-2"></i> Dashboard
+                            </a>
+                        </li>
+                    </ul>
+                    <hr />
+                    <h6 class="sidebar-heading px-3 mt-4 mb-1 text-muted">
+                        <span>Management</span>
+                    </h6>
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link" href="/admin/houses">
+                                <i class="fas fa-home me-2"></i> Houses
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/admin/users">
+                                <i class="fas fa-users me-2"></i> Users
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/admin/tickets">
+                                <i class="fas fa-ticket-alt me-2"></i> Tickets
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/admin/draws">
+                                <i class="fas fa-dice me-2"></i> Draws
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/admin/payments">
+                                <i class="fas fa-euro-sign me-2"></i> Payments
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/admin/translations">
+                                <i class="fas fa-language me-2"></i> Translations
                             </a>
                         </li>
                     </ul>

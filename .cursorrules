@@ -1133,6 +1133,93 @@ Client → CloudFront /api/* → ALB (path-based routing) → ECS Task (microser
   - Schedule: Periodic sync (configurable interval)
   - Location: `BE/AmesaBackend.Lottery/Services/InventorySyncService.cs`
 
+### Service Registration Patterns
+- **Extension Method Pattern**: All service registration is organized via extension methods in `Configuration/` folders
+  - **Naming Convention**: `Add{ServiceName}{Feature}()` (e.g., `AddAuthServices()`, `AddAuthSwagger()`, `AddAuthControllers()`)
+  - **Purpose**: Encapsulates service registration logic, keeps `Program.cs` clean and readable
+  - **Location**: Each microservice has its own `Configuration/` folder with extension methods
+- **Service Registration Methods**:
+  - `AddAuthControllers()` - Configures controllers with camelCase JSON serialization and custom ModelState validation
+  - `AddAuthSwagger()` - Configures Swagger/OpenAPI documentation
+  - `AddAuthDatabase()` - Configures Entity Framework with PostgreSQL connection pooling
+  - `AddAuthCors()` - Configures CORS policy for frontend
+  - `AddAuthServices()` - Registers all application services (security, auth, AWS, infrastructure)
+  - `AddAuthForwardedHeaders()` - Configures forwarded headers for load balancer/proxy
+  - `AddJwtAuthentication()` - Configures JWT authentication
+  - `AddAuthAuthorization()` - Configures authorization policies
+  - `UseAuthSerilog()` - Configures Serilog logging
+  - `UseAuthKestrel()` - Configures Kestrel HTTPS (development only)
+  - `UseAuthMiddleware()` - Configures middleware pipeline
+- **Service Lifetime Patterns**:
+  - **Singleton**: AWS service clients (`IAmazonRekognition`, `IAmazonSES`, `IAmazonSNS`), `ICircuitBreakerService`
+  - **Scoped**: Application services (repositories, business logic), `IRateLimitService`, `IAccountLockoutService`
+  - **Transient**: Not commonly used (default for most services)
+- **Dependency Resolution**:
+  - Circular dependencies handled with `Lazy<T>` pattern (e.g., `AccountRecoveryService` and `PasswordResetService`)
+  - Shared library services registered via `AddAmesaBackendShared()` extension method
+  - HttpClient registration with configuration (e.g., `NotificationPreferencesSyncService`)
+
+### Swagger/OpenAPI Configuration
+- **Setup**: Configured via `AddAuthSwagger()` extension method in `Configuration/SwaggerConfiguration.cs`
+- **OpenAPI Info**:
+  - Title: Service-specific (e.g., "Amesa Auth API")
+  - Version: "v1"
+  - Description: Service description
+  - Contact: Support email and name
+- **Security Scheme**:
+  - **Bearer Token Authentication**: JWT token via Authorization header
+  - Scheme: "Bearer"
+  - Description: "JWT Authorization header using the Bearer scheme. Example: \"Authorization: Bearer {token}\""
+  - Location: Header
+- **Security Requirements**: All endpoints require Bearer token authentication
+- **Endpoints**:
+  - Swagger UI: `/swagger` (development) or `/swagger/index.html`
+  - OpenAPI JSON: `/swagger/v1/swagger.json`
+- **Configuration Location**: `BE/AmesaBackend.{Service}/Configuration/SwaggerConfiguration.cs`
+- **Usage**: Enabled in development, can be conditionally enabled in production
+
+### Logging Configuration Patterns
+- **Framework**: Serilog with structured logging
+- **Configuration Method**: `UseAuthSerilog()` extension method in `Configuration/LoggingConfiguration.cs`
+- **Configuration Sources**:
+  - Primary: `appsettings.json` (via `ReadFrom.Configuration()`)
+  - Environment-specific: `appsettings.{Environment}.json`
+- **Sinks**:
+  - **Console**: Development and production (via `WriteTo.Console()`)
+  - **File**: Development only (`logs/auth-.txt` with daily rolling)
+  - **CloudWatch**: Production (configured via `appsettings.json` Serilog settings)
+- **Log Context Enrichment**: `Enrich.FromLogContext()` for request/user context
+- **Log Levels**: Configured via `appsettings.json` (Information, Warning, Error, Critical)
+- **Structured Logging**: JSON format with properties (e.g., `Log.Information("User logged in: {UserId}", userId)`)
+- **Graceful Shutdown**: `ConfigureGracefulShutdown()` ensures logs are flushed on application shutdown
+- **Log Location**: `BE/AmesaBackend.{Service}/Configuration/LoggingConfiguration.cs`
+- **Best Practices**:
+  - Use structured logging with properties, not string interpolation
+  - Include context (request ID, user ID, session ID) via log context
+  - Sanitize PII in logs (middleware handles this)
+
+### Application Bootstrap Patterns
+- **Program.cs Structure** (Top-to-bottom execution order):
+  1. **Configuration Setup**: Google credentials, Serilog logging
+  2. **Forwarded Headers**: Load balancer/proxy configuration
+  3. **Controllers**: JSON serialization (camelCase), ModelState validation
+  4. **Swagger/OpenAPI**: API documentation setup
+  5. **Database**: Entity Framework with connection pooling
+  6. **Secrets Loading**: AWS Secrets Manager (production only)
+  7. **Authentication**: JWT configuration
+  8. **OAuth**: Google and Meta OAuth (if configured)
+  9. **Authorization**: Policy configuration
+  10. **CORS**: Frontend origin configuration
+  11. **Services**: All application services registration
+  12. **Kestrel**: HTTPS configuration (development only)
+  13. **Middleware Pipeline**: Forwarded headers, HTTPS, Swagger, CORS, shared middleware, security, routing, auth, health checks
+  14. **Database Creation**: Development only (ensures database exists)
+  15. **Graceful Shutdown**: Log flushing on shutdown
+- **Error Handling**: Try-catch-finally block with Serilog fatal logging
+- **Partial Program Class**: `public partial class Program { }` for test project access
+- **Pattern**: Extension methods keep `Program.cs` clean and maintainable
+- **Location**: `BE/AmesaBackend.{Service}/Program.cs`
+
 ## Business Context
 - **4Wins Model**: Property lottery platform
 - **Legal Compliance**: Gaming regulations, responsible gambling
@@ -1527,6 +1614,6 @@ Client → CloudFront /api/* → ALB (path-based routing) → ECS Task (microser
 
 ---
 **Last Updated**: 2025-01-25
-**Context Version**: 2.3.0 (Secrets management, database connection patterns, monitoring & observability, API versioning, testing patterns, and migration patterns documented)
+**Context Version**: 2.4.0 (Service registration patterns, Swagger/OpenAPI configuration, logging patterns, and application bootstrap patterns documented)
 **Note**: This file should be updated whenever API design, database schema, deployment processes, or infrastructure changes.
 

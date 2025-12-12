@@ -1,0 +1,161 @@
+@using AmesaBackend.Admin.Services
+@using AmesaBackend.Admin.DTOs
+@using AmesaBackend.Admin.Components
+@using Microsoft.AspNetCore.Components.Forms
+@inject IS3ImageService S3ImageService
+@inject ILogger<ImageUpload> Logger
+
+<div class="image-upload-component">
+    <div class="mb-3">
+        <label class="form-label">House Images</label>
+        <InputFile @ref="fileInput" OnChange="HandleFileSelected" 
+                   accept="image/*" multiple class="form-control" />
+        <small class="form-text text-muted">Upload images for this house (JPG, PNG, GIF - Max 10MB each)</small>
+    </div>
+
+    @if (uploading)
+    {
+        <div class="alert alert-info">
+            <i class="fas fa-spinner fa-spin"></i> Uploading images...
+        </div>
+    }
+
+    @if (uploadedImages.Any())
+    {
+        <div class="row g-3 mb-3">
+            @foreach (var image in uploadedImages)
+            {
+                <div class="col-md-3">
+                    <div class="card">
+                        <img src="@image.Url" class="card-img-top" alt="@image.AltText" style="height: 150px; object-fit: cover;" />
+                        <div class="card-body p-2">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="primaryImage" 
+                                       checked="@image.IsPrimary" @onchange="() => SetPrimaryImage(image)" />
+                                <label class="form-check-label small">Primary</label>
+                            </div>
+                            <button class="btn btn-sm btn-danger w-100 mt-2" @onclick="() => RemoveImage(image)">
+                                <i class="fas fa-trash"></i> Remove
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+    @if (errors.Any())
+    {
+        <div class="alert alert-danger">
+            <ul class="mb-0">
+                @foreach (var error in errors)
+                {
+                    <li>@error</li>
+                }
+            </ul>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid HouseId { get; set; }
+    [Parameter] public EventCallback<List<ImageInfo>> OnImagesChanged { get; set; }
+
+    private InputFile? fileInput;
+    private List<ImageInfo> uploadedImages = new();
+    private bool uploading = false;
+    private List<string> errors = new();
+
+    private async Task HandleFileSelected(InputFileChangeEventArgs e)
+    {
+        errors.Clear();
+        uploading = true;
+
+        try
+        {
+            var files = e.GetMultipleFiles(10); // Max 10 files
+
+            foreach (var file in files)
+            {
+                // Validate file size (10MB max)
+                if (file.Size > 10 * 1024 * 1024)
+                {
+                    errors.Add($"{file.Name} is too large. Maximum size is 10MB.");
+                    continue;
+                }
+
+                // Validate file type
+                if (!file.ContentType.StartsWith("image/"))
+                {
+                    errors.Add($"{file.Name} is not a valid image file.");
+                    continue;
+                }
+
+                try
+                {
+                    using var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+                    var imageUrl = await S3ImageService.UploadImageAsync(
+                        stream, 
+                        file.Name, 
+                        file.ContentType, 
+                        HouseId);
+
+                    var imageInfo = new ImageInfo
+                    {
+                        Url = imageUrl,
+                        AltText = file.Name,
+                        IsPrimary = !uploadedImages.Any(), // First image is primary by default
+                        DisplayOrder = uploadedImages.Count
+                    };
+
+                    uploadedImages.Add(imageInfo);
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError(ex, "Error uploading image {FileName}", file.Name);
+                    errors.Add($"Failed to upload {file.Name}: {ex.Message}");
+                }
+            }
+
+            await OnImagesChanged.InvokeAsync(uploadedImages);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error handling file selection");
+            errors.Add($"Error processing files: {ex.Message}");
+        }
+        finally
+        {
+            uploading = false;
+        }
+    }
+
+    private void SetPrimaryImage(ImageInfo image)
+    {
+        foreach (var img in uploadedImages)
+        {
+            img.IsPrimary = img == image;
+        }
+    }
+
+    private async Task RemoveImage(ImageInfo image)
+    {
+        try
+        {
+            await S3ImageService.DeleteImageAsync(image.Url);
+            uploadedImages.Remove(image);
+            await OnImagesChanged.InvokeAsync(uploadedImages);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error removing image {ImageUrl}", image.Url);
+            errors.Add($"Failed to remove image: {ex.Message}");
+        }
+    }
+
+    public void SetExistingImages(List<ImageInfo> images)
+    {
+        uploadedImages = images ?? new List<ImageInfo>();
+    }
+}
+

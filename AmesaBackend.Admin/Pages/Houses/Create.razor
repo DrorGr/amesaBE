@@ -1,0 +1,286 @@
+@page "/admin/houses/create"
+@using AmesaBackend.Admin.Services
+@using AmesaBackend.Admin.DTOs
+@using AmesaBackend.Admin.Components
+@inject IHousesService HousesService
+@inject NavigationManager Navigation
+
+<PageTitle>Create House - Amesa Admin</PageTitle>
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h1 class="display-5">
+                <i class="fas fa-plus-circle"></i> Create New House
+            </h1>
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-secondary" @onclick="NavigateBack">
+                <i class="fas fa-arrow-left"></i> Back to List
+            </button>
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="card">
+            <div class="card-body">
+                <EditForm Model="@request" OnValidSubmit="HandleSubmit">
+                    <DataAnnotationsValidator />
+                    <ValidationSummary class="text-danger mb-3" />
+
+                    <div class="row">
+                        <!-- Basic Information -->
+                        <div class="col-md-6">
+                            <h5 class="mb-3">Basic Information</h5>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Title <span class="text-danger">*</span></label>
+                                <InputText @bind-Value="request.Title" class="form-control" />
+                                <ValidationMessage For="@(() => request.Title)" />
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">Description</label>
+                                <InputTextArea @bind-Value="request.Description" class="form-control" rows="4" />
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">Location <span class="text-danger">*</span></label>
+                                <InputText @bind-Value="request.Location" class="form-control" />
+                                <ValidationMessage For="@(() => request.Location)" />
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">Address</label>
+                                <InputText @bind-Value="request.Address" class="form-control" />
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label class="form-label">Bedrooms</label>
+                                        <InputNumber @bind-Value="request.Bedrooms" class="form-control" />
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label class="form-label">Bathrooms</label>
+                                        <InputNumber @bind-Value="request.Bathrooms" class="form-control" />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label class="form-label">Square Feet</label>
+                                        <InputNumber @bind-Value="request.SquareFeet" class="form-control" />
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label class="form-label">Year Built</label>
+                                        <InputNumber @bind-Value="request.YearBuilt" class="form-control" />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">Property Type</label>
+                                <InputText @bind-Value="request.PropertyType" class="form-control" />
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">Lot Size (acres)</label>
+                                <InputNumber @bind-Value="request.LotSize" class="form-control" step="0.01" />
+                            </div>
+                        </div>
+
+                        <!-- Lottery Information -->
+                        <div class="col-md-6">
+                            <h5 class="mb-3">Lottery Information</h5>
+
+                            <div class="mb-3">
+                                <label class="form-label">Price (€) <span class="text-danger">*</span></label>
+                                <InputNumber @bind-Value="request.Price" class="form-control" step="0.01" />
+                                <ValidationMessage For="@(() => request.Price)" />
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">Ticket Price (€) <span class="text-danger">*</span></label>
+                                <InputNumber @bind-Value="request.TicketPrice" class="form-control" step="0.01" />
+                                <ValidationMessage For="@(() => request.TicketPrice)" />
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">Total Tickets <span class="text-danger">*</span></label>
+                                <InputNumber @bind-Value="request.TotalTickets" class="form-control" />
+                                <ValidationMessage For="@(() => request.TotalTickets)" />
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">Max Participants</label>
+                                <InputNumber @bind-Value="request.MaxParticipants" class="form-control" />
+                                <small class="form-text text-muted">Leave empty for no limit</small>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">Minimum Participation Percentage (%)</label>
+                                <InputNumber @bind-Value="request.MinimumParticipationPercentage" class="form-control" step="0.01" />
+                                <small class="form-text text-muted">Default: 75%</small>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">Lottery Start Date</label>
+                                <InputDate @bind-Value="lotteryStartDate" class="form-control" />
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">Lottery End Date <span class="text-danger">*</span></label>
+                                <InputDate @bind-Value="lotteryEndDate" class="form-control" />
+                                <ValidationMessage For="@(() => request.LotteryEndDate)" />
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">Draw Date</label>
+                                <InputDate @bind-Value="drawDate" class="form-control" />
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">Status</label>
+                                <InputSelect @bind-Value="request.Status" class="form-select">
+                                    <option value="">Select Status</option>
+                                    <option value="Pending">Pending</option>
+                                    <option value="Active">Active</option>
+                                    <option value="Upcoming">Upcoming</option>
+                                    <option value="Inactive">Inactive</option>
+                                </InputSelect>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Features -->
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <h5 class="mb-3">Features</h5>
+                            <div class="mb-3">
+                                <label class="form-label">Features (comma-separated)</label>
+                                <InputText @bind-Value="featuresText" class="form-control" 
+                                          placeholder="e.g., Pool, Garage, Garden, Fireplace" />
+                                <small class="form-text text-muted">Enter features separated by commas</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Image Upload -->
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <h5 class="mb-3">House Images</h5>
+                            <ImageUpload HouseId="@(houseId ?? Guid.NewGuid())" OnImagesChanged="HandleImagesChanged" />
+                        </div>
+                    </div>
+
+                    <!-- Form Actions -->
+                    <div class="row mt-4">
+                        <div class="col-12">
+                            <div class="d-flex justify-content-between">
+                                <button type="button" class="btn btn-secondary" @onclick="NavigateBack">
+                                    <i class="fas fa-times"></i> Cancel
+                                </button>
+                                <button type="submit" class="btn btn-primary" disabled="@isSubmitting">
+                                    @if (isSubmitting)
+                                    {
+                                        <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                                    }
+                                    <i class="fas fa-save"></i> Create House
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private CreateHouseRequest request = new();
+    private bool isLoading = false;
+    private bool isSubmitting = false;
+    private DateTime? lotteryStartDate;
+    private DateTime? lotteryEndDate;
+    private DateTime? drawDate;
+    private string featuresText = string.Empty;
+    private Guid? houseId;
+    private List<ImageInfo> uploadedImages = new();
+    private List<ImageInfo> houseImages = new();
+
+    protected override void OnInitialized()
+    {
+        // Set default values
+        request.Status = "Pending";
+        request.MinimumParticipationPercentage = 75.00m;
+        lotteryEndDate = DateTime.UtcNow.AddDays(30); // Default to 30 days from now
+    }
+
+    private async Task HandleSubmit()
+    {
+        if (isSubmitting) return;
+
+        isSubmitting = true;
+        try
+        {
+            // Convert dates
+            request.LotteryStartDate = lotteryStartDate;
+            request.LotteryEndDate = lotteryEndDate ?? DateTime.UtcNow;
+            request.DrawDate = drawDate;
+
+            // Parse features
+            if (!string.IsNullOrWhiteSpace(featuresText))
+            {
+                request.Features = featuresText
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(f => f.Trim())
+                    .Where(f => !string.IsNullOrWhiteSpace(f))
+                    .ToArray();
+            }
+
+            var createdHouse = await HousesService.CreateHouseAsync(request);
+            
+            // TODO: Save house images to database after house is created
+            // For now, images are uploaded to S3 but not linked to house in DB
+            
+            // Navigate to the house detail or list page
+            Navigation.NavigateTo($"/admin/houses/{createdHouse.Id}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error creating house: {ex.Message}");
+            // TODO: Show error message to user
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private void NavigateBack()
+    {
+        Navigation.NavigateTo("/admin/houses");
+    }
+
+    private void HandleImagesChanged(List<ImageInfo> images)
+    {
+        houseImages = images;
+    }
+}
+

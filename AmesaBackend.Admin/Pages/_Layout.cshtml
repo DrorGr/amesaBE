@@ -24,6 +24,16 @@
     </div>
 
     <script src="_framework/blazor.server.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@@microsoft/signalr@latest/dist/browser/signalr.min.js"></script>
+    <script src="js/admin-signalr.js"></script>
+    <script>
+        // Initialize SignalR connection
+        window.addEventListener('load', function() {
+            if (typeof adminSignalR !== 'undefined') {
+                adminSignalR.initialize('/admin/hub');
+            }
+        });
+    </script>
 </body>
 </html>
 

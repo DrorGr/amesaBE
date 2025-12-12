@@ -1,0 +1,73 @@
+@inject IConfiguration Configuration
+@inject NavigationManager Navigation
+
+<div class="database-selector">
+    <div class="dropdown">
+        <button class="btn btn-outline-secondary dropdown-toggle" type="button" 
+                id="databaseSelector" data-bs-toggle="dropdown" aria-expanded="false">
+            <i class="fas fa-database"></i> 
+            <span id="currentDatabase">@CurrentDatabase</span>
+        </button>
+        <ul class="dropdown-menu" aria-labelledby="databaseSelector">
+            <li>
+                <a class="dropdown-item @(CurrentDatabase == "Production" ? "active" : "")" 
+                   @onclick='() => SelectDatabase("Production")'>
+                    <i class="fas fa-server text-success me-2"></i> Production
+                </a>
+            </li>
+            <li>
+                <a class="dropdown-item @(CurrentDatabase == "Staging" ? "active" : "")" 
+                   @onclick='() => SelectDatabase("Staging")'>
+                    <i class="fas fa-server text-warning me-2"></i> Staging
+                </a>
+            </li>
+            <li>
+                <a class="dropdown-item @(CurrentDatabase == "Development" ? "active" : "")" 
+                   @onclick='() => SelectDatabase("Development")'>
+                    <i class="fas fa-server text-info me-2"></i> Development
+                </a>
+            </li>
+            <li><hr class="dropdown-divider"></li>
+            <li>
+                <a class="dropdown-item text-muted" href="#">
+                    <small>Current: @CurrentDatabase</small>
+                </a>
+            </li>
+        </ul>
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback<string> OnDatabaseChanged { get; set; }
+
+    private string CurrentDatabase { get; set; } = "Production";
+
+    protected override void OnInitialized()
+    {
+        // Get current database from configuration or environment
+        var env = Configuration["ASPNETCORE_ENVIRONMENT"] ?? "Production";
+        CurrentDatabase = env switch
+        {
+            "Development" => "Development",
+            "Staging" => "Staging",
+            _ => "Production"
+        };
+    }
+
+    private async Task SelectDatabase(string database)
+    {
+        if (CurrentDatabase == database) return;
+
+        CurrentDatabase = database;
+        
+        // Store selection in session/localStorage
+        // In a real implementation, this would update the connection string
+        // For now, we'll just notify the parent component
+        await OnDatabaseChanged.InvokeAsync(database);
+        
+        // Show warning that this requires page reload
+        // In production, this would trigger a connection string update
+        Console.WriteLine($"Database selector changed to: {database}");
+    }
+}
+

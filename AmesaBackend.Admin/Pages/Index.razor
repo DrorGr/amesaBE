@@ -1,6 +1,8 @@
 @page "/admin"
 @page "/admin/dashboard"
+@using AmesaBackend.Admin.Models
 @inject IAdminDatabaseService DatabaseService
+@inject IDashboardService DashboardService
 
 <PageTitle>Dashboard - Amesa Admin</PageTitle>
 
@@ -19,16 +21,232 @@
         <strong>Current Environment:</strong> @DatabaseService.GetCurrentEnvironment()
     </div>
 
-    <div class="row g-4">
-        <div class="col-md-4">
-            <div class="card">
-                <div class="card-body text-center">
-                    <i class="fas fa-home fa-3x text-primary mb-3"></i>
-                    <h5 class="card-title">Admin Panel</h5>
-                    <p class="card-text text-muted">Microservices Admin Interface</p>
+    @if (isLoading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="row g-4">
+            <!-- User Statistics -->
+            <div class="col-md-3">
+                <div class="card border-primary">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="text-muted mb-1">Total Users</h6>
+                                <h3 class="mb-0">@stats.TotalUsers</h3>
+                                <small class="text-success">
+                                    <i class="fas fa-arrow-up"></i> @stats.NewUsersToday today
+                                </small>
+                            </div>
+                            <i class="fas fa-users fa-2x text-primary"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-3">
+                <div class="card border-success">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="text-muted mb-1">Active Users</h6>
+                                <h3 class="mb-0">@stats.ActiveUsers</h3>
+                                <small class="text-muted">@stats.NewUsersThisWeek this week</small>
+                            </div>
+                            <i class="fas fa-user-check fa-2x text-success"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- House Statistics -->
+            <div class="col-md-3">
+                <div class="card border-info">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="text-muted mb-1">Total Houses</h6>
+                                <h3 class="mb-0">@stats.TotalHouses</h3>
+                                <small class="text-info">@stats.ActiveHouses active</small>
+                            </div>
+                            <i class="fas fa-home fa-2x text-info"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-3">
+                <div class="card border-warning">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="text-muted mb-1">Pending Houses</h6>
+                                <h3 class="mb-0">@stats.PendingHouses</h3>
+                                <small class="text-warning">Requires review</small>
+                            </div>
+                            <i class="fas fa-clock fa-2x text-warning"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Ticket Statistics -->
+            <div class="col-md-3">
+                <div class="card border-secondary">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="text-muted mb-1">Total Tickets</h6>
+                                <h3 class="mb-0">@stats.TotalTickets</h3>
+                                <small class="text-success">
+                                    <i class="fas fa-arrow-up"></i> @stats.SoldTicketsToday today
+                                </small>
+                            </div>
+                            <i class="fas fa-ticket-alt fa-2x text-secondary"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-3">
+                <div class="card border-success">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="text-muted mb-1">Tickets This Week</h6>
+                                <h3 class="mb-0">@stats.SoldTicketsThisWeek</h3>
+                                <small class="text-muted">Sold tickets</small>
+                            </div>
+                            <i class="fas fa-chart-line fa-2x text-success"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Revenue Statistics -->
+            <div class="col-md-3">
+                <div class="card border-success">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="text-muted mb-1">Total Revenue</h6>
+                                <h3 class="mb-0">€@stats.TotalRevenue.ToString("N2")</h3>
+                                <small class="text-success">
+                                    <i class="fas fa-arrow-up"></i> €@stats.RevenueToday.ToString("N2") today
+                                </small>
+                            </div>
+                            <i class="fas fa-euro-sign fa-2x text-success"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-3">
+                <div class="card border-primary">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="text-muted mb-1">Revenue This Week</h6>
+                                <h3 class="mb-0">€@stats.RevenueThisWeek.ToString("N2")</h3>
+                                <small class="text-muted">@stats.TotalTransactions transactions</small>
+                            </div>
+                            <i class="fas fa-chart-bar fa-2x text-primary"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Draw Statistics -->
+            <div class="col-md-3">
+                <div class="card border-info">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="text-muted mb-1">Total Draws</h6>
+                                <h3 class="mb-0">@stats.TotalDraws</h3>
+                                <small class="text-success">@stats.CompletedDraws completed</small>
+                            </div>
+                            <i class="fas fa-dice fa-2x text-info"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-3">
+                <div class="card border-warning">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="text-muted mb-1">Pending Draws</h6>
+                                <h3 class="mb-0">@stats.PendingDraws</h3>
+                                <small class="text-warning">Requires action</small>
+                            </div>
+                            <i class="fas fa-hourglass-half fa-2x text-warning"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Reservation Statistics -->
+            <div class="col-md-3">
+                <div class="card border-primary">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="text-muted mb-1">Active Reservations</h6>
+                                <h3 class="mb-0">@stats.ActiveReservations</h3>
+                                <small class="text-danger">@stats.ExpiredReservations expired</small>
+                            </div>
+                            <i class="fas fa-bookmark fa-2x text-primary"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-3">
+                <div class="card border-danger">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="text-muted mb-1">Pending Transactions</h6>
+                                <h3 class="mb-0">@stats.PendingTransactions</h3>
+                                <small class="text-warning">Requires review</small>
+                            </div>
+                            <i class="fas fa-exclamation-triangle fa-2x text-danger"></i>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
+    }
 </div>
+
+@code {
+    private DashboardStats stats = new();
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            stats = await DashboardService.GetDashboardStatsAsync();
+        }
+        catch (Exception ex)
+        {
+            // Log error - stats will show zeros
+            Console.WriteLine($"Error loading dashboard stats: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}
+
 

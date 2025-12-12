@@ -1,0 +1,276 @@
+@page "/admin/users/{id:guid}/edit"
+@using AmesaBackend.Admin.Services
+@using AmesaBackend.Admin.DTOs
+@using AmesaBackend.Auth.Models
+@inject IUsersService UsersService
+@inject NavigationManager Navigation
+
+<PageTitle>Edit User - Amesa Admin</PageTitle>
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h1 class="display-5">
+                <i class="fas fa-user-edit"></i> Edit User
+            </h1>
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-secondary" @onclick="NavigateBack">
+                <i class="fas fa-arrow-left"></i> Back to List
+            </button>
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+    else if (user == null)
+    {
+        <div class="alert alert-danger">
+            <i class="fas fa-exclamation-triangle"></i> User not found.
+        </div>
+    }
+    else
+    {
+        <div class="row">
+            <!-- User Information Card -->
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title mb-4">User Information</h5>
+                        
+                        <EditForm Model="@request" OnValidSubmit="HandleSubmit">
+                            <DataAnnotationsValidator />
+                            <ValidationSummary class="text-danger mb-3" />
+
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label class="form-label">Email</label>
+                                        <input type="email" class="form-control" value="@user.Email" disabled />
+                                        <small class="form-text text-muted">Email cannot be changed</small>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label class="form-label">Username</label>
+                                        <input type="text" class="form-control" value="@user.Username" disabled />
+                                        <small class="form-text text-muted">Username cannot be changed</small>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label class="form-label">First Name</label>
+                                        <InputText @bind-Value="request.FirstName" class="form-control" />
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label class="form-label">Last Name</label>
+                                        <InputText @bind-Value="request.LastName" class="form-control" />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">Phone</label>
+                                <InputText @bind-Value="request.Phone" class="form-control" />
+                                @if (user.PhoneVerified)
+                                {
+                                    <small class="form-text text-success">
+                                        <i class="fas fa-check-circle"></i> Phone verified
+                                    </small>
+                                }
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">Status</label>
+                                <InputSelect @bind-Value="statusValue" class="form-select">
+                                    <option value="">Select Status</option>
+                                    <option value="Active">Active</option>
+                                    <option value="Suspended">Suspended</option>
+                                    <option value="Inactive">Inactive</option>
+                                </InputSelect>
+                            </div>
+
+                            <div class="d-flex justify-content-between mt-4">
+                                <button type="button" class="btn btn-secondary" @onclick="NavigateBack">
+                                    <i class="fas fa-times"></i> Cancel
+                                </button>
+                                <button type="submit" class="btn btn-primary" disabled="@isSubmitting">
+                                    @if (isSubmitting)
+                                    {
+                                        <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                                    }
+                                    <i class="fas fa-save"></i> Save Changes
+                                </button>
+                            </div>
+                        </EditForm>
+                    </div>
+                </div>
+            </div>
+
+            <!-- User Details Card -->
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title mb-4">User Details</h5>
+                        
+                        <div class="mb-3">
+                            <strong>Email Verified:</strong>
+                            @if (user.EmailVerified)
+                            {
+                                <span class="badge bg-success">Yes</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-warning">No</span>
+                            }
+                        </div>
+
+                        <div class="mb-3">
+                            <strong>Phone Verified:</strong>
+                            @if (user.PhoneVerified)
+                            {
+                                <span class="badge bg-success">Yes</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-warning">No</span>
+                            }
+                        </div>
+
+                        <div class="mb-3">
+                            <strong>Verification Status:</strong>
+                            <span class="badge bg-@GetVerificationBadgeClass(user.VerificationStatus)">@user.VerificationStatus</span>
+                        </div>
+
+                        @if (user.DateOfBirth.HasValue)
+                        {
+                            <div class="mb-3">
+                                <strong>Date of Birth:</strong>
+                                <div>@user.DateOfBirth.Value.ToString("yyyy-MM-dd")</div>
+                            </div>
+                        }
+
+                        @if (!string.IsNullOrEmpty(user.Gender))
+                        {
+                            <div class="mb-3">
+                                <strong>Gender:</strong>
+                                <div>@user.Gender</div>
+                            </div>
+                        }
+
+                        <div class="mb-3">
+                            <strong>Created:</strong>
+                            <div>@user.CreatedAt.ToString("yyyy-MM-dd HH:mm")</div>
+                        </div>
+
+                        @if (user.LastLoginAt.HasValue)
+                        {
+                            <div class="mb-3">
+                                <strong>Last Login:</strong>
+                                <div>@user.LastLoginAt.Value.ToString("yyyy-MM-dd HH:mm")</div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private UserDto? user;
+    private UpdateUserRequest request = new();
+    private bool isLoading = true;
+    private bool isSubmitting = false;
+    private string? statusValue;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUser();
+    }
+
+    private async Task LoadUser()
+    {
+        isLoading = true;
+        try
+        {
+            user = await UsersService.GetUserByIdAsync(Id);
+            if (user != null)
+            {
+                // Populate form with existing data
+                request.FirstName = user.FirstName;
+                request.LastName = user.LastName;
+                request.Phone = user.Phone;
+                statusValue = user.Status;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading user: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task HandleSubmit()
+    {
+        if (isSubmitting) return;
+
+        isSubmitting = true;
+        try
+        {
+            // Convert status string to enum
+            if (!string.IsNullOrWhiteSpace(statusValue) && Enum.TryParse<UserStatus>(statusValue, out var parsedStatus))
+            {
+                request.Status = parsedStatus;
+            }
+
+            var updatedUser = await UsersService.UpdateUserAsync(Id, request);
+            
+            // Navigate back to users list
+            Navigation.NavigateTo("/admin/users");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error updating user: {ex.Message}");
+            // TODO: Show error message to user
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private void NavigateBack()
+    {
+        Navigation.NavigateTo("/admin/users");
+    }
+
+    private string GetVerificationBadgeClass(string verificationStatus)
+    {
+        return verificationStatus switch
+        {
+            "IdentityVerified" => "success",
+            "Pending" => "warning",
+            "Rejected" => "danger",
+            "NotStarted" => "secondary",
+            _ => "secondary"
+        };
+    }
+}
+
