@@ -2,9 +2,16 @@
 (function () {
     let connection = null;
     let retryCount = 0;
+    let isInitializing = false;
+    let isInitialized = false;
     const maxRetries = 10; // Maximum 10 retries (1 second total)
 
     function initializeSignalR() {
+        // Prevent multiple simultaneous initializations
+        if (isInitializing || isInitialized) {
+            return;
+        }
+        
         const signalRUrl = '/hub'; // Relative to base href /admin/, resolves to /admin/hub
         
         // Check if SignalR is available (wait for script to load)
@@ -17,11 +24,13 @@
             } else {
                 // Max retries reached - SignalR library failed to load
                 console.warn('SignalR library failed to load after ' + maxRetries + ' attempts. Real-time updates will not be available.');
+                isInitializing = false;
                 return;
             }
         }
         
-        // Reset retry count on success
+        // SignalR is available, mark as initializing
+        isInitializing = true;
         retryCount = 0;
 
         connection = new SignalR.HubConnectionBuilder()
@@ -99,6 +108,8 @@
         connection.start()
             .then(() => {
                 console.log('SignalR connected');
+                isInitialized = true;
+                isInitializing = false;
                 // Join relevant groups
                 connection.invoke('JoinGroup', 'houses').catch(err => console.error('Failed to join houses group:', err));
                 connection.invoke('JoinGroup', 'users').catch(err => console.error('Failed to join users group:', err));
@@ -106,6 +117,7 @@
             })
             .catch(err => {
                 console.error('SignalR connection error:', err);
+                isInitializing = false;
             });
     }
 
@@ -127,15 +139,20 @@
     }
 
     // Initialize when window is fully loaded (ensures all scripts are loaded)
+    // Use a single initialization point to prevent multiple calls
+    function startInitialization() {
+        if (!isInitialized && !isInitializing) {
+            // Wait a bit for SignalR script to load from CDN
+            setTimeout(initializeSignalR, 500);
+        }
+    }
+    
     if (document.readyState === 'complete') {
-        // Page already loaded, wait a bit for SignalR script to initialize
-        setTimeout(initializeSignalR, 200);
+        // Page already loaded
+        startInitialization();
     } else {
         // Wait for window load event to ensure all scripts are loaded
-        window.addEventListener('load', function() {
-            // Give SignalR script a moment to initialize
-            setTimeout(initializeSignalR, 200);
-        });
+        window.addEventListener('load', startInitialization, { once: true });
     }
 
     // Cleanup on page unload
@@ -145,3 +162,4 @@
         }
     });
 })();
+
