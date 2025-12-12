@@ -1,4 +1,4 @@
-@page "/admin/houses/{id:guid}/edit"
+@page "/houses/{id:guid}/edit"
 @using AmesaBackend.Admin.Services
 @using AmesaBackend.Admin.DTOs
 @using AmesaBackend.Admin.Components
@@ -316,7 +316,7 @@
             var updatedHouse = await HousesService.UpdateHouseAsync(Id, request);
             
             // Navigate to the house detail or list page
-            Navigation.NavigateTo($"/admin/houses/{updatedHouse.Id}");
+            Navigation.NavigateTo($"/houses/{updatedHouse.Id}");
         }
         catch (Exception ex)
         {
@@ -331,7 +331,7 @@
 
     private void NavigateBack()
     {
-        Navigation.NavigateTo("/admin/houses");
+        Navigation.NavigateTo("/houses");
     }
 
     private void HandleImagesChanged(List<ImageInfo> images)

@@ -1,4 +1,4 @@
-@page "/admin/houses"
+@page "/houses"
 @using AmesaBackend.Admin.Services
 @using AmesaBackend.Admin.DTOs
 @inject IHousesService HousesService
@@ -217,17 +217,17 @@
 
     private void NavigateToCreate()
     {
-        Navigation.NavigateTo("/admin/houses/create");
+        Navigation.NavigateTo("/houses/create");
     }
 
     private void ViewHouse(Guid id)
     {
-        Navigation.NavigateTo($"/admin/houses/{id}");
+        Navigation.NavigateTo($"/houses/{id}");
     }
 
     private void EditHouse(Guid id)
     {
-        Navigation.NavigateTo($"/admin/houses/{id}/edit");
+        Navigation.NavigateTo($"/houses/{id}/edit");
     }
 
     private async Task DeleteHouse(Guid id)

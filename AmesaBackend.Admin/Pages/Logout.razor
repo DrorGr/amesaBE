@@ -1,4 +1,4 @@
-@page "/admin/logout"
+@page "/logout"
 @inject IAdminAuthService AuthService
 @inject NavigationManager Navigation
 
@@ -6,7 +6,7 @@
     protected override async Task OnInitializedAsync()
     {
         await AuthService.SignOutAsync();
-        Navigation.NavigateTo("/admin/login", forceLoad: true);
+        Navigation.NavigateTo("/login", forceLoad: true);
     }
 }
 

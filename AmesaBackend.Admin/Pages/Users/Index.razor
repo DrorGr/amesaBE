@@ -1,4 +1,4 @@
-@page "/admin/users"
+@page "/users"
 @using AmesaBackend.Admin.Services
 @using AmesaBackend.Admin.DTOs
 @using AmesaBackend.Auth.Models
@@ -211,12 +211,12 @@
 
     private void ViewUser(Guid id)
     {
-        Navigation.NavigateTo($"/admin/users/{id}");
+        Navigation.NavigateTo($"/users/{id}");
     }
 
     private void EditUser(Guid id)
     {
-        Navigation.NavigateTo($"/admin/users/{id}/edit");
+        Navigation.NavigateTo($"/users/{id}/edit");
     }
 
     private async Task SuspendUser(Guid id)

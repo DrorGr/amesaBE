@@ -1,4 +1,4 @@
-@page "/admin/houses/create"
+@page "/houses/create"
 @using AmesaBackend.Admin.Services
 @using AmesaBackend.Admin.DTOs
 @using AmesaBackend.Admin.Components
@@ -260,7 +260,7 @@
             // For now, images are uploaded to S3 but not linked to house in DB
             
             // Navigate to the house detail or list page
-            Navigation.NavigateTo($"/admin/houses/{createdHouse.Id}");
+            Navigation.NavigateTo($"/houses/{createdHouse.Id}");
         }
         catch (Exception ex)
         {
@@ -275,7 +275,7 @@
 
     private void NavigateBack()
     {
-        Navigation.NavigateTo("/admin/houses");
+        Navigation.NavigateTo("/houses");
     }
 
     private void HandleImagesChanged(List<ImageInfo> images)

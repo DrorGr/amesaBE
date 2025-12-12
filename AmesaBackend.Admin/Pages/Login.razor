@@ -1,4 +1,4 @@
-@page "/admin/login"
+@page "/login"
 @inject IAdminAuthService AuthService
 @inject NavigationManager Navigation
 
@@ -77,7 +77,7 @@
 
             if (success)
             {
-                Navigation.NavigateTo("/admin", forceLoad: true);
+                Navigation.NavigateTo("/", forceLoad: true);
             }
             else
             {

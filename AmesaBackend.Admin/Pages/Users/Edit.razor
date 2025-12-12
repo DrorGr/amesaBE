@@ -1,4 +1,4 @@
-@page "/admin/users/{id:guid}/edit"
+@page "/users/{id:guid}/edit"
 @using AmesaBackend.Admin.Services
 @using AmesaBackend.Admin.DTOs
 @using AmesaBackend.Auth.Models
@@ -243,7 +243,7 @@
             var updatedUser = await UsersService.UpdateUserAsync(Id, request);
             
             // Navigate back to users list
-            Navigation.NavigateTo("/admin/users");
+            Navigation.NavigateTo("/users");
         }
         catch (Exception ex)
         {
@@ -258,7 +258,7 @@
 
     private void NavigateBack()
     {
-        Navigation.NavigateTo("/admin/users");
+        Navigation.NavigateTo("/users");
     }
 
     private string GetVerificationBadgeClass(string verificationStatus)
