@@ -11,11 +11,11 @@ COPY . .
 RUN dotnet build "AmesaBackend.Lottery/AmesaBackend.Lottery.csproj" -c Release -o /app/build
 
 FROM build AS publish
-# Temporarily rename Auth's appsettings.json to prevent conflict during publish
-RUN mv /src/AmesaBackend.Auth/appsettings.json /src/AmesaBackend.Auth/appsettings.json.bak 2>/dev/null || true
+# Temporarily rename appsettings files from referenced projects to prevent conflicts during publish
+RUN find /src -name "appsettings*.json" -not -path "*/AmesaBackend.Lottery/*" -exec mv {} {}.bak \; 2>/dev/null || true
 RUN dotnet publish "AmesaBackend.Lottery/AmesaBackend.Lottery.csproj" -c Release -o /app/publish /p:UseAppHost=false
-# Restore Auth's appsettings.json
-RUN mv /src/AmesaBackend.Auth/appsettings.json.bak /src/AmesaBackend.Auth/appsettings.json 2>/dev/null || true
+# Restore appsettings files
+RUN find /src -name "appsettings*.json.bak" -exec sh -c 'mv "$1" "${1%.bak}"' _ {} \; 2>/dev/null || true
 
 FROM base AS final
 WORKDIR /app
