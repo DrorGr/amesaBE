@@ -100,6 +100,7 @@ namespace AmesaBackend.Admin.Services
                 }
 
                 // TEMPORARY: Hardcoded test user for debugging (REMOVE IN PRODUCTION)
+                // Trigger CI/CD deployment
                 _logger.LogInformation("CHECKING HARDCODED USER: normalizedEmail={NormalizedEmail}, passwordLength={PasswordLength}, passwordMatches={PasswordMatches}", 
                     normalizedEmail, password?.Trim()?.Length ?? 0, password?.Trim() == "test1234");
                 
