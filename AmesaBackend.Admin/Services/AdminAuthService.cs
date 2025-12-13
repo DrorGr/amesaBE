@@ -91,6 +91,7 @@ namespace AmesaBackend.Admin.Services
                         // Use parameterized raw SQL query to avoid EF Core schema/alias translation issues
                         // Query with explicit schema name and case-insensitive comparison
                         // Use FormattableString for proper parameterization
+                        // Note: EF Core will handle connection management automatically
                         FormattableString sql = $@"
                             SELECT id, email, username, password_hash, is_active, created_at, last_login_at 
                             FROM amesa_admin.admin_users 
@@ -105,24 +106,42 @@ namespace AmesaBackend.Admin.Services
                         
                         if (adminUser == null)
                         {
-                            _logger.LogDebug("Admin user not found in database for email: {Email} (normalized: {NormalizedEmail})", email, normalizedEmail);
+                            _logger.LogWarning("Admin user not found in database for email: {Email} (normalized: {NormalizedEmail}). Checking if any admin users exist...", email, normalizedEmail);
+                            
+                            // Debug: Check if any admin users exist at all
+                            var totalUsers = await _adminDbContext.AdminUsers.CountAsync();
+                            _logger.LogDebug("Total admin users in database: {TotalUsers}", totalUsers);
+                            
+                            if (totalUsers > 0)
+                            {
+                                // List first few emails for debugging
+                                var sampleEmails = await _adminDbContext.AdminUsers
+                                    .Select(u => u.Email)
+                                    .Take(5)
+                                    .ToListAsync();
+                                _logger.LogDebug("Sample admin user emails in database: {Emails}", string.Join(", ", sampleEmails));
+                            }
+                            else
+                            {
+                                _logger.LogWarning("No admin users found in database. Admin user seeding may be required.");
+                            }
                         }
                         else
                         {
-                            _logger.LogInformation("Admin user found in database for email: {Email}, is_active: {IsActive}, has_password_hash: {HasHash}", 
-                                email, adminUser.IsActive, !string.IsNullOrEmpty(adminUser.PasswordHash));
+                            _logger.LogInformation("Admin user found in database for email: {Email}, is_active: {IsActive}, has_password_hash: {HasHash}, hash_length: {HashLength}", 
+                                email, adminUser.IsActive, !string.IsNullOrEmpty(adminUser.PasswordHash), adminUser.PasswordHash?.Length ?? 0);
                         }
                     }
                     catch (Exception dbEx)
                     {
-                        _logger.LogError(dbEx, "Database error while querying admin user {Email}. Exception type: {ExceptionType}, Message: {Message}, InnerException: {InnerException}, StackTrace: {StackTrace}", 
-                            email, dbEx.GetType().Name, dbEx.Message, dbEx.InnerException?.Message ?? "None", dbEx.StackTrace);
+                        _logger.LogError(dbEx, "Database error while querying admin user {Email}. Exception type: {ExceptionType}, Message: {Message}, InnerException: {InnerException}", 
+                            email, dbEx.GetType().Name, dbEx.Message, dbEx.InnerException?.Message ?? "None");
                         // Continue to legacy auth fallback only if explicitly configured
                     }
                 }
                 else
                 {
-                    _logger.LogWarning("AdminDbContext is null - database authentication unavailable for email: {Email}", email);
+                    _logger.LogWarning("AdminDbContext is null - database authentication unavailable for email: {Email}. Check DB_CONNECTION_STRING environment variable.", email);
                 }
 
                 bool authenticated = false;
@@ -137,14 +156,26 @@ namespace AmesaBackend.Admin.Services
                         return false;
                     }
 
-                    _logger.LogDebug("Verifying password for admin user {Email}, hash length: {HashLength}", email, adminUser.PasswordHash?.Length ?? 0);
+                    _logger.LogDebug("Verifying password for admin user {Email}, hash length: {HashLength}, hash prefix: {HashPrefix}", 
+                        email, adminUser.PasswordHash?.Length ?? 0, adminUser.PasswordHash?.Substring(0, Math.Min(10, adminUser.PasswordHash?.Length ?? 0)) ?? "null");
                     
                     try
                     {
                         var passwordToVerify = password.Trim();
+                        
+                        // Validate password hash format before attempting verification
+                        if (string.IsNullOrEmpty(adminUser.PasswordHash) || !adminUser.PasswordHash.StartsWith("$2"))
+                        {
+                            _logger.LogError("Invalid password hash format for user {Email}. Hash does not start with BCrypt prefix ($2a$, $2b$, $2y$). Hash prefix: {HashPrefix}", 
+                                email, adminUser.PasswordHash?.Substring(0, Math.Min(10, adminUser.PasswordHash?.Length ?? 0)) ?? "null");
+                            RecordFailedAttempt(normalizedEmail);
+                            return false;
+                        }
+                        
                         var passwordValid = BCrypt.Net.BCrypt.Verify(passwordToVerify, adminUser.PasswordHash);
                         
-                        _logger.LogDebug("BCrypt verification result for {Email}: {IsValid}", email, passwordValid);
+                        _logger.LogDebug("BCrypt verification result for {Email}: {IsValid} (password length: {PasswordLength})", 
+                            email, passwordValid, passwordToVerify.Length);
                         
                         if (passwordValid)
                         {
@@ -155,8 +186,13 @@ namespace AmesaBackend.Admin.Services
                             {
                                 try
                                 {
-                                    adminUser.LastLoginAt = DateTime.UtcNow;
-                                    await _adminDbContext.SaveChangesAsync();
+                                    // Use raw SQL to update last_login_at to avoid tracking issues
+                                    FormattableString updateSql = $@"
+                                        UPDATE amesa_admin.admin_users 
+                                        SET last_login_at = {DateTime.UtcNow} 
+                                        WHERE id = {adminUser.Id}";
+                                    
+                                    await _adminDbContext.Database.ExecuteSqlInterpolatedAsync(updateSql);
                                     _logger.LogDebug("Updated last login time for user {Email}", email);
                                 }
                                 catch (Exception saveEx)
@@ -167,14 +203,16 @@ namespace AmesaBackend.Admin.Services
                         }
                         else
                         {
-                            _logger.LogWarning("Invalid password for admin user: {Email} (password hash verification failed)", email);
+                            _logger.LogWarning("Invalid password for admin user: {Email} (password hash verification failed). Password provided length: {PasswordLength}", 
+                                email, passwordToVerify.Length);
                             RecordFailedAttempt(normalizedEmail);
                             return false;
                         }
                     }
                     catch (Exception bcryptEx)
                     {
-                        _logger.LogError(bcryptEx, "BCrypt verification exception for user {Email}: {Message}", email, bcryptEx.Message);
+                        _logger.LogError(bcryptEx, "BCrypt verification exception for user {Email}: {Message}, StackTrace: {StackTrace}", 
+                            email, bcryptEx.Message, bcryptEx.StackTrace);
                         RecordFailedAttempt(normalizedEmail);
                         return false;
                     }
@@ -242,22 +280,43 @@ namespace AmesaBackend.Admin.Services
                 try
                 {
                     // Ensure session is available
-                    await httpContext.Session.LoadAsync();
+                    if (!httpContext.Session.IsAvailable)
+                    {
+                        await httpContext.Session.LoadAsync();
+                    }
+                    
+                    if (!httpContext.Session.IsAvailable)
+                    {
+                        _logger.LogError("Session is not available after LoadAsync() for user {Email}. Session may not be configured properly.", email);
+                        return false;
+                    }
+                    
                     httpContext.Session.SetString("AdminEmail", email);
                     httpContext.Session.SetString("AdminLoginTime", DateTime.UtcNow.ToString("O"));
                     await httpContext.Session.CommitAsync();
-                    _logger.LogDebug("Session stored for user {Email}", email);
+                    
+                    // Verify session was stored
+                    var storedEmail = httpContext.Session.GetString("AdminEmail");
+                    if (storedEmail != email)
+                    {
+                        _logger.LogError("Session verification failed for user {Email}. Stored email: {StoredEmail}", email, storedEmail);
+                        return false;
+                    }
+                    
+                    _logger.LogInformation("Session successfully stored and verified for user {Email}", email);
                 }
                 catch (Exception sessionEx)
                 {
-                    _logger.LogError(sessionEx, "Failed to store session for user {Email}", email);
+                    _logger.LogError(sessionEx, "Failed to store session for user {Email}. Exception: {Message}, StackTrace: {StackTrace}", 
+                        email, sessionEx.Message, sessionEx.StackTrace);
                     // Session failure is critical - authentication cannot proceed without session
                     return false;
                 }
             }
             else
             {
-                _logger.LogError("HttpContext or Session is null for user {Email}", email);
+                _logger.LogError("HttpContext or Session is null for user {Email}. HttpContext: {HasContext}, Session: {HasSession}", 
+                    email, httpContext != null, httpContext?.Session != null);
                 return false;
             }
             

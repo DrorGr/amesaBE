@@ -44,9 +44,6 @@
             // Set the flag if not already set (backup)
             window.SignalRLoaded = true;
         }
-            isInitializing = false;
-            return;
-        }
         
         // SignalR is available, mark as initializing
         isInitializing = true;
