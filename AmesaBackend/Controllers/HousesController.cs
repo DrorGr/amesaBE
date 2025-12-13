@@ -11,6 +11,7 @@ namespace AmesaBackend.Controllers
 {
     [ApiController]
     [Route("api/v1/[controller]")]
+    [ApiExplorerSettings(IgnoreApi = true)] // Exclude from routing to avoid conflict with HousesSearchController
     public class HousesController : ControllerBase
     {
         private readonly AmesaDbContext _context;
@@ -26,8 +27,7 @@ namespace AmesaBackend.Controllers
         /// Get all houses with pagination and filtering
         /// NOTE: This method is disabled - use HousesSearchController in Lottery service instead
         /// </summary>
-        [HttpGet]
-        [ApiExplorerSettings(IgnoreApi = true)] // Exclude from routing to avoid conflict with HousesSearchController
+        [HttpGet("legacy")]
         [Obsolete("Use HousesSearchController.GetHouses in Lottery service instead")]
         public async Task<ActionResult<ApiResponse<PagedResponse<HouseDto>>>> GetHouses(
             [FromQuery] int page = 1,
