@@ -306,7 +306,7 @@ namespace AmesaBackend.Admin.Services
                     return true;
                 }
                 
-                // Response hasn't started - use session storage
+                // Response hasn't started - try session storage first, fallback to cookies if unavailable
                 if (!httpContext.Session.IsAvailable)
                 {
                     await httpContext.Session.LoadAsync();
@@ -314,8 +314,22 @@ namespace AmesaBackend.Admin.Services
                 
                 if (!httpContext.Session.IsAvailable)
                 {
-                    _logger.LogError("Session is not available after LoadAsync() for user {Email}. Session middleware may not be configured properly or Redis connection failed. Check Redis configuration and session middleware registration.", email);
-                    return false;
+                    // Session unavailable (Redis connection failed, etc.) - use cookie fallback
+                    _logger.LogWarning("Session is not available after LoadAsync() for user {Email}. Using cookie fallback. Session middleware may not be configured properly or Redis connection failed. Check Redis configuration and session middleware registration.", email);
+                    
+                    var cookieOptions = new CookieOptions
+                    {
+                        HttpOnly = true,
+                        Secure = !httpContext.Request.IsHttps ? false : true,
+                        SameSite = SameSiteMode.Lax,
+                        Expires = DateTimeOffset.UtcNow.AddHours(2)
+                    };
+                    
+                    httpContext.Response.Cookies.Append("AdminEmail", email, cookieOptions);
+                    httpContext.Response.Cookies.Append("AdminLoginTime", DateTime.UtcNow.ToString("O"), cookieOptions);
+                    
+                    _logger.LogInformation("Authentication state stored in cookies (session unavailable fallback) for user {Email}", email);
+                    return true;
                 }
                 
                 // Set session values (will throw if response has started, but we checked above)
@@ -361,10 +375,39 @@ namespace AmesaBackend.Admin.Services
             }
             catch (Exception sessionEx)
             {
-                _logger.LogError(sessionEx, "Failed to store session for user {Email}. Exception: {Message}, StackTrace: {StackTrace}. Authentication succeeded but session storage failed - check Redis connection and session middleware configuration.", 
-                    email, sessionEx.Message, sessionEx.StackTrace);
-                // Session failure is critical - authentication cannot proceed without session
-                return false;
+                // Session storage failed - try cookie fallback if response hasn't started
+                _logger.LogWarning(sessionEx, "Failed to store session for user {Email}. Exception: {Message}. Attempting cookie fallback.", 
+                    email, sessionEx.Message);
+                
+                try
+                {
+                    if (!httpContext.Response.HasStarted)
+                    {
+                        var cookieOptions = new CookieOptions
+                        {
+                            HttpOnly = true,
+                            Secure = !httpContext.Request.IsHttps ? false : true,
+                            SameSite = SameSiteMode.Lax,
+                            Expires = DateTimeOffset.UtcNow.AddHours(2)
+                        };
+                        
+                        httpContext.Response.Cookies.Append("AdminEmail", email, cookieOptions);
+                        httpContext.Response.Cookies.Append("AdminLoginTime", DateTime.UtcNow.ToString("O"), cookieOptions);
+                        
+                        _logger.LogInformation("Authentication state stored in cookies (exception fallback) for user {Email}", email);
+                        return true;
+                    }
+                    else
+                    {
+                        _logger.LogError("Response has already started, cannot use cookie fallback. Authentication succeeded but state storage failed for user {Email}.", email);
+                        return false;
+                    }
+                }
+                catch (Exception cookieEx)
+                {
+                    _logger.LogError(cookieEx, "Cookie fallback also failed for user {Email}. Authentication succeeded but state storage completely failed.", email);
+                    return false;
+                }
             }
         }
 
