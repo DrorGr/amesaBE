@@ -184,16 +184,15 @@ namespace AmesaBackend.Admin.Services
                             // Update last login time
                             if (_adminDbContext != null)
                             {
-                                try
-                                {
-                                    // Update last_login_at using ExecuteSqlInterpolated for proper parameterization
-                                    // This avoids tracking issues and uses SQL parameters (prevents SQL injection)
-                                    var updateSql = $@"
-                                        UPDATE amesa_admin.admin_users 
-                                        SET last_login_at = {DateTime.UtcNow} 
-                                        WHERE id = {adminUser.Id}";
-                                    
-                                    var updateResult = await _adminDbContext.Database.ExecuteSqlInterpolatedAsync(updateSql);
+                                              try
+                                              {
+                                                  // Update last_login_at using ExecuteSqlInterpolated for proper parameterization
+                                                  // This avoids tracking issues and uses SQL parameters (prevents SQL injection)
+                                                  // Must pass FormattableString directly (not assign to var first)
+                                                  var updateResult = await _adminDbContext.Database.ExecuteSqlInterpolatedAsync($@"
+                                                      UPDATE amesa_admin.admin_users 
+                                                      SET last_login_at = {DateTime.UtcNow} 
+                                                      WHERE id = {adminUser.Id}");
                                     _logger.LogDebug("Updated last login time for user {Email} (rows affected: {RowsAffected})", email, updateResult);
                                 }
                                 catch (Exception saveEx)
