@@ -25,27 +25,28 @@
     </div>
 
     <script src="_framework/blazor.server.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@@microsoft/signalr@latest/dist/browser/signalr.min.js" 
-            onload="window.SignalRLoaded = true; console.log('SignalR library loaded successfully');"
-            onerror="console.error('Failed to load SignalR library from CDN');"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@@microsoft/signalr@latest/dist/browser/signalr.min.js"></script>
     <script>
-        // SignalR loading verification - set flag when loaded
+        // SignalR loading verification - wait for SignalR object to be available
         (function() {
+            let checkCount = 0;
+            const maxChecks = 200; // 200 * 50ms = 10 seconds max wait
+            const checkInterval = 50; // Check every 50ms
+            
             const checkSignalR = setInterval(function() {
-                if (typeof SignalR !== 'undefined') {
+                checkCount++;
+                // Check if SignalR object is fully available (not just flag)
+                if (typeof SignalR !== 'undefined' && 
+                    SignalR !== null && 
+                    typeof SignalR.HubConnectionBuilder !== 'undefined') {
                     window.SignalRLoaded = true;
                     clearInterval(checkSignalR);
-                    console.log('SignalR detected and loaded');
+                    console.log('SignalR library loaded and ready');
+                } else if (checkCount >= maxChecks) {
+                    clearInterval(checkSignalR);
+                    console.error('SignalR library failed to load from CDN after ' + (maxChecks * checkInterval / 1000) + ' seconds');
                 }
-            }, 50);
-            
-            // Timeout after 10 seconds (increased for slower connections)
-            setTimeout(function() {
-                clearInterval(checkSignalR);
-                if (typeof SignalR === 'undefined' && !window.SignalRLoaded) {
-                    console.error('SignalR library failed to load from CDN after 10 seconds');
-                }
-            }, 10000);
+            }, checkInterval);
         })();
     </script>
     <script src="js/admin-signalr.js"></script>
