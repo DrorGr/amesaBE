@@ -35,10 +35,11 @@
             
             const checkSignalR = setInterval(function() {
                 checkCount++;
-                // Check if SignalR object is fully available (not just flag)
-                if (typeof SignalR !== 'undefined' && 
-                    SignalR !== null && 
-                    typeof SignalR.HubConnectionBuilder !== 'undefined') {
+                // Check if signalR object is fully available (not just flag)
+                // CRITICAL FIX: Microsoft SignalR exposes 'signalR' (camelCase), not 'SignalR' (PascalCase)
+                if (typeof signalR !== 'undefined' && 
+                    signalR !== null && 
+                    typeof signalR.HubConnectionBuilder !== 'undefined') {
                     window.SignalRLoaded = true;
                     clearInterval(checkSignalR);
                     console.log('SignalR library loaded and ready');

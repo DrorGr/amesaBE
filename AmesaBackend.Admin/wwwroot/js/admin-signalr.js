@@ -14,13 +14,14 @@
         
         const signalRUrl = '/hub'; // Relative to base href /admin/, resolves to /admin/hub
         
-        // Check if SignalR is fully available (wait for script to load and initialize)
-        // SignalR must have HubConnectionBuilder available to be usable
-        // Note: window.SignalRLoaded flag may be set before SignalR object is actually available,
-        // so we check the actual SignalR object, not just the flag
-        var signalRAvailable = typeof SignalR !== 'undefined' && 
-                                SignalR !== null &&
-                                typeof SignalR.HubConnectionBuilder !== 'undefined';
+        // Check if signalR is fully available (wait for script to load and initialize)
+        // signalR must have HubConnectionBuilder available to be usable
+        // Note: window.SignalRLoaded flag may be set before signalR object is actually available,
+        // so we check the actual signalR object, not just the flag
+        // CRITICAL FIX: Microsoft SignalR exposes 'signalR' (camelCase), not 'SignalR' (PascalCase)
+        var signalRAvailable = typeof signalR !== 'undefined' && 
+                                signalR !== null &&
+                                typeof signalR.HubConnectionBuilder !== 'undefined';
         
         // If SignalR is not fully available, retry
         if (!signalRAvailable) {
@@ -32,8 +33,8 @@
                 return;
             } else {
                 // Max retries reached - SignalR library failed to load
-                var signalRExists = typeof SignalR !== 'undefined';
-                var hasHubBuilder = signalRExists && typeof SignalR.HubConnectionBuilder !== 'undefined';
+                var signalRExists = typeof signalR !== 'undefined';
+                var hasHubBuilder = signalRExists && typeof signalR.HubConnectionBuilder !== 'undefined';
                 var flagSet = window.SignalRLoaded === true;
                 console.warn('SignalR library failed to load after ' + maxRetries + ' attempts. SignalR available: ' + signalRExists + ', HubConnectionBuilder: ' + hasHubBuilder + ', Flag: ' + flagSet + '. Real-time updates will not be available.');
                 isInitializing = false;
@@ -49,7 +50,8 @@
         isInitializing = true;
         retryCount = 0;
 
-        connection = new SignalR.HubConnectionBuilder()
+        // CRITICAL FIX: Use 'signalR' (camelCase) not 'SignalR' (PascalCase)
+        connection = new signalR.HubConnectionBuilder()
             .withUrl(signalRUrl)
             .withAutomaticReconnect()
             .build();
@@ -158,11 +160,12 @@
     // Use a single initialization point to prevent multiple calls
     function startInitialization() {
         if (!isInitialized && !isInitializing) {
-            // Check if SignalR script is already loaded
-            if (typeof SignalR !== 'undefined') {
+            // Check if signalR script is already loaded
+            // CRITICAL FIX: Use 'signalR' (camelCase) not 'SignalR' (PascalCase)
+            if (typeof signalR !== 'undefined') {
                 initializeSignalR();
             } else {
-                // Wait a bit for SignalR script to load from CDN
+                // Wait a bit for signalR script to load from CDN
                 // Increased delay to 1000ms to account for slower CDN loads
                 setTimeout(initializeSignalR, 1000);
             }
