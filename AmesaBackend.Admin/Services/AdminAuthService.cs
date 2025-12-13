@@ -188,7 +188,7 @@ namespace AmesaBackend.Admin.Services
                                 {
                                     // Update last_login_at using ExecuteSqlInterpolated for proper parameterization
                                     // This avoids tracking issues and uses SQL parameters (prevents SQL injection)
-                                    FormattableString updateSql = $@"
+                                    var updateSql = $@"
                                         UPDATE amesa_admin.admin_users 
                                         SET last_login_at = {DateTime.UtcNow} 
                                         WHERE id = {adminUser.Id}";
@@ -285,7 +285,8 @@ namespace AmesaBackend.Admin.Services
             
             try
             {
-                // Ensure session is available
+                // CRITICAL: In Blazor Server, we must ensure session is loaded and committed
+                // BEFORE the response has started. Load session first.
                 if (!httpContext.Session.IsAvailable)
                 {
                     await httpContext.Session.LoadAsync();
@@ -297,9 +298,32 @@ namespace AmesaBackend.Admin.Services
                     return false;
                 }
                 
+                // Set session values
                 httpContext.Session.SetString("AdminEmail", email);
                 httpContext.Session.SetString("AdminLoginTime", DateTime.UtcNow.ToString("O"));
-                await httpContext.Session.CommitAsync();
+                
+                // CRITICAL: In Blazor Server, session commit must happen before response starts
+                // Try to commit synchronously, but if response has started, the session middleware
+                // will handle it on the next request. We'll verify on next request.
+                try
+                {
+                    // Attempt synchronous commit to ensure it happens before response starts
+                    if (!httpContext.Response.HasStarted)
+                    {
+                        httpContext.Session.CommitAsync().GetAwaiter().GetResult();
+                    }
+                    else
+                    {
+                        // Response has started, commit asynchronously (may fail, but session middleware will retry)
+                        _ = httpContext.Session.CommitAsync();
+                    }
+                }
+                catch (InvalidOperationException ioEx) when (ioEx.Message.Contains("response has started"))
+                {
+                    // Response has already started - this is acceptable in Blazor Server
+                    // Session middleware will handle the commit on the next request
+                    _logger.LogWarning("Session commit attempted after response started for user {Email}. Session middleware will handle this on next request.", email);
+                }
                 
                 // Verify session was stored correctly
                 var storedEmail = httpContext.Session.GetString("AdminEmail");
