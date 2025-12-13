@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -387,28 +387,37 @@ namespace AmesaBackend.Admin.Services
 
         public bool IsAuthenticated()
         {
-            // SECURITY: Rely solely on session storage for authentication state
+            // SECURITY: Check session first, fallback to cookies if session unavailable (Blazor Server timing issue)
             // Session timeout is handled by ASP.NET Core session middleware
             try
             {
                 var httpContext = _httpContextAccessor.HttpContext;
-                if (httpContext?.Session != null)
+                if (httpContext == null)
                 {
-                    // Check if session is available (may not be loaded yet)
-                    if (httpContext.Session.IsAvailable)
+                    return false;
+                }
+                
+                // Check session first (preferred method)
+                if (httpContext.Session != null && httpContext.Session.IsAvailable)
+                {
+                    var sessionEmail = httpContext.Session.GetString("AdminEmail");
+                    if (!string.IsNullOrEmpty(sessionEmail))
                     {
-                        var sessionEmail = httpContext.Session.GetString("AdminEmail");
-                        if (!string.IsNullOrEmpty(sessionEmail))
-                        {
-                            return true;
-                        }
+                        return true;
                     }
+                }
+                
+                // Fallback to cookies (used when session couldn't be set due to response timing)
+                var cookieEmail = httpContext.Request.Cookies["AdminEmail"];
+                if (!string.IsNullOrEmpty(cookieEmail))
+                {
+                    return true;
                 }
             }
             catch (Exception ex)
             {
                 // Log but don't throw - authentication check should never crash the page
-                _logger.LogWarning(ex, "Failed to check session authentication");
+                _logger.LogWarning(ex, "Failed to check session/cookie authentication");
             }
             
             return false;
@@ -416,19 +425,36 @@ namespace AmesaBackend.Admin.Services
 
         public string? GetCurrentAdminEmail()
         {
-            // Get email from session
+            // Get email from session first, fallback to cookies
             try
             {
                 var httpContext = _httpContextAccessor.HttpContext;
-                if (httpContext?.Session != null && httpContext.Session.IsAvailable)
+                if (httpContext == null)
                 {
-                    return httpContext.Session.GetString("AdminEmail");
+                    return null;
+                }
+                
+                // Check session first (preferred method)
+                if (httpContext.Session != null && httpContext.Session.IsAvailable)
+                {
+                    var sessionEmail = httpContext.Session.GetString("AdminEmail");
+                    if (!string.IsNullOrEmpty(sessionEmail))
+                    {
+                        return sessionEmail;
+                    }
+                }
+                
+                // Fallback to cookies (used when session couldn't be set due to response timing)
+                var cookieEmail = httpContext.Request.Cookies["AdminEmail"];
+                if (!string.IsNullOrEmpty(cookieEmail))
+                {
+                    return cookieEmail;
                 }
             }
             catch (Exception ex)
             {
                 // Log but don't throw - email retrieval should never crash the page
-                _logger.LogWarning(ex, "Failed to get session email");
+                _logger.LogWarning(ex, "Failed to get session/cookie email");
             }
             
             return null;
