@@ -16,12 +16,11 @@
         
         // Check if SignalR is fully available (wait for script to load and initialize)
         // SignalR must have HubConnectionBuilder available to be usable
+        // Note: window.SignalRLoaded flag may be set before SignalR object is actually available,
+        // so we check the actual SignalR object, not just the flag
         var signalRAvailable = typeof SignalR !== 'undefined' && 
-                                typeof SignalR.HubConnectionBuilder !== 'undefined' &&
-                                typeof SignalR.HubConnectionBuilder.prototype !== 'undefined';
-        
-        // Also check the flag as a secondary indicator
-        var signalRFlagSet = window.SignalRLoaded === true;
+                                SignalR !== null &&
+                                typeof SignalR.HubConnectionBuilder !== 'undefined';
         
         // If SignalR is not fully available, retry
         if (!signalRAvailable) {
@@ -33,17 +32,18 @@
                 return;
             } else {
                 // Max retries reached - SignalR library failed to load
-                console.warn('SignalR library failed to load after ' + maxRetries + ' attempts. SignalR available: ' + (typeof SignalR !== 'undefined') + ', HubConnectionBuilder: ' + (typeof SignalR !== 'undefined' && typeof SignalR.HubConnectionBuilder !== 'undefined') + ', Flag: ' + signalRFlagSet + '. Real-time updates will not be available.');
+                var signalRExists = typeof SignalR !== 'undefined';
+                var hasHubBuilder = signalRExists && typeof SignalR.HubConnectionBuilder !== 'undefined';
+                var flagSet = window.SignalRLoaded === true;
+                console.warn('SignalR library failed to load after ' + maxRetries + ' attempts. SignalR available: ' + signalRExists + ', HubConnectionBuilder: ' + hasHubBuilder + ', Flag: ' + flagSet + '. Real-time updates will not be available.');
                 isInitializing = false;
                 return;
             }
         }
         
         // SignalR is available, proceed with initialization
-        if (!signalRFlagSet) {
-            // Set the flag if not already set (backup)
-            window.SignalRLoaded = true;
-        }
+        // Set the flag if not already set (backup)
+        window.SignalRLoaded = true;
         
         // SignalR is available, mark as initializing
         isInitializing = true;
