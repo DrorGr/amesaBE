@@ -97,10 +97,18 @@ namespace AmesaBackend.Admin.Services
                     
                     // Use parameterized raw SQL query to avoid EF Core schema/alias translation issues
                     // Query with explicit schema name and case-insensitive comparison
+                    // CRITICAL: Use column aliases that match entity property names (PascalCase)
+                    // EF Core maps raw SQL results to entity properties by name
                     // Use FormattableString for proper parameterization
-                    // Note: EF Core will handle connection management automatically
                     FormattableString sql = $@"
-                        SELECT id, email, username, password_hash, is_active, created_at, last_login_at 
+                        SELECT 
+                            id AS ""Id"",
+                            email AS ""Email"",
+                            username AS ""Username"",
+                            password_hash AS ""PasswordHash"",
+                            is_active AS ""IsActive"",
+                            created_at AS ""CreatedAt"",
+                            last_login_at AS ""LastLoginAt""
                         FROM amesa_admin.admin_users 
                         WHERE LOWER(TRIM(email)) = {normalizedEmail} 
                         AND is_active = true 
