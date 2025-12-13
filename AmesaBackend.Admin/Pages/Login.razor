@@ -123,9 +123,24 @@
         }
         catch (Exception ex)
         {
-            // SECURITY: Log detailed error server-side, show generic message to client
-            // Detailed error is logged by AdminAuthService
-            errorMessage = "An error occurred during login. Please try again.";
+            // Log exception for debugging (detailed error is also logged by AdminAuthService)
+            // Provide slightly more specific error messages based on exception type
+            // while maintaining security (no information leakage)
+            var exceptionMessage = ex.Message.ToLower();
+            if (exceptionMessage.Contains("database") || exceptionMessage.Contains("dbcontext") || exceptionMessage.Contains("connection"))
+            {
+                errorMessage = "Authentication service is temporarily unavailable. Please try again later.";
+            }
+            else if (exceptionMessage.Contains("session") || exceptionMessage.Contains("redis"))
+            {
+                errorMessage = "Authentication succeeded but session storage failed. Please try again.";
+            }
+            else
+            {
+                errorMessage = "An error occurred during login. Please try again.";
+            }
+            
+            // Note: Detailed error is logged by AdminAuthService server-side
         }
         finally
         {

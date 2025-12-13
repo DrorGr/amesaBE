@@ -82,73 +82,78 @@ namespace AmesaBackend.Admin.Services
 
                 // Try to find admin user in database (if DbContext is available)
                 AdminUser? adminUser = null;
-                if (_adminDbContext != null)
+                
+                // CRITICAL: Explicitly check DbContext availability before attempting authentication
+                if (_adminDbContext == null)
                 {
-                    try
+                    _logger.LogError("Authentication failed: AdminDbContext is not available for email: {Email}. Check DB_CONNECTION_STRING environment variable. Database authentication cannot proceed.", email);
+                    RecordFailedAttempt(normalizedEmail);
+                    return false; // Don't fall back to legacy auth - make database availability explicit
+                }
+                
+                try
+                {
+                    _logger.LogDebug("Querying database for admin user: {Email} (normalized: {NormalizedEmail})", email, normalizedEmail);
+                    
+                    // Use parameterized raw SQL query to avoid EF Core schema/alias translation issues
+                    // Query with explicit schema name and case-insensitive comparison
+                    // Use FormattableString for proper parameterization
+                    // Note: EF Core will handle connection management automatically
+                    FormattableString sql = $@"
+                        SELECT id, email, username, password_hash, is_active, created_at, last_login_at 
+                        FROM amesa_admin.admin_users 
+                        WHERE LOWER(TRIM(email)) = {normalizedEmail} 
+                        AND is_active = true 
+                        LIMIT 1";
+                    
+                    adminUser = await _adminDbContext.AdminUsers
+                        .FromSqlInterpolated(sql)
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync();
+                    
+                    if (adminUser == null)
                     {
-                        _logger.LogDebug("Querying database for admin user: {Email} (normalized: {NormalizedEmail})", email, normalizedEmail);
+                        _logger.LogWarning("Admin user not found in database for email: {Email} (normalized: {NormalizedEmail}). Checking if any admin users exist...", email, normalizedEmail);
                         
-                        // Use parameterized raw SQL query to avoid EF Core schema/alias translation issues
-                        // Query with explicit schema name and case-insensitive comparison
-                        // Use FormattableString for proper parameterization
-                        // Note: EF Core will handle connection management automatically
-                        FormattableString sql = $@"
-                            SELECT id, email, username, password_hash, is_active, created_at, last_login_at 
-                            FROM amesa_admin.admin_users 
-                            WHERE LOWER(TRIM(email)) = {normalizedEmail} 
-                            AND is_active = true 
-                            LIMIT 1";
+                        // Debug: Check if any admin users exist at all
+                        var totalUsers = await _adminDbContext.AdminUsers.CountAsync();
+                        _logger.LogDebug("Total admin users in database: {TotalUsers}", totalUsers);
                         
-                        adminUser = await _adminDbContext.AdminUsers
-                            .FromSqlInterpolated(sql)
-                            .AsNoTracking()
-                            .FirstOrDefaultAsync();
-                        
-                        if (adminUser == null)
+                        if (totalUsers > 0)
                         {
-                            _logger.LogWarning("Admin user not found in database for email: {Email} (normalized: {NormalizedEmail}). Checking if any admin users exist...", email, normalizedEmail);
-                            
-                            // Debug: Check if any admin users exist at all
-                            var totalUsers = await _adminDbContext.AdminUsers.CountAsync();
-                            _logger.LogDebug("Total admin users in database: {TotalUsers}", totalUsers);
-                            
-                            if (totalUsers > 0)
-                            {
-                                // List first few emails for debugging
-                                var sampleEmails = await _adminDbContext.AdminUsers
-                                    .Select(u => u.Email)
-                                    .Take(5)
-                                    .ToListAsync();
-                                _logger.LogDebug("Sample admin user emails in database: {Emails}", string.Join(", ", sampleEmails));
-                            }
-                            else
-                            {
-                                _logger.LogWarning("No admin users found in database. Admin user seeding may be required.");
-                            }
+                            // List first few emails for debugging
+                            var sampleEmails = await _adminDbContext.AdminUsers
+                                .Select(u => u.Email)
+                                .Take(5)
+                                .ToListAsync();
+                            _logger.LogDebug("Sample admin user emails in database: {Emails}", string.Join(", ", sampleEmails));
                         }
                         else
                         {
-                            _logger.LogInformation("Admin user found in database for email: {Email}, is_active: {IsActive}, has_password_hash: {HasHash}, hash_length: {HashLength}", 
-                                email, adminUser.IsActive, !string.IsNullOrEmpty(adminUser.PasswordHash), adminUser.PasswordHash?.Length ?? 0);
+                            _logger.LogWarning("No admin users found in database. Admin user seeding may be required.");
                         }
                     }
-                    catch (Exception dbEx)
+                    else
                     {
-                        _logger.LogError(dbEx, "Database error while querying admin user {Email}. Exception type: {ExceptionType}, Message: {Message}, InnerException: {InnerException}", 
-                            email, dbEx.GetType().Name, dbEx.Message, dbEx.InnerException?.Message ?? "None");
-                        // Continue to legacy auth fallback only if explicitly configured
+                        _logger.LogInformation("Admin user found in database for email: {Email}, is_active: {IsActive}, has_password_hash: {HasHash}, hash_length: {HashLength}", 
+                            email, adminUser.IsActive, !string.IsNullOrEmpty(adminUser.PasswordHash), adminUser.PasswordHash?.Length ?? 0);
                     }
                 }
-                else
+                catch (Exception dbEx)
                 {
-                    _logger.LogWarning("AdminDbContext is null - database authentication unavailable for email: {Email}. Check DB_CONNECTION_STRING environment variable.", email);
+                    // CRITICAL: Database errors are system errors - don't silently fall back to legacy auth
+                    _logger.LogError(dbEx, "Database error during authentication for email: {Email}. Exception type: {ExceptionType}, Message: {Message}, InnerException: {InnerException}. User authentication cannot proceed due to database error.", 
+                        email, dbEx.GetType().Name, dbEx.Message, dbEx.InnerException?.Message ?? "None");
+                    RecordFailedAttempt(normalizedEmail);
+                    return false; // Don't fall back - database error is a system error, not a user error
                 }
 
                 bool authenticated = false;
 
+                // Check if user was found in database
                 if (adminUser != null)
                 {
-                    // Verify password using BCrypt
+                    // Verify password using BCrypt for database user
                     if (string.IsNullOrEmpty(adminUser.PasswordHash))
                     {
                         _logger.LogWarning("Admin user {Email} has no password hash", email);
@@ -219,7 +224,7 @@ namespace AmesaBackend.Admin.Services
                 }
                 else
                 {
-                    // Fallback to legacy config-based authentication ONLY if explicitly configured
+                    // User not found in database - fall back to legacy config-based auth ONLY if explicitly configured
                     // SECURITY: Do not use hardcoded defaults
                     var adminEmail = Environment.GetEnvironmentVariable("ADMIN_EMAIL") 
                         ?? _configuration["AdminSettings:Email"];
@@ -247,7 +252,7 @@ namespace AmesaBackend.Admin.Services
                     }
                     else
                     {
-                        _logger.LogWarning("Authentication failed for email: {Email} - User not found and legacy auth not configured", email);
+                        _logger.LogWarning("Authentication failed for email: {Email} - User not found in database and legacy auth not configured", email);
                         RecordFailedAttempt(normalizedEmail);
                         return false;
                     }
@@ -275,52 +280,50 @@ namespace AmesaBackend.Admin.Services
             // Store email in session for authentication tracking
             // SECURITY: Rely solely on session storage (Redis in production) for multi-instance support
             var httpContext = _httpContextAccessor.HttpContext;
-            if (httpContext?.Session != null)
+            if (httpContext?.Session == null)
             {
-                try
-                {
-                    // Ensure session is available
-                    if (!httpContext.Session.IsAvailable)
-                    {
-                        await httpContext.Session.LoadAsync();
-                    }
-                    
-                    if (!httpContext.Session.IsAvailable)
-                    {
-                        _logger.LogError("Session is not available after LoadAsync() for user {Email}. Session may not be configured properly.", email);
-                        return false;
-                    }
-                    
-                    httpContext.Session.SetString("AdminEmail", email);
-                    httpContext.Session.SetString("AdminLoginTime", DateTime.UtcNow.ToString("O"));
-                    await httpContext.Session.CommitAsync();
-                    
-                    // Verify session was stored
-                    var storedEmail = httpContext.Session.GetString("AdminEmail");
-                    if (storedEmail != email)
-                    {
-                        _logger.LogError("Session verification failed for user {Email}. Stored email: {StoredEmail}", email, storedEmail);
-                        return false;
-                    }
-                    
-                    _logger.LogInformation("Session successfully stored and verified for user {Email}", email);
-                }
-                catch (Exception sessionEx)
-                {
-                    _logger.LogError(sessionEx, "Failed to store session for user {Email}. Exception: {Message}, StackTrace: {StackTrace}", 
-                        email, sessionEx.Message, sessionEx.StackTrace);
-                    // Session failure is critical - authentication cannot proceed without session
-                    return false;
-                }
-            }
-            else
-            {
-                _logger.LogError("HttpContext or Session is null for user {Email}. HttpContext: {HasContext}, Session: {HasSession}", 
+                _logger.LogError("HttpContext or Session is null for user {Email}. HttpContext: {HasContext}, Session: {HasSession}. Authentication succeeded but session storage failed.", 
                     email, httpContext != null, httpContext?.Session != null);
                 return false;
             }
             
-            return true;
+            try
+            {
+                // Ensure session is available
+                if (!httpContext.Session.IsAvailable)
+                {
+                    await httpContext.Session.LoadAsync();
+                }
+                
+                if (!httpContext.Session.IsAvailable)
+                {
+                    _logger.LogError("Session is not available after LoadAsync() for user {Email}. Session middleware may not be configured properly or Redis connection failed. Check Redis configuration and session middleware registration.", email);
+                    return false;
+                }
+                
+                httpContext.Session.SetString("AdminEmail", email);
+                httpContext.Session.SetString("AdminLoginTime", DateTime.UtcNow.ToString("O"));
+                await httpContext.Session.CommitAsync();
+                
+                // Verify session was stored correctly
+                var storedEmail = httpContext.Session.GetString("AdminEmail");
+                if (storedEmail != email)
+                {
+                    _logger.LogError("Session verification failed for user {Email}. Stored email: {StoredEmail}. Session may not be persisting correctly (check Redis configuration in multi-instance deployments).", 
+                        email, storedEmail ?? "null");
+                    return false;
+                }
+                
+                _logger.LogInformation("Session successfully stored and verified for user {Email}", email);
+                return true;
+            }
+            catch (Exception sessionEx)
+            {
+                _logger.LogError(sessionEx, "Failed to store session for user {Email}. Exception: {Message}, StackTrace: {StackTrace}. Authentication succeeded but session storage failed - check Redis connection and session middleware configuration.", 
+                    email, sessionEx.Message, sessionEx.StackTrace);
+                // Session failure is critical - authentication cannot proceed without session
+                return false;
+            }
         }
 
         private bool IsAccountLocked(string normalizedEmail)
