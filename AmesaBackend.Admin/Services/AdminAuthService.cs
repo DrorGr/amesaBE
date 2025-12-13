@@ -7,7 +7,6 @@ using AmesaBackend.Admin.Models;
 using BCrypt.Net;
 using AmesaBackend.Auth.Services;
 using System.Collections.Concurrent;
-using System.FormattableString;
 
 namespace AmesaBackend.Admin.Services
 {
