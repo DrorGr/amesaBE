@@ -24,8 +24,11 @@ namespace AmesaBackend.Controllers
 
         /// <summary>
         /// Get all houses with pagination and filtering
+        /// NOTE: This method is disabled - use HousesSearchController in Lottery service instead
         /// </summary>
         [HttpGet]
+        [ApiExplorerSettings(IgnoreApi = true)] // Exclude from routing to avoid conflict with HousesSearchController
+        [Obsolete("Use HousesSearchController.GetHouses in Lottery service instead")]
         public async Task<ActionResult<ApiResponse<PagedResponse<HouseDto>>>> GetHouses(
             [FromQuery] int page = 1,
             [FromQuery] int limit = 20,

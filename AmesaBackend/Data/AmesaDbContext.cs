@@ -178,20 +178,40 @@ namespace AmesaBackend.Data
             // Configure Promotion entity
             modelBuilder.Entity<Promotion>(entity =>
             {
+                entity.ToTable("promotions", "amesa_admin");
                 entity.HasKey(e => e.Id);
-                entity.Property(e => e.Title).IsRequired().HasMaxLength(255);
-                entity.Property(e => e.Type).IsRequired().HasMaxLength(50);
-                entity.Property(e => e.Value).HasColumnType("decimal(10,2)");
-                entity.Property(e => e.Code).HasMaxLength(50);
-                entity.Property(e => e.ApplicableHouses).HasColumnType("jsonb");
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.Title).IsRequired().HasMaxLength(255).HasColumnName("title");
+                entity.Property(e => e.Description).HasColumnName("description");
+                entity.Property(e => e.Type).IsRequired().HasMaxLength(50).HasColumnName("type");
+                entity.Property(e => e.Value).HasColumnName("value").HasColumnType("decimal(10,2)");
+                entity.Property(e => e.ValueType).HasColumnName("value_type").HasMaxLength(20);
+                entity.Property(e => e.Code).HasMaxLength(50).HasColumnName("code");
+                entity.Property(e => e.IsActive).HasColumnName("is_active");
+                entity.Property(e => e.StartDate).HasColumnName("start_date");
+                entity.Property(e => e.EndDate).HasColumnName("end_date");
+                entity.Property(e => e.UsageLimit).HasColumnName("usage_limit");
+                entity.Property(e => e.UsageCount).HasColumnName("usage_count");
+                entity.Property(e => e.MinPurchaseAmount).HasColumnName("min_purchase_amount").HasColumnType("decimal(10,2)");
+                entity.Property(e => e.MaxDiscountAmount).HasColumnName("max_discount_amount").HasColumnType("decimal(10,2)");
+                entity.Property(e => e.ApplicableHouses).HasColumnName("applicable_houses").HasColumnType("jsonb");
+                entity.Property(e => e.CreatedBy).HasColumnName("created_by");
+                entity.Property(e => e.CreatedAt).HasColumnName("created_at");
+                entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
                 entity.HasOne(e => e.CreatedByUser).WithMany().HasForeignKey(e => e.CreatedBy);
             });
 
             // Configure UserPromotion entity
             modelBuilder.Entity<UserPromotion>(entity =>
             {
+                entity.ToTable("user_promotions", "amesa_admin");
                 entity.HasKey(e => e.Id);
-                entity.Property(e => e.DiscountAmount).HasColumnType("decimal(10,2)");
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.UserId).HasColumnName("user_id");
+                entity.Property(e => e.PromotionId).HasColumnName("promotion_id");
+                entity.Property(e => e.UsedAt).HasColumnName("used_at");
+                entity.Property(e => e.TransactionId).HasColumnName("transaction_id");
+                entity.Property(e => e.DiscountAmount).HasColumnName("discount_amount").HasColumnType("decimal(10,2)");
                 entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId);
                 entity.HasOne(e => e.Promotion).WithMany().HasForeignKey(e => e.PromotionId);
                 entity.HasOne(e => e.Transaction).WithMany().HasForeignKey(e => e.TransactionId);
