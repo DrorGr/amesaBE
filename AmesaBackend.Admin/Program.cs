@@ -35,6 +35,7 @@ builder.Host.UseSerilog();
 // Add services to the container.
 builder.Services.AddRazorPages();
 builder.Services.AddServerSideBlazor();
+builder.Services.AddControllers(); // For API endpoints (diagnostics)
 
 // Add HttpContextAccessor for session access in services
 builder.Services.AddHttpContextAccessor();
@@ -209,6 +210,10 @@ app.MapHealthChecks("/health");
 app.MapRazorPages();
 app.MapBlazorHub();
 app.MapHub<AdminHub>("/hub"); // Changed from /admin/hub since UsePathBase handles /admin prefix
+
+// Map API controllers (for diagnostics endpoints)
+app.MapControllers();
+
 app.MapFallbackToPage("/_Host");
 
 Log.Information("Starting Amesa Admin Service");
