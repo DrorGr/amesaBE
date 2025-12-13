@@ -26,6 +26,8 @@ namespace AmesaBackend.Admin.Services
         // In-memory authentication token cache (works even when response has started)
         // Token -> (Email, Expiry) mapping
         private static readonly ConcurrentDictionary<string, AuthTokenInfo> _authTokens = new();
+        // Session ID -> Token mapping (fallback when cookies can't be set)
+        private static readonly ConcurrentDictionary<string, string> _sessionIdToToken = new();
         private const int AuthTokenExpiryHours = 2; // Match session timeout
         private const string AuthTokenCookieName = "AdminAuthToken";
         private const string AuthTokenHeaderName = "X-Admin-Auth-Token";
@@ -307,6 +309,40 @@ namespace AmesaBackend.Admin.Services
             };
             _authTokens[token] = tokenInfo;
             
+            // Map session ID to token (fallback mechanism when cookies can't be set)
+            // Session ID persists across requests via ASP.NET Core session cookie
+            try
+            {
+                if (httpContext.Session != null)
+                {
+                    // Try to get session ID - may require loading session first
+                    string? sessionId = null;
+                    try
+                    {
+                        if (!httpContext.Session.IsAvailable)
+                        {
+                            await httpContext.Session.LoadAsync();
+                        }
+                        sessionId = httpContext.Session.Id;
+                    }
+                    catch
+                    {
+                        // Session ID unavailable - that's OK, we'll use other methods
+                    }
+                    
+                    if (!string.IsNullOrEmpty(sessionId))
+                    {
+                        _sessionIdToToken[sessionId] = token;
+                        _logger.LogDebug("Mapped session ID {SessionId} to token for user {Email}", sessionId, email);
+                    }
+                }
+            }
+            catch (Exception sessionIdEx)
+            {
+                // Session ID mapping failed - log but don't fail authentication
+                _logger.LogDebug(sessionIdEx, "Failed to map session ID to token for user {Email}. Token is still stored in cache.", email);
+            }
+            
             // Clean up expired tokens (simple cleanup - remove tokens older than expiry)
             CleanupExpiredTokens();
             
@@ -411,6 +447,17 @@ namespace AmesaBackend.Admin.Services
             foreach (var key in expiredKeys)
             {
                 _authTokens.TryRemove(key, out _);
+                
+                // Also remove from session ID mapping
+                var sessionIdMappings = _sessionIdToToken
+                    .Where(kvp => kvp.Value == key)
+                    .Select(kvp => kvp.Key)
+                    .ToList();
+                
+                foreach (var sessionId in sessionIdMappings)
+                {
+                    _sessionIdToToken.TryRemove(sessionId, out _);
+                }
             }
             
             if (expiredKeys.Count > 0)
@@ -437,20 +484,60 @@ namespace AmesaBackend.Admin.Services
                 return headerToken.ToString();
             }
             
-            // Try to get token from session (if available)
+            // Try to get token from session storage (if available)
             if (httpContext.Session != null && httpContext.Session.IsAvailable)
             {
                 try
                 {
                     token = httpContext.Session.GetString("AdminAuthToken");
-                    if (!string.IsNullOrEmpty(token))
+                    if (!string.IsNullOrEmpty(token) && _authTokens.ContainsKey(token))
                     {
                         return token;
                     }
                 }
                 catch
                 {
-                    // Session not available or error reading - continue
+                    // Session not available or error reading - continue to session ID lookup
+                }
+            }
+            
+            // FALLBACK: Try to get token using session ID mapping (works even when cookies aren't set)
+            // This is critical for Blazor Server when response has started and cookies can't be set
+            // Session ID persists across requests via ASP.NET Core session cookie
+            if (httpContext.Session != null)
+            {
+                try
+                {
+                    // Session ID should be available even if session isn't fully loaded
+                    var sessionId = httpContext.Session.Id;
+                    if (!string.IsNullOrEmpty(sessionId) && _sessionIdToToken.TryGetValue(sessionId, out token))
+                    {
+                        // Verify token still exists and is valid
+                        if (!string.IsNullOrEmpty(token) && _authTokens.TryGetValue(token, out var tokenInfo))
+                        {
+                            if (tokenInfo.ExpiresAt > DateTime.UtcNow)
+                            {
+                                _logger.LogDebug("Retrieved authentication token using session ID fallback for session {SessionId}", sessionId);
+                                return token;
+                            }
+                            else
+                            {
+                                // Token expired - remove mapping
+                                _sessionIdToToken.TryRemove(sessionId, out _);
+                                _logger.LogDebug("Token expired for session ID {SessionId}, removed mapping", sessionId);
+                            }
+                        }
+                        else
+                        {
+                            // Token not found in cache - remove stale mapping
+                            _sessionIdToToken.TryRemove(sessionId, out _);
+                        }
+                    }
+                }
+                catch (Exception sessionIdEx)
+                {
+                    // Session ID retrieval failed - log debug but continue
+                    _logger.LogDebug(sessionIdEx, "Failed to retrieve token using session ID fallback");
                 }
             }
             
@@ -634,6 +721,14 @@ namespace AmesaBackend.Admin.Services
                     ClearFailedAttempts(tokenInfo.Email.ToLower());
                     _logger.LogDebug("Removed authentication token for user {Email} during sign out", tokenInfo.Email);
                 }
+            }
+            
+            // Also remove session ID mapping
+            var sessionId = httpContext?.Session?.Id;
+            if (!string.IsNullOrEmpty(sessionId))
+            {
+                _sessionIdToToken.TryRemove(sessionId, out _);
+                _logger.LogDebug("Removed session ID mapping for session {SessionId} during sign out", sessionId);
             }
             
             // Clear session data
