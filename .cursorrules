@@ -1771,6 +1771,6 @@ Client → CloudFront /api/* → ALB (path-based routing) → ECS Task (microser
 
 ---
 **Last Updated**: 2025-01-25
-**Context Version**: 2.5.0 (Admin Panel security fixes, rate limiting, page authorization, session security improvements)
+**Context Version**: 2.6.0 (API routing fixes, Promotion database mapping fixes, gitignore enhancements)
 **Note**: This file should be updated whenever API design, database schema, deployment processes, or infrastructure changes.
 
