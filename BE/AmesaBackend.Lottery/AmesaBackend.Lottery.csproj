@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.0" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR" Version="1.1.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.0" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.0" />
+    <PackageReference Include="Serilog.AspNetCore" Version="8.0.0" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.5" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
+    <PackageReference Include="AWSSDK.S3" Version="3.7.400" />
+    <PackageReference Include="AWSSDK.SQS" Version="3.7.400" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AmesaBackend.Shared\AmesaBackend.Shared.csproj" />
+    <ProjectReference Include="..\AmesaBackend.Auth\AmesaBackend.Auth.csproj" />
+    <ProjectReference Include="..\AmesaBackend\AmesaBackend.csproj" />
+  </ItemGroup>
+
+  <!-- Exclude appsettings.json from referenced Auth project during publish -->
+  <Target Name="ExcludeAuthAppSettings" BeforeTargets="_GetCopyToPublishDirectoryItems">
+    <ItemGroup>
+      <_AuthAppSettings Include="$(MSBuildProjectDirectory)\..\AmesaBackend.Auth\appsettings.json" />
+      <_AuthAppSettings Include="$(MSBuildProjectDirectory)\..\AmesaBackend.Auth\appsettings.*.json" />
+      <ContentWithTargetPath Remove="@(_AuthAppSettings)" />
+      <None Remove="@(_AuthAppSettings)" />
+    </ItemGroup>
+  </Target>
+
+</Project>
