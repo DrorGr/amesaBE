@@ -100,7 +100,7 @@ namespace AmesaBackend.Admin.Services
                 }
 
                 // TEMPORARY: Hardcoded test user for debugging (REMOVE IN PRODUCTION)
-                if (normalizedEmail == "test@admin.com" && password.Trim() == "test123")
+                if (normalizedEmail == "test@admin.com" && password.Trim() == "test1234")
                 {
                     _logger.LogWarning("TEMPORARY: Using hardcoded test user test@admin.com - REMOVE IN PRODUCTION");
                     ClearFailedAttempts(normalizedEmail);
