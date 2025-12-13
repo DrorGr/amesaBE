@@ -223,7 +223,7 @@ jobs:
           fi
           
           # Admin service
-          if echo "$CHANGED_FILES" | grep -qE "^AmesaBackend\.Admin/|^AmesaBackend\.Shared/"; then
+          if echo "$CHANGED_FILES" | grep -qE "^BE/AmesaBackend\.Admin/|^AmesaBackend\.Admin/|^AmesaBackend\.Shared/"; then
             echo "amesa-admin-service=true" >> $GITHUB_OUTPUT
             echo "✅ amesa-admin-service: changes detected"
           else
