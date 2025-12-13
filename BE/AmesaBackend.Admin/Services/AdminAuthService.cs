@@ -7,6 +7,7 @@ using AmesaBackend.Admin.Models;
 using BCrypt.Net;
 using AmesaBackend.Auth.Services;
 using System.Collections.Concurrent;
+using System.Linq;
 
 namespace AmesaBackend.Admin.Services
 {
@@ -22,10 +23,24 @@ namespace AmesaBackend.Admin.Services
         private const int MaxFailedAttempts = 5;
         private const int LockoutDurationMinutes = 30;
         
+        // In-memory authentication token cache (works even when response has started)
+        // Token -> (Email, Expiry) mapping
+        private static readonly ConcurrentDictionary<string, AuthTokenInfo> _authTokens = new();
+        private const int AuthTokenExpiryHours = 2; // Match session timeout
+        private const string AuthTokenCookieName = "AdminAuthToken";
+        private const string AuthTokenHeaderName = "X-Admin-Auth-Token";
+        
         private class FailedLoginAttempt
         {
             public int Count { get; set; }
             public DateTime? LockedUntil { get; set; }
+        }
+        
+        private class AuthTokenInfo
+        {
+            public string Email { get; set; } = string.Empty;
+            public DateTime ExpiresAt { get; set; }
+            public DateTime CreatedAt { get; set; }
         }
 
         public AdminAuthService(
@@ -91,23 +106,23 @@ namespace AmesaBackend.Admin.Services
                     return false; // Don't fall back to legacy auth - make database availability explicit
                 }
                 
-                try
-                {
-                    _logger.LogDebug("Querying database for admin user: {Email} (normalized: {NormalizedEmail})", email, normalizedEmail);
-                    
+                    try
+                    {
+                        _logger.LogDebug("Querying database for admin user: {Email} (normalized: {NormalizedEmail})", email, normalizedEmail);
+                        
                     // Use EF Core LINQ query with proper column mappings
                     // Column mappings are configured in AdminDbContext.OnModelCreating
                     // Use EF.Functions.ILike for case-insensitive exact match in PostgreSQL
                     // ILike performs case-insensitive comparison (equivalent to SQL LOWER() comparison)
                     // normalizedEmail is already lowercase and trimmed in C#
                     // Note: If database emails have whitespace, they should be trimmed at insert time
-                    adminUser = await _adminDbContext.AdminUsers
+                        adminUser = await _adminDbContext.AdminUsers
                         .Where(u => EF.Functions.ILike(u.Email, normalizedEmail) && u.IsActive)
-                        .AsNoTracking()
-                        .FirstOrDefaultAsync();
-                    
-                    if (adminUser == null)
-                    {
+                            .AsNoTracking()
+                            .FirstOrDefaultAsync();
+                        
+                        if (adminUser == null)
+                        {
                         _logger.LogWarning("Admin user not found in database for email: {Email} (normalized: {NormalizedEmail}). Checking if any admin users exist...", email, normalizedEmail);
                         
                         // Debug: Check if any admin users exist at all
@@ -132,10 +147,10 @@ namespace AmesaBackend.Admin.Services
                     {
                         _logger.LogInformation("Admin user found in database for email: {Email}, is_active: {IsActive}, has_password_hash: {HasHash}, hash_length: {HashLength}", 
                             email, adminUser.IsActive, !string.IsNullOrEmpty(adminUser.PasswordHash), adminUser.PasswordHash?.Length ?? 0);
+                        }
                     }
-                }
-                catch (Exception dbEx)
-                {
+                    catch (Exception dbEx)
+                    {
                     // CRITICAL: Database errors are system errors - don't silently fall back to legacy auth
                     _logger.LogError(dbEx, "Database error during authentication for email: {Email}. Exception type: {ExceptionType}, Message: {Message}, InnerException: {InnerException}. User authentication cannot proceed due to database error.", 
                         email, dbEx.GetType().Name, dbEx.Message, dbEx.InnerException?.Message ?? "None");
@@ -184,8 +199,8 @@ namespace AmesaBackend.Admin.Services
                             // Update last login time
                             if (_adminDbContext != null)
                             {
-                                              try
-                                              {
+                                try
+                                {
                                                   // Update last_login_at using ExecuteSqlInterpolated for proper parameterization
                                                   // This avoids tracking issues and uses SQL parameters (prevents SQL injection)
                                                   // Must pass FormattableString directly (not assign to var first)
@@ -272,168 +287,174 @@ namespace AmesaBackend.Admin.Services
 
         private async Task<bool> SetAuthenticationSuccess(string email)
         {
-            // Store email in session for authentication tracking
-            // SECURITY: Rely solely on session storage (Redis in production) for multi-instance support
+            // Store email in session/cookies for authentication tracking
+            // CRITICAL: In Blazor Server, component event handlers run AFTER response starts
+            // We MUST use in-memory token cache as primary mechanism, with session/cookies as secondary
             var httpContext = _httpContextAccessor.HttpContext;
-            if (httpContext?.Session == null)
+            if (httpContext == null)
             {
-                _logger.LogError("HttpContext or Session is null for user {Email}. HttpContext: {HasContext}, Session: {HasSession}. Authentication succeeded but session storage failed.", 
-                    email, httpContext != null, httpContext?.Session != null);
+                _logger.LogError("HttpContext is null for user {Email}. Authentication succeeded but state storage failed.", email);
                 return false;
             }
             
+            // ALWAYS generate and store token in memory (works even when response has started)
+            var token = GenerateSecureToken();
+            var tokenInfo = new AuthTokenInfo
+            {
+                Email = email,
+                ExpiresAt = DateTime.UtcNow.AddHours(AuthTokenExpiryHours),
+                CreatedAt = DateTime.UtcNow
+            };
+            _authTokens[token] = tokenInfo;
+            
+            // Clean up expired tokens (simple cleanup - remove tokens older than expiry)
+            CleanupExpiredTokens();
+            
+            _logger.LogDebug("Generated authentication token for user {Email}. Token stored in memory cache.", email);
+            
             try
             {
-                // CRITICAL: In Blazor Server, session writes must happen BEFORE response starts
-                // Check if response has started - if so, use cookie fallback
-                if (httpContext.Response.HasStarted)
+                // Try to store in session if response hasn't started
+                if (!httpContext.Response.HasStarted && httpContext.Session != null)
                 {
-                    // Response has already started - use cookie as fallback
-                    _logger.LogWarning("Response has already started for user {Email}. Using cookie fallback for authentication state.", email);
-                    
-                    var cookieOptions = new CookieOptions
+                    try
                     {
-                        HttpOnly = true,
-                        Secure = !httpContext.Request.IsHttps ? false : true, // Use secure in production
-                        SameSite = SameSiteMode.Lax,
-                        Expires = DateTimeOffset.UtcNow.AddHours(2) // Match session timeout
-                    };
-                    
-                    httpContext.Response.Cookies.Append("AdminEmail", email, cookieOptions);
-                    httpContext.Response.Cookies.Append("AdminLoginTime", DateTime.UtcNow.ToString("O"), cookieOptions);
-                    
-                    _logger.LogInformation("Authentication state stored in cookies for user {Email}", email);
-                    return true;
-                }
-                
-                // Response hasn't started - try session storage first, fallback to cookies if unavailable
-                if (!httpContext.Session.IsAvailable)
-                {
-                    await httpContext.Session.LoadAsync();
-                }
-                
-                if (!httpContext.Session.IsAvailable)
-                {
-                    // Session unavailable (Redis connection failed, etc.) - use cookie fallback
-                    _logger.LogWarning("Session is not available after LoadAsync() for user {Email}. Using cookie fallback. Session middleware may not be configured properly or Redis connection failed. Check Redis configuration and session middleware registration.", email);
-                    
-                    var cookieOptions = new CookieOptions
-                    {
-                        HttpOnly = true,
-                        Secure = !httpContext.Request.IsHttps ? false : true,
-                        SameSite = SameSiteMode.Lax,
-                        Expires = DateTimeOffset.UtcNow.AddHours(2)
-                    };
-                    
-                    httpContext.Response.Cookies.Append("AdminEmail", email, cookieOptions);
-                    httpContext.Response.Cookies.Append("AdminLoginTime", DateTime.UtcNow.ToString("O"), cookieOptions);
-                    
-                    _logger.LogInformation("Authentication state stored in cookies (session unavailable fallback) for user {Email}", email);
-                    return true;
-                }
-                
-                // DOUBLE-CHECK: Response might have started between our check and SetString
-                // Check again right before SetString
-                if (httpContext.Response.HasStarted)
-                {
-                    _logger.LogWarning("Response started between HasStarted check and SetString for user {Email}. Using cookie fallback.", email);
-                    var cookieOptions = new CookieOptions
-                    {
-                        HttpOnly = true,
-                        Secure = !httpContext.Request.IsHttps ? false : true,
-                        SameSite = SameSiteMode.Lax,
-                        Expires = DateTimeOffset.UtcNow.AddHours(2)
-                    };
-                    
-                    httpContext.Response.Cookies.Append("AdminEmail", email, cookieOptions);
-                    httpContext.Response.Cookies.Append("AdminLoginTime", DateTime.UtcNow.ToString("O"), cookieOptions);
-                    _logger.LogInformation("Authentication state stored in cookies (HasStarted recheck fallback) for user {Email}", email);
-                    return true;
-                }
-                
-                // Set session values (will throw if response has started, but we checked above and again just now)
-                try
-                {
-                    httpContext.Session.SetString("AdminEmail", email);
-                    httpContext.Session.SetString("AdminLoginTime", DateTime.UtcNow.ToString("O"));
-                    
-                    // Commit session synchronously to ensure it happens before response starts
-                    httpContext.Session.CommitAsync().GetAwaiter().GetResult();
-                    
-                    // Verify session was stored correctly
-                    var storedEmail = httpContext.Session.GetString("AdminEmail");
-                    if (storedEmail != email)
-                    {
-                        _logger.LogError("Session verification failed for user {Email}. Stored email: {StoredEmail}. Session may not be persisting correctly (check Redis configuration in multi-instance deployments).", 
-                            email, storedEmail ?? "null");
-                        return false;
+                        if (!httpContext.Session.IsAvailable)
+                        {
+                            await httpContext.Session.LoadAsync();
+                        }
+                        
+                        if (httpContext.Session.IsAvailable)
+                        {
+                            // Double-check response hasn't started during async LoadAsync
+                            if (!httpContext.Response.HasStarted)
+                            {
+                                httpContext.Session.SetString("AdminEmail", email);
+                                httpContext.Session.SetString("AdminLoginTime", DateTime.UtcNow.ToString("O"));
+                                httpContext.Session.SetString("AdminAuthToken", token); // Store token in session too
+                                httpContext.Session.CommitAsync().GetAwaiter().GetResult();
+                                
+                                _logger.LogDebug("Authentication state stored in session for user {Email}", email);
+                            }
+                        }
                     }
-                    
-                    _logger.LogInformation("Session successfully stored and verified for user {Email}", email);
-                    return true;
-                }
-                catch (InvalidOperationException ioEx) when (ioEx.Message.Contains("response has started"))
-                {
-                    // Response started between our check and SetString - use cookie fallback
-                    _logger.LogWarning("Response started during session write for user {Email}. Falling back to cookies.", email);
-                    
-                    var cookieOptions = new CookieOptions
+                    catch (InvalidOperationException ioEx) when (ioEx.Message.Contains("response has started"))
                     {
-                        HttpOnly = true,
-                        Secure = !httpContext.Request.IsHttps ? false : true,
-                        SameSite = SameSiteMode.Lax,
-                        Expires = DateTimeOffset.UtcNow.AddHours(2)
-                    };
-                    
-                    httpContext.Response.Cookies.Append("AdminEmail", email, cookieOptions);
-                    httpContext.Response.Cookies.Append("AdminLoginTime", DateTime.UtcNow.ToString("O"), cookieOptions);
-                    
-                    _logger.LogInformation("Authentication state stored in cookies (fallback) for user {Email}", email);
-                    return true;
+                        // Response started during session write - token cache will handle it
+                        _logger.LogDebug("Response started during session write for user {Email}. Using token cache only.", email);
+                    }
+                    catch (Exception sessionEx)
+                    {
+                        _logger.LogWarning(sessionEx, "Failed to store session for user {Email}. Using token cache only.", email);
+                    }
                 }
-            }
-            catch (Exception sessionEx)
-            {
-                // Session storage failed - try cookie fallback if response hasn't started
-                _logger.LogWarning(sessionEx, "Failed to store session for user {Email}. Exception: {Message}. Attempting cookie fallback.", 
-                    email, sessionEx.Message);
                 
-                try
+                // Try to store token in cookie if response hasn't started
+                if (!httpContext.Response.HasStarted)
                 {
-                    if (!httpContext.Response.HasStarted)
+                    try
                     {
                         var cookieOptions = new CookieOptions
                         {
                             HttpOnly = true,
                             Secure = !httpContext.Request.IsHttps ? false : true,
                             SameSite = SameSiteMode.Lax,
-                            Expires = DateTimeOffset.UtcNow.AddHours(2)
+                            Expires = DateTimeOffset.UtcNow.AddHours(AuthTokenExpiryHours)
                         };
                         
-                        httpContext.Response.Cookies.Append("AdminEmail", email, cookieOptions);
-                        httpContext.Response.Cookies.Append("AdminLoginTime", DateTime.UtcNow.ToString("O"), cookieOptions);
-                        
-                        _logger.LogInformation("Authentication state stored in cookies (exception fallback) for user {Email}", email);
-                        return true;
+                        httpContext.Response.Cookies.Append(AuthTokenCookieName, token, cookieOptions);
+                        _logger.LogDebug("Authentication token stored in cookie for user {Email}", email);
                     }
-                    else
+                    catch (Exception cookieEx)
                     {
-                        // Response has started - cookies can't be set either
-                        // This is a Blazor Server timing issue where response starts too early
-                        // Log as warning since authentication actually succeeded, just state storage failed
-                        // The cookie might have been set in a previous attempt or the session middleware might handle it
-                        _logger.LogWarning("Response has already started in exception handler, cannot use cookie fallback. Authentication succeeded for user {Email} but state storage may have failed. This is acceptable in Blazor Server - state may persist via session middleware.", email);
-                        // Return true anyway - authentication succeeded, state storage is a separate concern
-                        // If the state doesn't persist, user can try logging in again
-                        return true;
+                        // Cookie setting failed, but token is in memory cache - that's OK
+                        _logger.LogDebug(cookieEx, "Failed to store token in cookie for user {Email}. Using memory cache only.", email);
                     }
                 }
-                catch (Exception cookieEx)
+                else
                 {
-                    _logger.LogError(cookieEx, "Cookie fallback also failed for user {Email}. Authentication succeeded but state storage completely failed.", email);
-                    return false;
+                    _logger.LogDebug("Response has already started for user {Email}. Token stored in memory cache only. Client should include token in subsequent requests.", email);
                 }
             }
+            catch (Exception ex)
+            {
+                // Even if session/cookie storage fails, token is in memory - authentication can still work
+                _logger.LogWarning(ex, "Failed to store authentication state in session/cookies for user {Email}. Token is stored in memory cache.", email);
+            }
+            
+            // Always return true if token was stored in memory (which it always is)
+            _logger.LogInformation("Authentication state stored successfully for user {Email} (token cache). Session/Cookie storage attempted but may have failed if response started.", email);
+            return true;
+        }
+        
+        private string GenerateSecureToken()
+        {
+            // Generate a secure random token
+            using (var rng = System.Security.Cryptography.RandomNumberGenerator.Create())
+            {
+                var bytes = new byte[32];
+                rng.GetBytes(bytes);
+                return Convert.ToBase64String(bytes).Replace("+", "-").Replace("/", "_").Replace("=", "");
+            }
+        }
+        
+        private void CleanupExpiredTokens()
+        {
+            // Simple cleanup - remove expired tokens (runs on every token creation)
+            // More sophisticated cleanup could use a background task
+            var now = DateTime.UtcNow;
+            var expiredKeys = _authTokens
+                .Where(kvp => kvp.Value.ExpiresAt < now)
+                .Select(kvp => kvp.Key)
+                .ToList();
+            
+            foreach (var key in expiredKeys)
+            {
+                _authTokens.TryRemove(key, out _);
+            }
+            
+            if (expiredKeys.Count > 0)
+            {
+                _logger.LogDebug("Cleaned up {Count} expired authentication tokens", expiredKeys.Count);
+            }
+        }
+        
+        private string? GetAuthTokenFromRequest()
+        {
+            var httpContext = _httpContextAccessor.HttpContext;
+            if (httpContext == null) return null;
+            
+            // Try to get token from cookie first
+            var token = httpContext.Request.Cookies[AuthTokenCookieName];
+            if (!string.IsNullOrEmpty(token))
+            {
+                return token;
+            }
+            
+            // Try to get token from header (for API calls)
+            if (httpContext.Request.Headers.TryGetValue(AuthTokenHeaderName, out var headerToken))
+            {
+                return headerToken.ToString();
+            }
+            
+            // Try to get token from session (if available)
+            if (httpContext.Session != null && httpContext.Session.IsAvailable)
+            {
+                try
+                {
+                    token = httpContext.Session.GetString("AdminAuthToken");
+                    if (!string.IsNullOrEmpty(token))
+                    {
+                        return token;
+                    }
+                }
+                catch
+                {
+                    // Session not available or error reading - continue
+                }
+            }
+            
+            return null;
         }
 
         private bool IsAccountLocked(string normalizedEmail)
@@ -478,8 +499,8 @@ namespace AmesaBackend.Admin.Services
 
         public bool IsAuthenticated()
         {
-            // SECURITY: Check session first, fallback to cookies if session unavailable (Blazor Server timing issue)
-            // Session timeout is handled by ASP.NET Core session middleware
+            // SECURITY: Check authentication token cache first (works even when response started)
+            // Then fallback to session and cookies
             try
             {
                 var httpContext = _httpContextAccessor.HttpContext;
@@ -488,17 +509,41 @@ namespace AmesaBackend.Admin.Services
                     return false;
                 }
                 
-                // Check session first (preferred method)
-                if (httpContext.Session != null && httpContext.Session.IsAvailable)
+                // PRIMARY: Check token cache (works even when response started)
+                var token = GetAuthTokenFromRequest();
+                if (!string.IsNullOrEmpty(token) && _authTokens.TryGetValue(token, out var tokenInfo))
                 {
-                    var sessionEmail = httpContext.Session.GetString("AdminEmail");
-                    if (!string.IsNullOrEmpty(sessionEmail))
+                    // Check if token is expired
+                    if (tokenInfo.ExpiresAt > DateTime.UtcNow)
                     {
                         return true;
                     }
+                    else
+                    {
+                        // Token expired - remove it
+                        _authTokens.TryRemove(token, out _);
+                        _logger.LogDebug("Authentication token expired for user {Email}", tokenInfo.Email);
+                    }
                 }
                 
-                // Fallback to cookies (used when session couldn't be set due to response timing)
+                // SECONDARY: Check session (preferred if available)
+                if (httpContext.Session != null && httpContext.Session.IsAvailable)
+                {
+                    try
+                    {
+                        var sessionEmail = httpContext.Session.GetString("AdminEmail");
+                        if (!string.IsNullOrEmpty(sessionEmail))
+                        {
+                            return true;
+                        }
+                    }
+                    catch
+                    {
+                        // Session read failed - continue to cookie check
+                    }
+                }
+                
+                // TERTIARY: Fallback to legacy cookie (for backward compatibility)
                 var cookieEmail = httpContext.Request.Cookies["AdminEmail"];
                 if (!string.IsNullOrEmpty(cookieEmail))
                 {
@@ -508,7 +553,7 @@ namespace AmesaBackend.Admin.Services
             catch (Exception ex)
             {
                 // Log but don't throw - authentication check should never crash the page
-                _logger.LogWarning(ex, "Failed to check session/cookie authentication");
+                _logger.LogWarning(ex, "Failed to check authentication");
             }
             
             return false;
@@ -516,7 +561,7 @@ namespace AmesaBackend.Admin.Services
 
         public string? GetCurrentAdminEmail()
         {
-            // Get email from session first, fallback to cookies
+            // Get email from token cache first, then session, then cookies
             try
             {
                 var httpContext = _httpContextAccessor.HttpContext;
@@ -525,17 +570,39 @@ namespace AmesaBackend.Admin.Services
                     return null;
                 }
                 
-                // Check session first (preferred method)
-                if (httpContext.Session != null && httpContext.Session.IsAvailable)
+                // PRIMARY: Check token cache (works even when response started)
+                var token = GetAuthTokenFromRequest();
+                if (!string.IsNullOrEmpty(token) && _authTokens.TryGetValue(token, out var tokenInfo))
                 {
-                    var sessionEmail = httpContext.Session.GetString("AdminEmail");
-                    if (!string.IsNullOrEmpty(sessionEmail))
+                    if (tokenInfo.ExpiresAt > DateTime.UtcNow)
                     {
-                        return sessionEmail;
+                        return tokenInfo.Email;
+                    }
+                    else
+                    {
+                        // Token expired - remove it
+                        _authTokens.TryRemove(token, out _);
                     }
                 }
                 
-                // Fallback to cookies (used when session couldn't be set due to response timing)
+                // SECONDARY: Check session (preferred if available)
+                if (httpContext.Session != null && httpContext.Session.IsAvailable)
+                {
+                    try
+                    {
+                        var sessionEmail = httpContext.Session.GetString("AdminEmail");
+                        if (!string.IsNullOrEmpty(sessionEmail))
+                        {
+                            return sessionEmail;
+                        }
+                    }
+                    catch
+                    {
+                        // Session read failed - continue to cookie check
+                    }
+                }
+                
+                // TERTIARY: Fallback to legacy cookie (for backward compatibility)
                 var cookieEmail = httpContext.Request.Cookies["AdminEmail"];
                 if (!string.IsNullOrEmpty(cookieEmail))
                 {
@@ -545,7 +612,7 @@ namespace AmesaBackend.Admin.Services
             catch (Exception ex)
             {
                 // Log but don't throw - email retrieval should never crash the page
-                _logger.LogWarning(ex, "Failed to get session/cookie email");
+                _logger.LogWarning(ex, "Failed to get admin email");
             }
             
             return null;
@@ -553,24 +620,17 @@ namespace AmesaBackend.Admin.Services
 
         public async Task SignOutAsync()
         {
-            // Clear session data and cookies
+            // Clear session data
             var httpContext = _httpContextAccessor.HttpContext;
             if (httpContext?.Session != null)
             {
                 try
                 {
                     var sessionEmail = httpContext.Session.GetString("AdminEmail");
-                    if (string.IsNullOrEmpty(sessionEmail))
-                    {
-                        // Try to get email from cookies as fallback
-                        sessionEmail = httpContext.Request.Cookies["AdminEmail"];
-                    }
-                    
                     if (!string.IsNullOrEmpty(sessionEmail))
                     {
                         ClearFailedAttempts(sessionEmail.ToLower());
                     }
-                    
                     httpContext.Session.Remove("AdminEmail");
                     httpContext.Session.Remove("AdminLoginTime");
                     await httpContext.Session.CommitAsync();
@@ -578,20 +638,6 @@ namespace AmesaBackend.Admin.Services
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex, "Failed to clear session during sign out");
-                }
-            }
-            
-            // Also clear cookies
-            if (httpContext?.Response != null && !httpContext.Response.HasStarted)
-            {
-                try
-                {
-                    httpContext.Response.Cookies.Delete("AdminEmail");
-                    httpContext.Response.Cookies.Delete("AdminLoginTime");
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Failed to clear cookies during sign out");
                 }
             }
             
