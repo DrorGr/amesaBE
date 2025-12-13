@@ -12,7 +12,9 @@
             return;
         }
         
-        const signalRUrl = '/hub'; // Relative to base href /admin/, resolves to /admin/hub
+        // CRITICAL FIX: Use absolute path /admin/hub instead of relative /hub
+        // SignalR client doesn't always respect <base> tag, so we must be explicit
+        const signalRUrl = '/admin/hub';
         
         // Check if signalR is fully available (wait for script to load and initialize)
         // signalR must have HubConnectionBuilder available to be usable
