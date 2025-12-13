@@ -335,12 +335,16 @@ namespace AmesaBackend.Admin.Services
                     if (!string.IsNullOrEmpty(sessionId))
                     {
                         _sessionIdToToken[sessionId] = token;
-                        _logger.LogDebug("Mapped session ID {SessionId} to token for user {Email}", sessionId, email);
+                        _logger.LogInformation("Mapped session ID {SessionId} to token for user {Email}", sessionId, email);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Session ID was empty when trying to map token for user {Email}. Token stored in cache but session ID mapping failed.", email);
                     }
                     
                     // Also map email to token (additional fallback - if we can get email from session/cookie, we can find token)
                     _emailToToken[email.ToLower().Trim()] = token;
-                    _logger.LogDebug("Mapped email to token for user {Email}", email);
+                    _logger.LogInformation("Mapped email {Email} to token for user", email);
                 }
             }
             catch (Exception sessionIdEx)
@@ -425,7 +429,7 @@ namespace AmesaBackend.Admin.Services
             }
             
             // Always return true if token was stored in memory (which it always is)
-            _logger.LogInformation("Authentication state stored successfully for user {Email} (token cache). Session/Cookie storage attempted but may have failed if response started.", email);
+            _logger.LogInformation("Authentication state stored successfully for user {Email} (token cache). Token: {TokenPrefix}..., Session/Cookie storage attempted but may have failed if response started.", email, token?.Substring(0, Math.Min(8, token?.Length ?? 0)) ?? "null");
             return true;
         }
         
@@ -536,11 +540,11 @@ namespace AmesaBackend.Admin.Services
                         // Verify token still exists and is valid
                         if (!string.IsNullOrEmpty(token) && _authTokens.TryGetValue(token, out var tokenInfo))
                         {
-                            if (tokenInfo.ExpiresAt > DateTime.UtcNow)
-                            {
-                                _logger.LogDebug("Retrieved authentication token using session ID fallback for session {SessionId}", sessionId);
-                                return token;
-                            }
+                        if (tokenInfo.ExpiresAt > DateTime.UtcNow)
+                        {
+                            _logger.LogInformation("Retrieved authentication token using session ID fallback for session {SessionId}, user {Email}", sessionId, tokenInfo.Email);
+                            return token;
+                        }
                             else
                             {
                                 // Token expired - remove mapping
@@ -598,7 +602,7 @@ namespace AmesaBackend.Admin.Services
                         {
                             if (tokenInfo.ExpiresAt > DateTime.UtcNow && tokenInfo.Email.Equals(normalizedEmail, StringComparison.OrdinalIgnoreCase))
                             {
-                                _logger.LogDebug("Retrieved authentication token using email fallback for {Email}", email);
+                                _logger.LogInformation("Retrieved authentication token using email fallback for {Email}", email);
                                 return token;
                             }
                             else
@@ -678,19 +682,31 @@ namespace AmesaBackend.Admin.Services
                 
                 // PRIMARY: Check token cache (works even when response started)
                 var token = GetAuthTokenFromRequest();
-                if (!string.IsNullOrEmpty(token) && _authTokens.TryGetValue(token, out var tokenInfo))
+                if (!string.IsNullOrEmpty(token))
                 {
-                    // Check if token is expired
-                    if (tokenInfo.ExpiresAt > DateTime.UtcNow)
+                    if (_authTokens.TryGetValue(token, out var tokenInfo))
                     {
-                        return true;
+                        // Check if token is expired
+                        if (tokenInfo.ExpiresAt > DateTime.UtcNow)
+                        {
+                            _logger.LogDebug("IsAuthenticated: Token found and valid for user {Email}", tokenInfo.Email);
+                            return true;
+                        }
+                        else
+                        {
+                            // Token expired - remove it
+                            _authTokens.TryRemove(token, out _);
+                            _logger.LogInformation("Authentication token expired for user {Email}", tokenInfo.Email);
+                        }
                     }
                     else
                     {
-                        // Token expired - remove it
-                        _authTokens.TryRemove(token, out _);
-                        _logger.LogDebug("Authentication token expired for user {Email}", tokenInfo.Email);
+                        _logger.LogWarning("IsAuthenticated: Token found in request but not in cache. Token: {TokenPrefix}...", token.Substring(0, Math.Min(8, token.Length)));
                     }
+                }
+                else
+                {
+                    _logger.LogDebug("IsAuthenticated: No token found in request (cookie/header/session/sessionId/email lookup all failed)");
                 }
                 
                 // SECONDARY: Check session (preferred if available)
