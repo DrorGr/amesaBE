@@ -620,24 +620,69 @@ namespace AmesaBackend.Admin.Services
 
         public async Task SignOutAsync()
         {
-            // Clear session data
+            // Clear authentication token, session data, and cookies
             var httpContext = _httpContextAccessor.HttpContext;
+            AuthTokenInfo? tokenInfo = null;
+            
+            // Remove token from cache
+            var token = GetAuthTokenFromRequest();
+            if (!string.IsNullOrEmpty(token))
+            {
+                _authTokens.TryRemove(token, out tokenInfo);
+                if (tokenInfo != null)
+                {
+                    ClearFailedAttempts(tokenInfo.Email.ToLower());
+                    _logger.LogDebug("Removed authentication token for user {Email} during sign out", tokenInfo.Email);
+                }
+            }
+            
+            // Clear session data
             if (httpContext?.Session != null)
             {
                 try
                 {
                     var sessionEmail = httpContext.Session.GetString("AdminEmail");
+                    if (string.IsNullOrEmpty(sessionEmail))
+                    {
+                        // Try to get email from token or cookies as fallback
+                        if (tokenInfo != null)
+                        {
+                            sessionEmail = tokenInfo.Email;
+                        }
+                        else
+                        {
+                            sessionEmail = httpContext.Request.Cookies["AdminEmail"];
+                        }
+                    }
+                    
                     if (!string.IsNullOrEmpty(sessionEmail))
                     {
                         ClearFailedAttempts(sessionEmail.ToLower());
                     }
+                    
                     httpContext.Session.Remove("AdminEmail");
                     httpContext.Session.Remove("AdminLoginTime");
+                    httpContext.Session.Remove("AdminAuthToken");
                     await httpContext.Session.CommitAsync();
                 }
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex, "Failed to clear session during sign out");
+                }
+            }
+            
+            // Clear cookies (if response hasn't started)
+            if (httpContext?.Response != null && !httpContext.Response.HasStarted)
+            {
+                try
+                {
+                    httpContext.Response.Cookies.Delete(AuthTokenCookieName);
+                    httpContext.Response.Cookies.Delete("AdminEmail");
+                    httpContext.Response.Cookies.Delete("AdminLoginTime");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to clear cookies during sign out");
                 }
             }
             
