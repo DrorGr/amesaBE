@@ -107,3 +107,4 @@ ORDER BY tablename, indexname;
 --    migrate it to amesa_admin schema BEFORE running this script
 -- 4. Always backup your database before running migration scripts
 -- ============================================================
+

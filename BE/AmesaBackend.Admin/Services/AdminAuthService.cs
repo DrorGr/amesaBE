@@ -99,6 +99,15 @@ namespace AmesaBackend.Admin.Services
                     return false;
                 }
 
+                // TEMPORARY: Hardcoded test user for debugging (REMOVE IN PRODUCTION)
+                if (normalizedEmail == "test@admin.com" && password.Trim() == "test123")
+                {
+                    _logger.LogWarning("TEMPORARY: Using hardcoded test user test@admin.com - REMOVE IN PRODUCTION");
+                    ClearFailedAttempts(normalizedEmail);
+                    _logger.LogInformation("Hardcoded test user test@admin.com authenticated successfully");
+                    return await SetAuthenticationSuccess("test@admin.com");
+                }
+
                 // Try to find admin user in database (if DbContext is available)
                 AdminUser? adminUser = null;
                 
