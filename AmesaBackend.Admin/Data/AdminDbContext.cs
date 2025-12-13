@@ -38,8 +38,16 @@ namespace AmesaBackend.Admin.Data
             {
                 entity.ToTable("admin_users", "amesa_admin");
                 entity.HasKey(e => e.Id);
-                entity.Property(e => e.Email).IsRequired().HasMaxLength(255);
-                entity.Property(e => e.Username).IsRequired().HasMaxLength(50);
+                
+                // Explicit column mappings for PostgreSQL case-sensitivity
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.Email).IsRequired().HasMaxLength(255).HasColumnName("email");
+                entity.Property(e => e.Username).IsRequired().HasMaxLength(50).HasColumnName("username");
+                entity.Property(e => e.PasswordHash).IsRequired().HasColumnName("password_hash");
+                entity.Property(e => e.IsActive).HasColumnName("is_active");
+                entity.Property(e => e.CreatedAt).HasColumnName("created_at");
+                entity.Property(e => e.LastLoginAt).HasColumnName("last_login_at");
+                
                 entity.HasIndex(e => e.Email).IsUnique();
                 entity.HasIndex(e => e.Username).IsUnique();
             });

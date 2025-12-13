@@ -7,6 +7,7 @@ using AmesaBackend.Admin.Models;
 using BCrypt.Net;
 using AmesaBackend.Auth.Services;
 using System.Collections.Concurrent;
+using System.FormattableString;
 
 namespace AmesaBackend.Admin.Services
 {
@@ -95,27 +96,14 @@ namespace AmesaBackend.Admin.Services
                 {
                     _logger.LogDebug("Querying database for admin user: {Email} (normalized: {NormalizedEmail})", email, normalizedEmail);
                     
-                    // Use parameterized raw SQL query to avoid EF Core schema/alias translation issues
-                    // Query with explicit schema name and case-insensitive comparison
-                    // CRITICAL: Use column aliases that match entity property names (PascalCase)
-                    // EF Core maps raw SQL results to entity properties by name
-                    // Use FormattableString for proper parameterization
-                    FormattableString sql = $@"
-                        SELECT 
-                            id AS ""Id"",
-                            email AS ""Email"",
-                            username AS ""Username"",
-                            password_hash AS ""PasswordHash"",
-                            is_active AS ""IsActive"",
-                            created_at AS ""CreatedAt"",
-                            last_login_at AS ""LastLoginAt""
-                        FROM amesa_admin.admin_users 
-                        WHERE LOWER(TRIM(email)) = {normalizedEmail} 
-                        AND is_active = true 
-                        LIMIT 1";
-                    
+                    // Use EF Core LINQ query with proper column mappings
+                    // Column mappings are configured in AdminDbContext.OnModelCreating
+                    // Use EF.Functions.ILike for case-insensitive exact match in PostgreSQL
+                    // ILike performs case-insensitive comparison (equivalent to SQL LOWER() comparison)
+                    // normalizedEmail is already lowercase and trimmed in C#
+                    // Note: If database emails have whitespace, they should be trimmed at insert time
                     adminUser = await _adminDbContext.AdminUsers
-                        .FromSqlInterpolated(sql)
+                        .Where(u => EF.Functions.ILike(u.Email, normalizedEmail) && u.IsActive)
                         .AsNoTracking()
                         .FirstOrDefaultAsync();
                     
@@ -199,14 +187,15 @@ namespace AmesaBackend.Admin.Services
                             {
                                 try
                                 {
-                                    // Use raw SQL to update last_login_at to avoid tracking issues
+                                    // Update last_login_at using ExecuteSqlInterpolated for proper parameterization
+                                    // This avoids tracking issues and uses SQL parameters (prevents SQL injection)
                                     FormattableString updateSql = $@"
                                         UPDATE amesa_admin.admin_users 
                                         SET last_login_at = {DateTime.UtcNow} 
                                         WHERE id = {adminUser.Id}";
                                     
-                                    await _adminDbContext.Database.ExecuteSqlInterpolatedAsync(updateSql);
-                                    _logger.LogDebug("Updated last login time for user {Email}", email);
+                                    var updateResult = await _adminDbContext.Database.ExecuteSqlInterpolatedAsync(updateSql);
+                                    _logger.LogDebug("Updated last login time for user {Email} (rows affected: {RowsAffected})", email, updateResult);
                                 }
                                 catch (Exception saveEx)
                                 {
