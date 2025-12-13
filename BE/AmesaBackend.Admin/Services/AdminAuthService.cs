@@ -284,8 +284,29 @@ namespace AmesaBackend.Admin.Services
             
             try
             {
-                // CRITICAL: In Blazor Server, we must ensure session is loaded and committed
-                // BEFORE the response has started. Load session first.
+                // CRITICAL: In Blazor Server, session writes must happen BEFORE response starts
+                // Check if response has started - if so, use cookie fallback
+                if (httpContext.Response.HasStarted)
+                {
+                    // Response has already started - use cookie as fallback
+                    _logger.LogWarning("Response has already started for user {Email}. Using cookie fallback for authentication state.", email);
+                    
+                    var cookieOptions = new CookieOptions
+                    {
+                        HttpOnly = true,
+                        Secure = !httpContext.Request.IsHttps ? false : true, // Use secure in production
+                        SameSite = SameSiteMode.Lax,
+                        Expires = DateTimeOffset.UtcNow.AddHours(2) // Match session timeout
+                    };
+                    
+                    httpContext.Response.Cookies.Append("AdminEmail", email, cookieOptions);
+                    httpContext.Response.Cookies.Append("AdminLoginTime", DateTime.UtcNow.ToString("O"), cookieOptions);
+                    
+                    _logger.LogInformation("Authentication state stored in cookies for user {Email}", email);
+                    return true;
+                }
+                
+                // Response hasn't started - use session storage
                 if (!httpContext.Session.IsAvailable)
                 {
                     await httpContext.Session.LoadAsync();
@@ -297,44 +318,46 @@ namespace AmesaBackend.Admin.Services
                     return false;
                 }
                 
-                // Set session values
-                httpContext.Session.SetString("AdminEmail", email);
-                httpContext.Session.SetString("AdminLoginTime", DateTime.UtcNow.ToString("O"));
-                
-                // CRITICAL: In Blazor Server, session commit must happen before response starts
-                // Try to commit synchronously, but if response has started, the session middleware
-                // will handle it on the next request. We'll verify on next request.
+                // Set session values (will throw if response has started, but we checked above)
                 try
                 {
-                    // Attempt synchronous commit to ensure it happens before response starts
-                    if (!httpContext.Response.HasStarted)
+                    httpContext.Session.SetString("AdminEmail", email);
+                    httpContext.Session.SetString("AdminLoginTime", DateTime.UtcNow.ToString("O"));
+                    
+                    // Commit session synchronously to ensure it happens before response starts
+                    httpContext.Session.CommitAsync().GetAwaiter().GetResult();
+                    
+                    // Verify session was stored correctly
+                    var storedEmail = httpContext.Session.GetString("AdminEmail");
+                    if (storedEmail != email)
                     {
-                        httpContext.Session.CommitAsync().GetAwaiter().GetResult();
+                        _logger.LogError("Session verification failed for user {Email}. Stored email: {StoredEmail}. Session may not be persisting correctly (check Redis configuration in multi-instance deployments).", 
+                            email, storedEmail ?? "null");
+                        return false;
                     }
-                    else
-                    {
-                        // Response has started, commit asynchronously (may fail, but session middleware will retry)
-                        _ = httpContext.Session.CommitAsync();
-                    }
+                    
+                    _logger.LogInformation("Session successfully stored and verified for user {Email}", email);
+                    return true;
                 }
                 catch (InvalidOperationException ioEx) when (ioEx.Message.Contains("response has started"))
                 {
-                    // Response has already started - this is acceptable in Blazor Server
-                    // Session middleware will handle the commit on the next request
-                    _logger.LogWarning("Session commit attempted after response started for user {Email}. Session middleware will handle this on next request.", email);
+                    // Response started between our check and SetString - use cookie fallback
+                    _logger.LogWarning("Response started during session write for user {Email}. Falling back to cookies.", email);
+                    
+                    var cookieOptions = new CookieOptions
+                    {
+                        HttpOnly = true,
+                        Secure = !httpContext.Request.IsHttps ? false : true,
+                        SameSite = SameSiteMode.Lax,
+                        Expires = DateTimeOffset.UtcNow.AddHours(2)
+                    };
+                    
+                    httpContext.Response.Cookies.Append("AdminEmail", email, cookieOptions);
+                    httpContext.Response.Cookies.Append("AdminLoginTime", DateTime.UtcNow.ToString("O"), cookieOptions);
+                    
+                    _logger.LogInformation("Authentication state stored in cookies (fallback) for user {Email}", email);
+                    return true;
                 }
-                
-                // Verify session was stored correctly
-                var storedEmail = httpContext.Session.GetString("AdminEmail");
-                if (storedEmail != email)
-                {
-                    _logger.LogError("Session verification failed for user {Email}. Stored email: {StoredEmail}. Session may not be persisting correctly (check Redis configuration in multi-instance deployments).", 
-                        email, storedEmail ?? "null");
-                    return false;
-                }
-                
-                _logger.LogInformation("Session successfully stored and verified for user {Email}", email);
-                return true;
             }
             catch (Exception sessionEx)
             {
