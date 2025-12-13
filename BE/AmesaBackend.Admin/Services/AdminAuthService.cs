@@ -28,6 +28,8 @@ namespace AmesaBackend.Admin.Services
         private static readonly ConcurrentDictionary<string, AuthTokenInfo> _authTokens = new();
         // Session ID -> Token mapping (fallback when cookies can't be set)
         private static readonly ConcurrentDictionary<string, string> _sessionIdToToken = new();
+        // Email -> Token mapping (additional fallback - allows lookup by email from session/cookie)
+        private static readonly ConcurrentDictionary<string, string> _emailToToken = new();
         private const int AuthTokenExpiryHours = 2; // Match session timeout
         private const string AuthTokenCookieName = "AdminAuthToken";
         private const string AuthTokenHeaderName = "X-Admin-Auth-Token";
@@ -335,6 +337,10 @@ namespace AmesaBackend.Admin.Services
                         _sessionIdToToken[sessionId] = token;
                         _logger.LogDebug("Mapped session ID {SessionId} to token for user {Email}", sessionId, email);
                     }
+                    
+                    // Also map email to token (additional fallback - if we can get email from session/cookie, we can find token)
+                    _emailToToken[email.ToLower().Trim()] = token;
+                    _logger.LogDebug("Mapped email to token for user {Email}", email);
                 }
             }
             catch (Exception sessionIdEx)
@@ -458,6 +464,20 @@ namespace AmesaBackend.Admin.Services
                 {
                     _sessionIdToToken.TryRemove(sessionId, out _);
                 }
+                
+                // Also remove from email mapping
+                var expiredTokenInfo = expiredKeys
+                    .Select(key => _authTokens.TryGetValue(key, out var info) ? (key, info) : (key, (AuthTokenInfo?)null))
+                    .Where(t => t.Item2 != null)
+                    .ToList();
+                
+                foreach (var (expiredToken, tokenInfo) in expiredTokenInfo)
+                {
+                    if (tokenInfo != null)
+                    {
+                        _emailToToken.TryRemove(tokenInfo.Email.ToLower().Trim(), out _);
+                    }
+                }
             }
             
             if (expiredKeys.Count > 0)
@@ -501,7 +521,7 @@ namespace AmesaBackend.Admin.Services
                 }
             }
             
-            // FALLBACK: Try to get token using session ID mapping (works even when cookies aren't set)
+            // FALLBACK 1: Try to get token using session ID mapping (works even when cookies aren't set)
             // This is critical for Blazor Server when response has started and cookies can't be set
             // Session ID persists across requests via ASP.NET Core session cookie
             if (httpContext.Session != null)
@@ -509,6 +529,7 @@ namespace AmesaBackend.Admin.Services
                 try
                 {
                     // Session ID should be available even if session isn't fully loaded
+                    // But wrap in try-catch as Session.Id might throw if session not initialized
                     var sessionId = httpContext.Session.Id;
                     if (!string.IsNullOrEmpty(sessionId) && _sessionIdToToken.TryGetValue(sessionId, out token))
                     {
@@ -536,9 +557,68 @@ namespace AmesaBackend.Admin.Services
                 }
                 catch (Exception sessionIdEx)
                 {
-                    // Session ID retrieval failed - log debug but continue
+                    // Session ID retrieval failed - log debug but continue to email lookup
                     _logger.LogDebug(sessionIdEx, "Failed to retrieve token using session ID fallback");
                 }
+            }
+            
+            // FALLBACK 2: Try to get token using email mapping (if we can get email from session/cookie)
+            // This works when session ID changed but we still have email in session/cookie
+            try
+            {
+                string? email = null;
+                
+                // Try to get email from session first
+                if (httpContext.Session != null && httpContext.Session.IsAvailable)
+                {
+                    try
+                    {
+                        email = httpContext.Session.GetString("AdminEmail");
+                    }
+                    catch
+                    {
+                        // Session read failed - try cookie
+                    }
+                }
+                
+                // Try to get email from legacy cookie if session didn't work
+                if (string.IsNullOrEmpty(email))
+                {
+                    email = httpContext.Request.Cookies["AdminEmail"];
+                }
+                
+                // If we have email, try to find token
+                if (!string.IsNullOrEmpty(email))
+                {
+                    var normalizedEmail = email.ToLower().Trim();
+                    if (_emailToToken.TryGetValue(normalizedEmail, out token))
+                    {
+                        // Verify token still exists and is valid
+                        if (!string.IsNullOrEmpty(token) && _authTokens.TryGetValue(token, out var tokenInfo))
+                        {
+                            if (tokenInfo.ExpiresAt > DateTime.UtcNow && tokenInfo.Email.Equals(normalizedEmail, StringComparison.OrdinalIgnoreCase))
+                            {
+                                _logger.LogDebug("Retrieved authentication token using email fallback for {Email}", email);
+                                return token;
+                            }
+                            else
+                            {
+                                // Token expired or email mismatch - remove mapping
+                                _emailToToken.TryRemove(normalizedEmail, out _);
+                            }
+                        }
+                        else
+                        {
+                            // Token not found in cache - remove stale mapping
+                            _emailToToken.TryRemove(normalizedEmail, out _);
+                        }
+                    }
+                }
+            }
+            catch (Exception emailLookupEx)
+            {
+                // Email lookup failed - log debug but continue
+                _logger.LogDebug(emailLookupEx, "Failed to retrieve token using email fallback");
             }
             
             return null;
@@ -723,12 +803,46 @@ namespace AmesaBackend.Admin.Services
                 }
             }
             
-            // Also remove session ID mapping
-            var sessionId = httpContext?.Session?.Id;
-            if (!string.IsNullOrEmpty(sessionId))
+            // Also remove session ID and email mappings
+            try
             {
-                _sessionIdToToken.TryRemove(sessionId, out _);
-                _logger.LogDebug("Removed session ID mapping for session {SessionId} during sign out", sessionId);
+                var sessionId = httpContext?.Session?.Id;
+                if (!string.IsNullOrEmpty(sessionId))
+                {
+                    _sessionIdToToken.TryRemove(sessionId, out _);
+                    _logger.LogDebug("Removed session ID mapping for session {SessionId} during sign out", sessionId);
+                }
+            }
+            catch
+            {
+                // Session ID unavailable - that's OK
+            }
+            
+            // Remove email mapping
+            if (tokenInfo != null)
+            {
+                _emailToToken.TryRemove(tokenInfo.Email.ToLower().Trim(), out _);
+                _logger.LogDebug("Removed email mapping for {Email} during sign out", tokenInfo.Email);
+            }
+            else
+            {
+                // Try to get email from session or cookie to remove email mapping
+                try
+                {
+                    var sessionEmail = httpContext?.Session?.GetString("AdminEmail");
+                    if (string.IsNullOrEmpty(sessionEmail))
+                    {
+                        sessionEmail = httpContext?.Request.Cookies["AdminEmail"];
+                    }
+                    if (!string.IsNullOrEmpty(sessionEmail))
+                    {
+                        _emailToToken.TryRemove(sessionEmail.ToLower().Trim(), out _);
+                    }
+                }
+                catch
+                {
+                    // Email lookup failed - that's OK
+                }
             }
             
             // Clear session data
