@@ -332,7 +332,26 @@ namespace AmesaBackend.Admin.Services
                     return true;
                 }
                 
-                // Set session values (will throw if response has started, but we checked above)
+                // DOUBLE-CHECK: Response might have started between our check and SetString
+                // Check again right before SetString
+                if (httpContext.Response.HasStarted)
+                {
+                    _logger.LogWarning("Response started between HasStarted check and SetString for user {Email}. Using cookie fallback.", email);
+                    var cookieOptions = new CookieOptions
+                    {
+                        HttpOnly = true,
+                        Secure = !httpContext.Request.IsHttps ? false : true,
+                        SameSite = SameSiteMode.Lax,
+                        Expires = DateTimeOffset.UtcNow.AddHours(2)
+                    };
+                    
+                    httpContext.Response.Cookies.Append("AdminEmail", email, cookieOptions);
+                    httpContext.Response.Cookies.Append("AdminLoginTime", DateTime.UtcNow.ToString("O"), cookieOptions);
+                    _logger.LogInformation("Authentication state stored in cookies (HasStarted recheck fallback) for user {Email}", email);
+                    return true;
+                }
+                
+                // Set session values (will throw if response has started, but we checked above and again just now)
                 try
                 {
                     httpContext.Session.SetString("AdminEmail", email);
