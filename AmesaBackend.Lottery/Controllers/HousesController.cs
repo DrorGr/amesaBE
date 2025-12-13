@@ -613,6 +613,61 @@ namespace AmesaBackend.Lottery.Controllers
             }
         }
 
+        /// <summary>
+        /// Get available tickets for a house
+        /// GET /api/v1/houses/{id}/tickets
+        /// </summary>
+        [HttpGet("{id}/tickets")]
+        public async Task<ActionResult<AmesaBackend.Lottery.DTOs.ApiResponse<object>>> GetAvailableTickets(Guid id)
+        {
+            try
+            {
+                var house = await _context.Houses
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(h => h.Id == id);
+                
+                if (house == null)
+                {
+                    return NotFound(new AmesaBackend.Lottery.DTOs.ApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "House not found"
+                    });
+                }
+
+                var ticketsSold = await _context.LotteryTickets
+                    .CountAsync(t => t.HouseId == id && t.Status == "Active");
+
+                var availableTickets = house.TotalTickets - ticketsSold;
+
+                return Ok(new AmesaBackend.Lottery.DTOs.ApiResponse<object>
+                {
+                    Success = true,
+                    Data = new
+                    {
+                        TotalTickets = house.TotalTickets,
+                        TicketsSold = ticketsSold,
+                        AvailableTickets = availableTickets,
+                        TicketPrice = house.TicketPrice,
+                        CanPurchase = availableTickets > 0 && house.Status == "Active"
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving available tickets for house {HouseId}", id);
+                return StatusCode(500, new AmesaBackend.Lottery.DTOs.ApiResponse<object>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "INTERNAL_ERROR",
+                        Message = "An error occurred while retrieving ticket information"
+                    }
+                });
+            }
+        }
+
         [HttpGet("{id}/inventory")]
         public async Task<ActionResult<AmesaBackend.Lottery.DTOs.ApiResponse<InventoryStatus>>> GetInventory(Guid id)
         {

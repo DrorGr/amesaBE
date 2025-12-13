@@ -413,21 +413,73 @@ stripe-secret*.json
 AmesaBackend.DatabaseSeeder/
 **/DatabaseSeeder.cs
 
-# PowerShell scripts
+# ============================================
+# POWERSHELL SCRIPTS
+# ============================================
+# Ignore PowerShell scripts in root, but allow infrastructure/deployment scripts
 *.ps1
+!BE/Infrastructure/**/*.ps1
+!BE/scripts/**/*.ps1
+!MetaData/Scripts/**/*.ps1
+!Infrastructure/**/*.ps1
 
+# ============================================
+# SQL SCRIPTS
+# ============================================
+# Ignore temporary SQL files in root, but allow migration and infrastructure scripts
+*.sql
+# Allow Entity Framework migrations
+!**/Migrations/**/*.sql
+# Allow infrastructure SQL scripts
+!BE/Infrastructure/sql/**/*.sql
+!Infrastructure/sql/**/*.sql
+!MetaData/Scripts/Database/**/*.sql
+!MetaData/Documentation/Database/Migrations/**/*.sql
+# Allow service-specific migration scripts
+!**/Infrastructure/**/*.sql
+
+# ============================================
+# TERRAFORM FILES (Infrastructure as Code)
+# ============================================
+# Terraform files should be tracked (Infrastructure as Code)
+# Only ignore Terraform state and cache files
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+.terraform/
+.terraform.lock.hcl
+terraform.tfplan
+terraform.tfplan.json
+*.tfplan
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# ============================================
+# DOCUMENTATION FILES
+# ============================================
 # Documentation files
 *.md
 *.txt
+# Allow README files
+!README.md
+!**/README.md
+# Allow documentation in MetaData
+!MetaData/**/*.md
+!MetaData/**/*.txt
 
-# Cursor rules and context files
+# ============================================
+# CURSOR RULES AND CONTEXT FILES
+# ============================================
 .cursorrules
 *.cursorrules
+.cursorignore
 
-# SQL scripts (unless part of migrations in code)
-*.sql
-!**/Migrations/**/*.sql
-
-# Infrastructure documentation
+# ============================================
+# INFRASTRUCTURE DOCUMENTATION
+# ============================================
 Infrastructure/**/*.md
 Infrastructure/**/*.txt
