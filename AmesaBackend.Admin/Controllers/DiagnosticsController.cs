@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using AmesaBackend.Admin.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace AmesaBackend.Admin.Controllers
 {
