@@ -34,7 +34,7 @@ namespace AmesaBackend.Lottery.Services
         Task<ValidateTicketsResponse> ValidateTicketsAsync(ValidateTicketsRequest request);
         
         // Payment processing for Quick Entry
-        Task<PaymentProcessResult> ProcessLotteryPaymentAsync(Guid userId, Guid houseId, int ticketCount, Guid paymentMethodId);
+        Task<PaymentProcessResult> ProcessLotteryPaymentAsync(Guid userId, Guid houseId, int ticketCount, Guid paymentMethodId, decimal totalCost);
         
         // Product creation for houses
         Task<Guid?> CreateProductForHouseAsync(Guid houseId, string houseTitle, decimal ticketPrice, Guid? createdBy);

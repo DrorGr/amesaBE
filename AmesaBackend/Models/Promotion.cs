@@ -3,7 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace AmesaBackend.Models
 {
-    [Table("promotions")]
+    [Table("promotions", Schema = "amesa_admin")]
     public class Promotion
     {
         [Key]
@@ -57,7 +57,7 @@ namespace AmesaBackend.Models
         public virtual ICollection<UserPromotion> UserPromotions { get; set; } = new List<UserPromotion>();
     }
 
-    [Table("user_promotions")]
+    [Table("user_promotions", Schema = "amesa_admin")]
     public class UserPromotion
     {
         [Key]

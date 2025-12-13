@@ -41,6 +41,9 @@ namespace AmesaBackend.Lottery.DTOs
 
         [Required]
         public Guid PaymentMethodId { get; set; }
+
+        [StringLength(50)]
+        public string? PromotionCode { get; set; }
     }
 
     /// <summary>
@@ -49,7 +52,10 @@ namespace AmesaBackend.Lottery.DTOs
     public class QuickEntryResponse
     {
         public int TicketsPurchased { get; set; } // Fixed: Changed from List<LotteryTicketDto> to int (count) to match API contract
-        public decimal TotalCost { get; set; } // Fixed: Changed from "TotalAmount" to "TotalCost"
+        public decimal TotalCost { get; set; } // Final cost after discount
+        public decimal OriginalCost { get; set; } // Cost before discount
+        public decimal DiscountAmount { get; set; } // Discount applied
+        public string? PromotionCode { get; set; } // Promotion code used (if any)
         public List<string> TicketNumbers { get; set; } = new(); // Fixed: Added TicketNumbers array
         public string TransactionId { get; set; } = string.Empty;
         public string Message { get; set; } = string.Empty;
@@ -139,6 +145,9 @@ namespace AmesaBackend.Lottery.DTOs
         
         [Required]
         public Guid PaymentMethodId { get; set; }
+        
+        [StringLength(50)]
+        public string? PromotionCode { get; set; }
     }
 
     /// <summary>
@@ -147,7 +156,10 @@ namespace AmesaBackend.Lottery.DTOs
     public class PurchaseTicketsResponse
     {
         public int TicketsPurchased { get; set; }
-        public decimal TotalCost { get; set; }
+        public decimal TotalCost { get; set; } // Final cost after discount
+        public decimal OriginalCost { get; set; } // Cost before discount
+        public decimal DiscountAmount { get; set; } // Discount applied
+        public string? PromotionCode { get; set; } // Promotion code used
         public List<string> TicketNumbers { get; set; } = new();
         public string TransactionId { get; set; } = string.Empty;
         public Guid PaymentId { get; set; }

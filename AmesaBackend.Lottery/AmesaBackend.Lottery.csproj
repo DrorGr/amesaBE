@@ -21,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\AmesaBackend.Shared\AmesaBackend.Shared.csproj" />
     <ProjectReference Include="..\AmesaBackend.Auth\AmesaBackend.Auth.csproj" />
+    <ProjectReference Include="..\AmesaBackend\AmesaBackend.csproj" />
   </ItemGroup>
 
   <!-- Exclude appsettings.json from referenced Auth project during publish -->

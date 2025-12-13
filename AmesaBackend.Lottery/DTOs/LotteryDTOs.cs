@@ -174,21 +174,6 @@ namespace AmesaBackend.Lottery.DTOs
         public DateTime CreatedAt { get; set; }
     }
 
-    public class PurchaseTicketRequest
-    {
-        [Required]
-        public Guid HouseId { get; set; }
-
-        [Required]
-        [Range(1, 100)]
-        public int Quantity { get; set; } = 1;
-
-        [Required]
-        public Guid PaymentMethodId { get; set; }
-
-        [StringLength(50)]
-        public string? PromotionCode { get; set; }
-    }
 
     public class LotteryDrawDto
     {

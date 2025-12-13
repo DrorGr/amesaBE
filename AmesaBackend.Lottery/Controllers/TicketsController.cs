@@ -22,19 +22,22 @@ namespace AmesaBackend.Lottery.Controllers
         private readonly LotteryDbContext _context;
         private readonly ICache? _cache;
         private readonly IEventPublisher? _eventPublisher;
+        private readonly IPromotionService? _promotionService;
 
         public TicketsController(
             ILotteryService lotteryService, 
             ILogger<TicketsController> logger,
             LotteryDbContext context,
             ICache? cache = null,
-            IEventPublisher? eventPublisher = null)
+            IEventPublisher? eventPublisher = null,
+            IPromotionService? promotionService = null)
         {
             _lotteryService = lotteryService;
             _logger = logger;
             _context = context;
             _cache = cache;
             _eventPublisher = eventPublisher;
+            _promotionService = promotionService;
         }
 
         [HttpGet]
@@ -330,7 +333,50 @@ namespace AmesaBackend.Lottery.Controllers
                     });
                 }
 
-                var totalCost = house.TicketPrice * request.TicketCount;
+                var originalTotalCost = house.TicketPrice * request.TicketCount;
+                var totalCost = originalTotalCost;
+                decimal discountAmount = 0;
+                Guid? appliedPromotionId = null;
+
+                // Validate and apply promotion code if provided
+                if (!string.IsNullOrWhiteSpace(request.PromotionCode) && _promotionService != null)
+                {
+                    var validation = await _promotionService.ValidatePromotionAsync(new ValidatePromotionRequest
+                    {
+                        Code = request.PromotionCode,
+                        UserId = userId,
+                        HouseId = request.HouseId,
+                        Amount = originalTotalCost
+                    });
+
+                    if (!validation.IsValid)
+                    {
+                        return BadRequest(new AmesaBackend.Lottery.DTOs.ApiResponse<QuickEntryResponse>
+                        {
+                            Success = false,
+                            Message = validation.Message ?? "Invalid promotion code",
+                            Error = new ErrorResponse 
+                            { 
+                                Code = validation.ErrorCode ?? "PROMOTION_CODE_INVALID",
+                                Message = validation.Message ?? "The provided promotion code is not valid or applicable."
+                            }
+                        });
+                    }
+
+                    discountAmount = validation.DiscountAmount;
+                    appliedPromotionId = validation.Promotion?.Id;
+                    totalCost -= discountAmount;
+
+                    // Ensure total cost is not negative
+                    if (totalCost < 0)
+                    {
+                        totalCost = 0;
+                    }
+
+                    _logger.LogInformation(
+                        "Promotion {PromotionCode} applied to quick entry: Original cost {OriginalCost}, Discount {Discount}, Final cost {FinalCost}",
+                        request.PromotionCode, originalTotalCost, discountAmount, totalCost);
+                }
 
                 // Check participant cap
                 // NOTE: CanUserEnterLotteryAsync uses transaction safety (Serializable isolation) when useTransaction=true (default)
@@ -352,7 +398,7 @@ namespace AmesaBackend.Lottery.Controllers
                 }
 
                 // Process payment via Payment service
-                var paymentResult = await _lotteryService.ProcessLotteryPaymentAsync(userId, request.HouseId, request.TicketCount, request.PaymentMethodId);
+                var paymentResult = await _lotteryService.ProcessLotteryPaymentAsync(userId, request.HouseId, request.TicketCount, request.PaymentMethodId, totalCost);
                 
                 if (!paymentResult.Success)
                 {
@@ -379,6 +425,41 @@ namespace AmesaBackend.Lottery.Controllers
                 };
 
                 var ticketsResult = await _lotteryService.CreateTicketsFromPaymentAsync(createTicketsRequest);
+
+                // Record promotion usage if promotion was applied
+                if (appliedPromotionId.HasValue && !string.IsNullOrWhiteSpace(request.PromotionCode) && _promotionService != null)
+                {
+                    try
+                    {
+                        await _promotionService.ApplyPromotionAsync(new ApplyPromotionRequest
+                        {
+                            Code = request.PromotionCode,
+                            UserId = userId,
+                            HouseId = request.HouseId,
+                            Amount = originalTotalCost, // Original amount before discount
+                            DiscountAmount = discountAmount,
+                            TransactionId = paymentResult.TransactionId
+                        });
+                        _logger.LogInformation("Promotion {PromotionCode} usage recorded for user {UserId} with transaction {TransactionId}",
+                            request.PromotionCode, userId, paymentResult.TransactionId);
+                    }
+                    catch (Exception ex)
+                    {
+                        // CRITICAL: Promotion discount was applied but usage not recorded
+                        // This creates data inconsistency - discount given but not tracked
+                        // Log as error with high severity for monitoring and manual reconciliation
+                        _logger.LogError(ex,
+                            "CRITICAL: Failed to record promotion usage after successful payment. " +
+                            "Promotion {PromotionCode} discount {DiscountAmount} was applied to transaction {TransactionId} " +
+                            "for user {UserId} but usage was not recorded. Manual reconciliation required.",
+                            request.PromotionCode, discountAmount, paymentResult.TransactionId, userId);
+                        
+                        // TODO: Consider implementing compensation logic:
+                        // 1. Create audit record for manual reconciliation
+                        // 2. Or attempt to reverse the discount (complex - would require payment service integration)
+                        // 3. Or mark transaction for review
+                    }
+                }
 
                 // Publish event for real-time updates
                 if (_eventPublisher != null)
@@ -410,7 +491,10 @@ namespace AmesaBackend.Lottery.Controllers
                 var response = new QuickEntryResponse
                 {
                     TicketsPurchased = ticketsResult.TicketsPurchased,
+                    OriginalCost = originalTotalCost,
+                    DiscountAmount = discountAmount,
                     TotalCost = totalCost,
+                    PromotionCode = request.PromotionCode,
                     TicketNumbers = ticketsResult.TicketNumbers,
                     TransactionId = paymentResult.TransactionId.ToString(),
                     Message = "Tickets purchased successfully"

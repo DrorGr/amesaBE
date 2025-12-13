@@ -911,7 +911,8 @@ namespace AmesaBackend.Lottery.Services
             Guid userId,
             Guid houseId,
             int ticketCount,
-            Guid paymentMethodId)
+            Guid paymentMethodId,
+            decimal totalCost)
         {
             if (_httpRequest == null || _configuration == null)
             {
@@ -923,7 +924,7 @@ namespace AmesaBackend.Lottery.Services
                 // Check identity verification requirement (mandatory for ticket purchases)
                 await CheckVerificationRequirementAsync(userId);
 
-                // Get house to calculate price (read-only query - use AsNoTracking for performance)
+                // Get house for description (read-only query - use AsNoTracking for performance)
                 var house = await _context.Houses
                     .AsNoTracking()
                     .FirstOrDefaultAsync(h => h.Id == houseId);
@@ -932,7 +933,8 @@ namespace AmesaBackend.Lottery.Services
                     throw new KeyNotFoundException("House not found");
                 }
 
-                var totalCost = house.TicketPrice * ticketCount;
+                // Use passed totalCost parameter (already includes discount if applicable)
+                // Do NOT recalculate - totalCost is passed from controller with discount applied
 
                 // Get payment service URL
                 var paymentServiceUrl = _configuration["PaymentService:BaseUrl"] 
