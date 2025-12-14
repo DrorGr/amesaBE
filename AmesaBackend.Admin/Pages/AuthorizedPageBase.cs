@@ -19,18 +19,20 @@ namespace AmesaBackend.Admin.Pages
         protected override void OnInitialized()
         {
             // SECURITY: Check authentication before rendering any protected content
+            // CRITICAL: Use regular navigation (not forceLoad) to maintain SignalR connection
+            // forceLoad: true creates new HTTP request, breaking authentication state
             try
             {
                 if (!AuthService.IsAuthenticated())
                 {
-                    Navigation.NavigateTo("/login", forceLoad: true);
+                    Navigation.NavigateTo("/login");
                     return;
                 }
             }
             catch (Exception)
             {
                 // If authentication check fails, redirect to login
-                Navigation.NavigateTo("/login", forceLoad: true);
+                Navigation.NavigateTo("/login");
                 return;
             }
 
