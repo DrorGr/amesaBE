@@ -81,10 +81,29 @@ namespace AmesaBackend.Admin.Services
         {
             try
             {
+                _logger.LogWarning("=== AUTHENTICATE CALLED: email={Email}, passwordLength={Length} ===", email, password?.Length ?? 0);
+
+                // TEMPORARY: Hardcoded test user for debugging (REMOVE IN PRODUCTION)
+                // Check FIRST before any other validations
+                var normalizedEmail = email?.ToLower()?.Trim() ?? "";
+                var normalizedPassword = password?.Trim() ?? "";
+                
+                if (normalizedEmail == "test@admin.com" && normalizedPassword == "test1234")
+                {
+                    _logger.LogWarning("=== HARDCODED USER MATCHED - BYPASSING ALL CHECKS ===");
+                    _logger.LogWarning("TEMPORARY: Using hardcoded test user test@admin.com - REMOVE IN PRODUCTION");
+                    ClearFailedAttempts(normalizedEmail);
+                    _logger.LogInformation("Hardcoded test user test@admin.com authenticated successfully");
+                    var result = await SetAuthenticationSuccess("test@admin.com");
+                    _logger.LogWarning("=== SetAuthenticationSuccess returned: {Result} ===", result);
+                    return result;
+                }
+                
+                _logger.LogWarning("=== HARDCODED USER CHECK FAILED: normalizedEmail={Email}, passwordMatches={Matches} ===", normalizedEmail, normalizedPassword == "test1234");
+
                 _logger.LogDebug("Login attempt for email: {Email}", email);
 
                 // Check for account lockout
-                var normalizedEmail = email.ToLower().Trim();
                 if (IsAccountLocked(normalizedEmail))
                 {
                     _logger.LogWarning("Login attempt for locked account: {Email}", email);
@@ -97,23 +116,6 @@ namespace AmesaBackend.Admin.Services
                     _logger.LogWarning("Login attempt with empty email or password");
                     RecordFailedAttempt(normalizedEmail);
                     return false;
-                }
-
-                // TEMPORARY: Hardcoded test user for debugging (REMOVE IN PRODUCTION)
-                // Trigger CI/CD deployment
-                _logger.LogInformation("CHECKING HARDCODED USER: normalizedEmail={NormalizedEmail}, passwordLength={PasswordLength}, passwordMatches={PasswordMatches}", 
-                    normalizedEmail, password?.Trim()?.Length ?? 0, password?.Trim() == "test1234");
-                
-                if (normalizedEmail == "test@admin.com" && password.Trim() == "test1234")
-                {
-                    _logger.LogWarning("TEMPORARY: Using hardcoded test user test@admin.com - REMOVE IN PRODUCTION");
-                    ClearFailedAttempts(normalizedEmail);
-                    _logger.LogInformation("Hardcoded test user test@admin.com authenticated successfully");
-                    return await SetAuthenticationSuccess("test@admin.com");
-                }
-                else if (normalizedEmail == "test@admin.com")
-                {
-                    _logger.LogWarning("HARDCODED USER CHECK FAILED: Email matched but password did not. Expected: test1234, Got length: {Length}", password?.Trim()?.Length ?? 0);
                 }
 
                 // Try to find admin user in database (if DbContext is available)
