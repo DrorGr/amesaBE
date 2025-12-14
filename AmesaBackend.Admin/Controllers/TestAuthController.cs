@@ -5,6 +5,7 @@ namespace AmesaBackend.Admin.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [AllowAnonymous] // Allow anonymous access for testing
     public class TestAuthController : ControllerBase
     {
         private readonly IAdminAuthService _authService;
