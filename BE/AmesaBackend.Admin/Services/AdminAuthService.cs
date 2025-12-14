@@ -321,6 +321,28 @@ namespace AmesaBackend.Admin.Services
                 return false;
             }
             
+            // CRITICAL: Access session EARLY to ensure session cookie is set before response starts
+            // This must happen BEFORE we try to write to session, so the cookie is available for subsequent requests
+            string? sessionId = null;
+            if (httpContext.Session != null)
+            {
+                try
+                {
+                    // Force session load early to set session cookie
+                    if (!httpContext.Session.IsAvailable)
+                    {
+                        await httpContext.Session.LoadAsync();
+                    }
+                    // Access Session.Id to ensure session cookie is set
+                    sessionId = httpContext.Session.Id;
+                    _logger.LogWarning("Early session access: Session ID {SessionId} retrieved for user {Email}", sessionId, email);
+                }
+                catch (Exception earlySessionEx)
+                {
+                    _logger.LogWarning(earlySessionEx, "Failed to access session early for user {Email}, but continuing", email);
+                }
+            }
+            
             // ALWAYS generate and store token in memory (works even when response has started)
             var token = GenerateSecureToken();
             var tokenInfo = new AuthTokenInfo
@@ -333,46 +355,33 @@ namespace AmesaBackend.Admin.Services
             
             // Map session ID to token (fallback mechanism when cookies can't be set)
             // Session ID persists across requests via ASP.NET Core session cookie
-            // CRITICAL: Ensure session is accessed early to set session cookie
             try
             {
-                if (httpContext.Session != null)
+                if (!string.IsNullOrEmpty(sessionId))
                 {
-                    // CRITICAL FIX: Load session BEFORE response starts to ensure session cookie is set
-                    // This must happen as early as possible in the authentication flow
-                    string? sessionId = null;
+                    _sessionIdToToken[sessionId] = token;
+                    _logger.LogWarning("Mapped session ID {SessionId} to token for user {Email}", sessionId, email);
+                }
+                else if (httpContext.Session != null)
+                {
+                    // Fallback: Try to get session ID again if we didn't get it earlier
                     try
                     {
-                        // Always try to load session to ensure cookie is set
                         if (!httpContext.Session.IsAvailable)
                         {
                             await httpContext.Session.LoadAsync();
                         }
-                        // Access session to ensure cookie is set (even if we can't write to it)
                         sessionId = httpContext.Session.Id;
-                        
-                        // Force session cookie to be sent by accessing session
-                        // This ensures session ID persists across requests even with forceLoad
-                        await httpContext.Session.LoadAsync();
                     }
-                    catch (Exception sessionLoadEx)
+                    catch
                     {
-                        // If session load fails, try to get ID anyway
-                        try
-                        {
-                            sessionId = httpContext.Session.Id;
-                        }
-                        catch
-                        {
-                            // Session ID unavailable - that's OK, we'll use other methods
-                            _logger.LogWarning("Could not retrieve session ID for token mapping: {Error}", sessionLoadEx.Message);
-                        }
+                        // Session ID unavailable - that's OK, we'll use other methods
                     }
                     
                     if (!string.IsNullOrEmpty(sessionId))
                     {
                         _sessionIdToToken[sessionId] = token;
-                        _logger.LogWarning("Mapped session ID {SessionId} to token for user {Email}", sessionId, email);
+                        _logger.LogInformation("Mapped session ID {SessionId} to token for user {Email}", sessionId, email);
                     }
                     else
                     {
@@ -381,17 +390,13 @@ namespace AmesaBackend.Admin.Services
                     
                     // Also map email to token (additional fallback - if we can get email from session/cookie, we can find token)
                     _emailToToken[email.ToLower().Trim()] = token;
-                    _logger.LogWarning("Mapped email {Email} to token for user", email);
-                }
-                else
-                {
-                    _logger.LogWarning("Session is null for user {Email}. Token stored in cache but session ID mapping unavailable.", email);
+                    _logger.LogInformation("Mapped email {Email} to token for user", email);
                 }
             }
             catch (Exception sessionIdEx)
             {
                 // Session ID mapping failed - log but don't fail authentication
-                _logger.LogWarning(sessionIdEx, "Failed to map session ID to token for user {Email}. Token is still stored in cache.", email);
+                _logger.LogDebug(sessionIdEx, "Failed to map session ID to token for user {Email}. Token is still stored in cache.", email);
             }
             
             // Clean up expired tokens (simple cleanup - remove tokens older than expiry)
