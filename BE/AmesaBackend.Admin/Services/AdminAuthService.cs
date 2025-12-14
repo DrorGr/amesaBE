@@ -8,6 +8,7 @@ using BCrypt.Net;
 using AmesaBackend.Auth.Services;
 using System.Collections.Concurrent;
 using System.Linq;
+using System;
 
 namespace AmesaBackend.Admin.Services
 {
@@ -449,6 +450,19 @@ namespace AmesaBackend.Admin.Services
             
             // Always return true if token was stored in memory (which it always is)
             _logger.LogInformation("Authentication state stored successfully for user {Email} (token cache). Token: {TokenPrefix}..., Session/Cookie storage attempted but may have failed if response started.", email, token?.Substring(0, Math.Min(8, token?.Length ?? 0)) ?? "null");
+            
+            // CRITICAL FIX: Store token in response headers so JavaScript can read it
+            // This works even when response has started (headers can be modified)
+            try
+            {
+                httpContext.Response.Headers.Append("X-Admin-Auth-Token", token);
+                _logger.LogInformation("Token stored in response header X-Admin-Auth-Token for client-side retrieval");
+            }
+            catch (Exception headerEx)
+            {
+                _logger.LogWarning(headerEx, "Failed to store token in response header. Client may need to use session ID mapping.");
+            }
+            
             return true;
         }
         
@@ -521,10 +535,26 @@ namespace AmesaBackend.Admin.Services
                 return token;
             }
             
-            // Try to get token from header (for API calls)
+            // Try to get token from header (for API calls or client-side storage)
             if (httpContext.Request.Headers.TryGetValue(AuthTokenHeaderName, out var headerToken))
             {
-                return headerToken.ToString();
+                var tokenValue = headerToken.ToString();
+                if (!string.IsNullOrEmpty(tokenValue))
+                {
+                    _logger.LogInformation("GetAuthTokenFromRequest: Found token in header X-Admin-Auth-Token");
+                    return tokenValue;
+                }
+            }
+            
+            // Also check X-Admin-Auth-Token header (alternative name for client-side)
+            if (httpContext.Request.Headers.TryGetValue("X-Admin-Auth-Token", out var altHeaderToken))
+            {
+                var tokenValue = altHeaderToken.ToString();
+                if (!string.IsNullOrEmpty(tokenValue))
+                {
+                    _logger.LogInformation("GetAuthTokenFromRequest: Found token in header X-Admin-Auth-Token (alt)");
+                    return tokenValue;
+                }
             }
             
             // Try to get token from session storage (if available)
@@ -551,9 +581,23 @@ namespace AmesaBackend.Admin.Services
             {
                 try
                 {
-                    // Session ID should be available even if session isn't fully loaded
-                    // But wrap in try-catch as Session.Id might throw if session not initialized
+                    // Ensure session is loaded to get Session.Id
+                    // This is critical - Session.Id may not be available until session is loaded
+                    if (!httpContext.Session.IsAvailable)
+                    {
+                        try
+                        {
+                            // Try to load session synchronously
+                            httpContext.Session.LoadAsync().GetAwaiter().GetResult();
+                        }
+                        catch
+                        {
+                            // Session load failed - Session.Id might still work
+                        }
+                    }
+                    
                     var sessionId = httpContext.Session.Id;
+                    _logger.LogInformation("GetAuthTokenFromRequest: Checking session ID {SessionId} for token mapping", sessionId);
                     if (!string.IsNullOrEmpty(sessionId) && _sessionIdToToken.TryGetValue(sessionId, out token))
                     {
                         // Verify token still exists and is valid
@@ -696,8 +740,12 @@ namespace AmesaBackend.Admin.Services
                 var httpContext = _httpContextAccessor.HttpContext;
                 if (httpContext == null)
                 {
+                    _logger.LogWarning("IsAuthenticated: HttpContext is null");
                     return false;
                 }
+                
+                _logger.LogWarning("IsAuthenticated: Checking authentication. Session available: {IsAvailable}, Session ID: {SessionId}", 
+                    httpContext.Session?.IsAvailable ?? false, httpContext.Session?.Id ?? "null");
                 
                 // PRIMARY: Check token cache (works even when response started)
                 var token = GetAuthTokenFromRequest();
@@ -708,14 +756,14 @@ namespace AmesaBackend.Admin.Services
                         // Check if token is expired
                         if (tokenInfo.ExpiresAt > DateTime.UtcNow)
                         {
-                            _logger.LogDebug("IsAuthenticated: Token found and valid for user {Email}", tokenInfo.Email);
+                            _logger.LogWarning("IsAuthenticated: Token found and valid for user {Email}", tokenInfo.Email);
                             return true;
                         }
                         else
                         {
                             // Token expired - remove it
                             _authTokens.TryRemove(token, out _);
-                            _logger.LogInformation("Authentication token expired for user {Email}", tokenInfo.Email);
+                            _logger.LogWarning("Authentication token expired for user {Email}", tokenInfo.Email);
                         }
                     }
                     else
@@ -725,7 +773,26 @@ namespace AmesaBackend.Admin.Services
                 }
                 else
                 {
-                    _logger.LogDebug("IsAuthenticated: No token found in request (cookie/header/session/sessionId/email lookup all failed)");
+                    _logger.LogWarning("IsAuthenticated: No token found in request (cookie/header/session/sessionId/email lookup all failed). Total tokens in cache: {TokenCount}", _authTokens.Count);
+                    
+                    // Debug: Log what's in the cache
+                    if (_authTokens.Count > 0)
+                    {
+                        foreach (var kvp in _authTokens.Take(3))
+                        {
+                            _logger.LogWarning("IsAuthenticated: Cache contains token for {Email}, expires at {ExpiresAt}", kvp.Value.Email, kvp.Value.ExpiresAt);
+                        }
+                    }
+                    
+                    // Debug: Log session ID mappings
+                    if (_sessionIdToToken.Count > 0)
+                    {
+                        _logger.LogWarning("IsAuthenticated: {MappingCount} session ID mappings exist", _sessionIdToToken.Count);
+                        foreach (var kvp in _sessionIdToToken.Take(3))
+                        {
+                            _logger.LogWarning("IsAuthenticated: Session ID {SessionId} maps to token", kvp.Key);
+                        }
+                    }
                 }
                 
                 // SECONDARY: Check session (preferred if available)

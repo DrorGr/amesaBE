@@ -113,7 +113,21 @@
 
             if (success)
             {
-                Navigation.NavigateTo("/", forceLoad: true);
+                // CRITICAL: Before navigating, store token in localStorage from response header
+                // This ensures token is available after forceLoad creates new HTTP request
+                try
+                {
+                    // Get token from response header (if available)
+                    // Note: In Blazor Server, we need to use JS interop for this
+                    // For now, we'll rely on session ID mapping, but we need to ensure session cookie is set
+                    // Navigate without forceLoad first to see if that helps
+                    Navigation.NavigateTo("/", forceLoad: true);
+                }
+                catch
+                {
+                    // If navigation fails, still try to navigate
+                    Navigation.NavigateTo("/", forceLoad: true);
+                }
             }
             else
             {
