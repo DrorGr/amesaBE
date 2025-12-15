@@ -4,6 +4,7 @@
 @using AmesaBackend.Admin.DTOs
 @inject ITranslationsService TranslationsService
 @inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
 
 <PageTitle>Translations - Amesa Admin</PageTitle>
 
@@ -91,6 +92,7 @@
                                 <th>Value</th>
                                 <th>Updated</th>
                                 <th>Created</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -107,6 +109,16 @@
                                     <td>@translation.Value</td>
                                     <td>@translation.UpdatedAt.ToString("yyyy-MM-dd HH:mm")</td>
                                     <td>@translation.CreatedAt.ToString("yyyy-MM-dd")</td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            <button class="btn btn-outline-primary" @onclick="() => ShowEditModal(translation)" title="Edit">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            <button class="btn btn-outline-danger" @onclick="() => ShowDeleteModal(translation)" title="Delete">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </div>
+                                    </td>
                                 </tr>
                             }
                         </tbody>
@@ -204,5 +216,123 @@
     {
         currentPage = page;
         await LoadTranslations();
+    }
+
+    private void ShowCreateModal()
+    {
+        isEditing = false;
+        editKey = string.Empty;
+        editLanguageCode = string.Empty;
+        editCategory = string.Empty;
+        editValue = string.Empty;
+        showTranslationModal = true;
+    }
+
+    private void ShowEditModal(TranslationDto translation)
+    {
+        isEditing = true;
+        editKey = translation.Key;
+        editLanguageCode = translation.LanguageCode;
+        editCategory = translation.Category;
+        editValue = translation.Value;
+        showTranslationModal = true;
+    }
+
+    private void CloseTranslationModal()
+    {
+        showTranslationModal = false;
+        isEditing = false;
+        editKey = string.Empty;
+        editLanguageCode = string.Empty;
+        editCategory = string.Empty;
+        editValue = string.Empty;
+    }
+
+    private async Task SaveTranslation()
+    {
+        if (string.IsNullOrWhiteSpace(editKey) || string.IsNullOrWhiteSpace(editLanguageCode) || string.IsNullOrWhiteSpace(editValue))
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "Please fill in all required fields.");
+            return;
+        }
+
+        isSaving = true;
+        try
+        {
+            if (isEditing)
+            {
+                var updateRequest = new UpdateTranslationRequest
+                {
+                    Value = editValue,
+                    Category = string.IsNullOrWhiteSpace(editCategory) ? null : editCategory
+                };
+                await TranslationsService.UpdateTranslationAsync(editKey, editLanguageCode, updateRequest);
+                await JSRuntime.InvokeVoidAsync("alert", "Translation updated successfully!");
+            }
+            else
+            {
+                var createRequest = new CreateTranslationRequest
+                {
+                    Key = editKey,
+                    LanguageCode = editLanguageCode,
+                    Category = string.IsNullOrWhiteSpace(editCategory) ? "common" : editCategory,
+                    Value = editValue
+                };
+                await TranslationsService.CreateTranslationAsync(createRequest);
+                await JSRuntime.InvokeVoidAsync("alert", "Translation created successfully!");
+            }
+            CloseTranslationModal();
+            await LoadLanguagesAndCategories(); // Refresh languages/categories in case new ones were added
+            await LoadTranslations(); // Refresh the list
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error saving translation: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", $"Error saving translation: {ex.Message}");
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void ShowDeleteModal(TranslationDto translation)
+    {
+        deleteKey = translation.Key;
+        deleteLanguageCode = translation.LanguageCode;
+        deleteValue = translation.Value;
+        showDeleteModal = true;
+    }
+
+    private void CloseDeleteModal()
+    {
+        showDeleteModal = false;
+        deleteKey = string.Empty;
+        deleteLanguageCode = string.Empty;
+        deleteValue = string.Empty;
+    }
+
+    private async Task ConfirmDelete()
+    {
+        if (string.IsNullOrWhiteSpace(deleteKey) || string.IsNullOrWhiteSpace(deleteLanguageCode))
+            return;
+
+        isDeleting = true;
+        try
+        {
+            await TranslationsService.DeleteTranslationAsync(deleteKey, deleteLanguageCode);
+            await JSRuntime.InvokeVoidAsync("alert", "Translation deleted successfully!");
+            CloseDeleteModal();
+            await LoadTranslations(); // Refresh the list
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error deleting translation: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", $"Error deleting translation: {ex.Message}");
+        }
+        finally
+        {
+            isDeleting = false;
+        }
     }
 }

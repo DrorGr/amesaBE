@@ -4,6 +4,7 @@
 @using AmesaBackend.Admin.DTOs
 @inject IPaymentsService PaymentsService
 @inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
 
 <PageTitle>Payments - Amesa Admin</PageTitle>
 
@@ -21,7 +22,11 @@
     <div class="card mb-4">
         <div class="card-body">
             <div class="row g-3">
-                <div class="col-md-3">
+                <div class="col-md-2">
+                    <label class="form-label">User ID</label>
+                    <input type="text" class="form-control" @bind="userIdFilter" placeholder="User ID (UUID)" />
+                </div>
+                <div class="col-md-2">
                     <label class="form-label">Status</label>
                     <select class="form-select" @bind="statusFilter">
                         <option value="">All Statuses</option>
@@ -31,7 +36,7 @@
                         <option value="Refunded">Refunded</option>
                     </select>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-2">
                     <label class="form-label">Type</label>
                     <select class="form-select" @bind="typeFilter">
                         <option value="">All Types</option>
@@ -82,6 +87,7 @@
                                 <th>Reference ID</th>
                                 <th>Processed At</th>
                                 <th>Created</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -111,6 +117,18 @@
                                         }
                                     </td>
                                     <td>@transaction.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                                    <td>
+                                        @if (transaction.Status == "Completed" && transaction.Type == "Payment")
+                                        {
+                                            <button class="btn btn-sm btn-warning" @onclick="() => ShowRefundModal(transaction)" title="Refund">
+                                                <i class="fas fa-undo"></i> Refund
+                                            </button>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">-</span>
+                                        }
+                                    </td>
                                 </tr>
                             }
                         </tbody>
@@ -152,6 +170,46 @@
     }
 </div>
 
+<!-- Refund Confirmation Modal -->
+@if (showRefundModal)
+{
+    <div class="modal fade show" style="display: block;" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Refund Transaction</h5>
+                    <button type="button" class="btn-close" @onclick="CloseRefundModal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to refund this transaction?</p>
+                    <div class="alert alert-info">
+                        <strong>Transaction ID:</strong> @refundTransactionId<br />
+                        <strong>Amount:</strong> @refundCurrency @refundAmount.ToString("F2")<br />
+                        <strong>User ID:</strong> @(refundUserId.ToString().Substring(0, 8) + "...")
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Refund Amount (leave empty for full refund)</label>
+                        <input type="number" class="form-control" step="0.01" min="0" @bind="refundAmountInput" />
+                        <small class="text-muted">Enter amount to partially refund, or leave empty for full refund of @refundCurrency @refundAmount.ToString("F2")</small>
+                    </div>
+                    <p class="text-warning"><strong>This action will create a refund transaction.</strong></p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseRefundModal">Cancel</button>
+                    <button type="button" class="btn btn-warning" @onclick="ConfirmRefund" disabled="@isRefunding">
+                        @if (isRefunding)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                        }
+                        <i class="fas fa-undo"></i> Refund
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
 @code {
     private PagedResult<TransactionDto>? transactions;
     private bool isLoading = true;
@@ -159,6 +217,16 @@
     private int pageSize = 20;
     private string? statusFilter;
     private string? typeFilter;
+    private string? userIdFilter;
+
+    // Refund modal state
+    private bool showRefundModal = false;
+    private bool isRefunding = false;
+    private Guid refundTransactionId;
+    private Guid refundUserId;
+    private decimal refundAmount;
+    private string refundCurrency = string.Empty;
+    private decimal? refundAmountInput;
 
     protected override async Task OnInitializedAsync()
     {
@@ -170,11 +238,17 @@
         isLoading = true;
         try
         {
-            transactions = await PaymentsService.GetTransactionsAsync(currentPage, pageSize, null, statusFilter, typeFilter);
+            Guid? userId = null;
+            if (!string.IsNullOrWhiteSpace(userIdFilter) && Guid.TryParse(userIdFilter, out var parsedUserId))
+            {
+                userId = parsedUserId;
+            }
+            transactions = await PaymentsService.GetTransactionsAsync(currentPage, pageSize, userId, statusFilter, typeFilter);
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error loading transactions: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", $"Error loading transactions: {ex.Message}");
         }
         finally
         {
@@ -208,5 +282,58 @@
             "Refund" => "warning",
             _ => "secondary"
         };
+    }
+
+    private void ShowRefundModal(TransactionDto transaction)
+    {
+        refundTransactionId = transaction.Id;
+        refundUserId = transaction.UserId;
+        refundAmount = transaction.Amount;
+        refundCurrency = transaction.Currency;
+        refundAmountInput = null; // Default to full refund
+        showRefundModal = true;
+    }
+
+    private void CloseRefundModal()
+    {
+        showRefundModal = false;
+        refundTransactionId = Guid.Empty;
+        refundUserId = Guid.Empty;
+        refundAmount = 0;
+        refundCurrency = string.Empty;
+        refundAmountInput = null;
+    }
+
+    private async Task ConfirmRefund()
+    {
+        isRefunding = true;
+        try
+        {
+            // If amount is specified and valid, use it; otherwise use null for full refund
+            decimal? refundAmountToUse = null;
+            if (refundAmountInput.HasValue && refundAmountInput.Value > 0 && refundAmountInput.Value <= refundAmount)
+            {
+                refundAmountToUse = refundAmountInput.Value;
+            }
+            else if (refundAmountInput.HasValue && refundAmountInput.Value > refundAmount)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", $"Refund amount cannot exceed the original transaction amount of {refundCurrency} {refundAmount:F2}");
+                return;
+            }
+
+            await PaymentsService.RefundTransactionAsync(refundTransactionId, refundAmountToUse);
+            await JSRuntime.InvokeVoidAsync("alert", "Transaction refunded successfully!");
+            CloseRefundModal();
+            await LoadTransactions(); // Refresh the list
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error refunding transaction: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", $"Error refunding transaction: {ex.Message}");
+        }
+        finally
+        {
+            isRefunding = false;
+        }
     }
 }

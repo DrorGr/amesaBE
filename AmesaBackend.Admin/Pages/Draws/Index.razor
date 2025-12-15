@@ -22,6 +22,19 @@
         <div class="card-body">
             <div class="row g-3">
                 <div class="col-md-3">
+                    <label class="form-label">House</label>
+                    <select class="form-select" @bind="houseIdFilter">
+                        <option value="">All Houses</option>
+                        @if (houses != null)
+                        {
+                            @foreach (var house in houses)
+                            {
+                                <option value="@house.Id">@house.Title</option>
+                            }
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2">
                     <label class="form-label">Status</label>
                     <select class="form-select" @bind="statusFilter">
                         <option value="">All Statuses</option>
@@ -116,6 +129,18 @@
                                             <span class="text-muted">-</span>
                                         }
                                     </td>
+                                    <td>
+                                        @if (draw.DrawStatus == "Pending")
+                                        {
+                                            <button class="btn btn-sm btn-primary" @onclick="() => ShowConductDrawModal(draw.Id, draw.HouseTitle)" title="Conduct Draw">
+                                                <i class="fas fa-dice"></i> Conduct
+                                            </button>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">-</span>
+                                        }
+                                    </td>
                                 </tr>
                             }
                         </tbody>
@@ -166,7 +191,21 @@
 
     protected override async Task OnInitializedAsync()
     {
+        await LoadHouses();
         await LoadDraws();
+    }
+
+    private async Task LoadHouses()
+    {
+        try
+        {
+            var housesResult = await HousesService.GetHousesAsync(1, 1000); // Get all houses for dropdown
+            houses = housesResult.Items.ToList();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading houses: {ex.Message}");
+        }
     }
 
     private async Task LoadDraws()
@@ -174,11 +213,12 @@
         isLoading = true;
         try
         {
-            draws = await DrawsService.GetDrawsAsync(currentPage, pageSize, null, statusFilter);
+            draws = await DrawsService.GetDrawsAsync(currentPage, pageSize, houseIdFilter, statusFilter);
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error loading draws: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", $"Error loading draws: {ex.Message}");
         }
         finally
         {
@@ -201,5 +241,46 @@
             "Cancelled" => "danger",
             _ => "secondary"
         };
+    }
+
+    private void ShowConductDrawModal(Guid drawId, string houseTitle)
+    {
+        selectedDrawId = drawId;
+        conductDrawHouseTitle = houseTitle;
+        showConductModal = true;
+    }
+
+    private void CloseConductDrawModal()
+    {
+        showConductModal = false;
+        selectedDrawId = null;
+        conductDrawHouseTitle = string.Empty;
+    }
+
+    private async Task ConfirmConductDraw()
+    {
+        if (!selectedDrawId.HasValue) return;
+
+        isConducting = true;
+        try
+        {
+            // TODO: Get actual admin user ID from authentication service
+            // For now, using Guid.Empty as placeholder
+            var conductedBy = Guid.Empty;
+            
+            await DrawsService.ConductDrawAsync(selectedDrawId.Value, conductedBy);
+            await JSRuntime.InvokeVoidAsync("alert", "Draw conducted successfully!");
+            CloseConductDrawModal();
+            await LoadDraws(); // Refresh the list
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error conducting draw: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", $"Error conducting draw: {ex.Message}");
+        }
+        finally
+        {
+            isConducting = false;
+        }
     }
 }

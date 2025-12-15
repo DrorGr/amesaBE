@@ -3,6 +3,7 @@
 @using AmesaBackend.Admin.Services
 @using AmesaBackend.Admin.DTOs
 @inject ITicketsService TicketsService
+@inject IHousesService HousesService
 @inject NavigationManager Navigation
 
 <PageTitle>Tickets - Amesa Admin</PageTitle>
@@ -139,14 +140,31 @@
 
 @code {
     private PagedResult<TicketDto>? tickets;
+    private List<HouseDto>? houses;
     private bool isLoading = true;
     private int currentPage = 1;
     private int pageSize = 20;
     private string? statusFilter;
+    private Guid? houseIdFilter;
+    private string? userIdFilter;
 
     protected override async Task OnInitializedAsync()
     {
+        await LoadHouses();
         await LoadTickets();
+    }
+
+    private async Task LoadHouses()
+    {
+        try
+        {
+            var housesResult = await HousesService.GetHousesAsync(1, 1000); // Get all houses for dropdown
+            houses = housesResult.Items.ToList();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading houses: {ex.Message}");
+        }
     }
 
     private async Task LoadTickets()
@@ -154,7 +172,12 @@
         isLoading = true;
         try
         {
-            tickets = await TicketsService.GetTicketsAsync(currentPage, pageSize, null, null, statusFilter);
+            Guid? userId = null;
+            if (!string.IsNullOrWhiteSpace(userIdFilter) && Guid.TryParse(userIdFilter, out var parsedUserId))
+            {
+                userId = parsedUserId;
+            }
+            tickets = await TicketsService.GetTicketsAsync(currentPage, pageSize, houseIdFilter, userId, statusFilter);
         }
         catch (Exception ex)
         {
