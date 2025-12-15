@@ -1,7 +1,9 @@
 @page "/translations"
 @inherits AuthorizedPageBase
 @using AmesaBackend.Admin.Services
+@using AmesaBackend.Admin.DTOs
 @inject ITranslationsService TranslationsService
+@inject NavigationManager Navigation
 
 <PageTitle>Translations - Amesa Admin</PageTitle>
 
@@ -15,23 +17,192 @@
         </div>
     </div>
 
-    <div class="alert alert-info">
-        <i class="fas fa-info-circle"></i> 
-        <strong>Coming Soon:</strong> Full translation management functionality is under development.
-    </div>
-
-    <div class="card">
+    <!-- Filters -->
+    <div class="card mb-4">
         <div class="card-body">
-            <p class="text-muted">Translation management features will be available here.</p>
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">Language</label>
+                    <select class="form-select" @bind="languageFilter">
+                        <option value="">All Languages</option>
+                        @if (languages != null)
+                        {
+                            @foreach (var lang in languages)
+                            {
+                                <option value="@lang">@lang.ToUpper()</option>
+                            }
+                        }
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Category</label>
+                    <select class="form-select" @bind="categoryFilter">
+                        <option value="">All Categories</option>
+                        @if (categories != null)
+                        {
+                            @foreach (var cat in categories)
+                            {
+                                <option value="@cat">@cat</option>
+                            }
+                        }
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Search</label>
+                    <input type="text" class="form-control" @bind="searchTerm" @bind:event="oninput" 
+                           placeholder="Search key or value..." />
+                </div>
+                <div class="col-md-1">
+                    <label class="form-label">Page Size</label>
+                    <select class="form-select" @bind="pageSize">
+                        <option value="20">20</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button class="btn btn-secondary w-100" @onclick="LoadTranslations">
+                        <i class="fas fa-search"></i> Search
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
+
+    @if (isLoading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+    else if (translations?.Items?.Any() == true)
+    {
+        <div class="card">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Key</th>
+                                <th>Language</th>
+                                <th>Category</th>
+                                <th>Value</th>
+                                <th>Updated</th>
+                                <th>Created</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var translation in translations.Items)
+                            {
+                                <tr>
+                                    <td><code>@translation.Key</code></td>
+                                    <td>
+                                        <span class="badge bg-primary">@translation.LanguageCode.ToUpper()</span>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-secondary">@translation.Category</span>
+                                    </td>
+                                    <td>@translation.Value</td>
+                                    <td>@translation.UpdatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                                    <td>@translation.CreatedAt.ToString("yyyy-MM-dd")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Pagination -->
+                @if (translations.TotalPages > 1)
+                {
+                    <nav>
+                        <ul class="pagination justify-content-center">
+                            <li class="page-item @(currentPage == 1 ? "disabled" : "")">
+                                <button class="page-link" @onclick="() => ChangePage(currentPage - 1)">Previous</button>
+                            </li>
+                            @for (int i = 1; i <= translations.TotalPages; i++)
+                            {
+                                <li class="page-item @(i == currentPage ? "active" : "")">
+                                    <button class="page-link" @onclick="() => ChangePage(i)">@i</button>
+                                </li>
+                            }
+                            <li class="page-item @(currentPage == translations.TotalPages ? "disabled" : "")">
+                                <button class="page-link" @onclick="() => ChangePage(currentPage + 1)">Next</button>
+                            </li>
+                        </ul>
+                    </nav>
+                }
+
+                <div class="text-muted text-center mt-3">
+                    Showing @((currentPage - 1) * pageSize + 1) to @(Math.Min(currentPage * pageSize, translations.TotalCount)) of @translations.TotalCount translations
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle"></i> No translations found.
+        </div>
+    }
 </div>
 
 @code {
+    private PagedResult<TranslationDto>? translations;
+    private List<string>? languages;
+    private List<string>? categories;
+    private bool isLoading = true;
+    private int currentPage = 1;
+    private int pageSize = 50;
+    private string? languageFilter;
+    private string? categoryFilter;
+    private string? searchTerm;
+
     protected override async Task OnInitializedAsync()
     {
-        // TODO: Implement translation listing
-        await Task.CompletedTask;
+        await LoadLanguagesAndCategories();
+        await LoadTranslations();
+    }
+
+    private async Task LoadLanguagesAndCategories()
+    {
+        try
+        {
+            languages = await TranslationsService.GetLanguagesAsync();
+            categories = await TranslationsService.GetCategoriesAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading languages/categories: {ex.Message}");
+        }
+    }
+
+    private async Task LoadTranslations()
+    {
+        isLoading = true;
+        try
+        {
+            translations = await TranslationsService.GetTranslationsAsync(
+                currentPage, 
+                pageSize, 
+                string.IsNullOrWhiteSpace(languageFilter) ? null : languageFilter,
+                string.IsNullOrWhiteSpace(categoryFilter) ? null : categoryFilter,
+                string.IsNullOrWhiteSpace(searchTerm) ? null : searchTerm);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading translations: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task ChangePage(int page)
+    {
+        currentPage = page;
+        await LoadTranslations();
     }
 }
-

@@ -1,7 +1,9 @@
 @page "/tickets"
 @inherits AuthorizedPageBase
 @using AmesaBackend.Admin.Services
+@using AmesaBackend.Admin.DTOs
 @inject ITicketsService TicketsService
+@inject NavigationManager Navigation
 
 <PageTitle>Tickets - Amesa Admin</PageTitle>
 
@@ -15,23 +17,169 @@
         </div>
     </div>
 
-    <div class="alert alert-info">
-        <i class="fas fa-info-circle"></i> 
-        <strong>Coming Soon:</strong> Full ticket management functionality is under development.
-    </div>
-
-    <div class="card">
+    <!-- Filters -->
+    <div class="card mb-4">
         <div class="card-body">
-            <p class="text-muted">Ticket management features will be available here.</p>
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">Status</label>
+                    <select class="form-select" @bind="statusFilter">
+                        <option value="">All Statuses</option>
+                        <option value="Active">Active</option>
+                        <option value="Sold">Sold</option>
+                        <option value="Cancelled">Cancelled</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Page Size</label>
+                    <select class="form-select" @bind="pageSize">
+                        <option value="10">10</option>
+                        <option value="20">20</option>
+                        <option value="50">50</option>
+                    </select>
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                    <button class="btn btn-secondary w-100" @onclick="LoadTickets">
+                        <i class="fas fa-search"></i> Search
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
+
+    @if (isLoading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+    else if (tickets?.Items?.Any() == true)
+    {
+        <div class="card">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Ticket Number</th>
+                                <th>House</th>
+                                <th>User ID</th>
+                                <th>Purchase Price</th>
+                                <th>Status</th>
+                                <th>Purchase Date</th>
+                                <th>Winner</th>
+                                <th>Created</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var ticket in tickets.Items)
+                            {
+                                <tr>
+                                    <td><strong>@ticket.TicketNumber</strong></td>
+                                    <td>@ticket.HouseTitle</td>
+                                    <td>@ticket.UserId.ToString().Substring(0, 8)...</td>
+                                    <td>€@ticket.PurchasePrice.ToString("F2")</td>
+                                    <td>
+                                        <span class="badge bg-@GetStatusBadgeClass(ticket.Status)">@ticket.Status</span>
+                                    </td>
+                                    <td>@ticket.PurchaseDate.ToString("yyyy-MM-dd HH:mm")</td>
+                                    <td>
+                                        @if (ticket.IsWinner)
+                                        {
+                                            <span class="badge bg-success"><i class="fas fa-trophy"></i> Winner</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">-</span>
+                                        }
+                                    </td>
+                                    <td>@ticket.CreatedAt.ToString("yyyy-MM-dd")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Pagination -->
+                @if (tickets.TotalPages > 1)
+                {
+                    <nav>
+                        <ul class="pagination justify-content-center">
+                            <li class="page-item @(currentPage == 1 ? "disabled" : "")">
+                                <button class="page-link" @onclick="() => ChangePage(currentPage - 1)">Previous</button>
+                            </li>
+                            @for (int i = 1; i <= tickets.TotalPages; i++)
+                            {
+                                <li class="page-item @(i == currentPage ? "active" : "")">
+                                    <button class="page-link" @onclick="() => ChangePage(i)">@i</button>
+                                </li>
+                            }
+                            <li class="page-item @(currentPage == tickets.TotalPages ? "disabled" : "")">
+                                <button class="page-link" @onclick="() => ChangePage(currentPage + 1)">Next</button>
+                            </li>
+                        </ul>
+                    </nav>
+                }
+
+                <div class="text-muted text-center mt-3">
+                    Showing @((currentPage - 1) * pageSize + 1) to @(Math.Min(currentPage * pageSize, tickets.TotalCount)) of @tickets.TotalCount tickets
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle"></i> No tickets found.
+        </div>
+    }
 </div>
 
 @code {
+    private PagedResult<TicketDto>? tickets;
+    private bool isLoading = true;
+    private int currentPage = 1;
+    private int pageSize = 20;
+    private string? statusFilter;
+
     protected override async Task OnInitializedAsync()
     {
-        // TODO: Implement ticket listing
-        await Task.CompletedTask;
+        await LoadTickets();
+    }
+
+    private async Task LoadTickets()
+    {
+        isLoading = true;
+        try
+        {
+            tickets = await TicketsService.GetTicketsAsync(currentPage, pageSize, null, null, statusFilter);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading tickets: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task ChangePage(int page)
+    {
+        currentPage = page;
+        await LoadTickets();
+    }
+
+    private string GetStatusBadgeClass(string status)
+    {
+        return status switch
+        {
+            "Active" => "success",
+            "Sold" => "primary",
+            "Cancelled" => "danger",
+            _ => "secondary"
+        };
     }
 }
-

@@ -1,7 +1,9 @@
 @page "/draws"
 @inherits AuthorizedPageBase
 @using AmesaBackend.Admin.Services
+@using AmesaBackend.Admin.DTOs
 @inject IDrawsService DrawsService
+@inject NavigationManager Navigation
 
 <PageTitle>Draws - Amesa Admin</PageTitle>
 
@@ -15,23 +17,189 @@
         </div>
     </div>
 
-    <div class="alert alert-info">
-        <i class="fas fa-info-circle"></i> 
-        <strong>Coming Soon:</strong> Full draw management functionality is under development.
-    </div>
-
-    <div class="card">
+    <!-- Filters -->
+    <div class="card mb-4">
         <div class="card-body">
-            <p class="text-muted">Draw management features will be available here.</p>
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">Status</label>
+                    <select class="form-select" @bind="statusFilter">
+                        <option value="">All Statuses</option>
+                        <option value="Pending">Pending</option>
+                        <option value="Completed">Completed</option>
+                        <option value="Cancelled">Cancelled</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Page Size</label>
+                    <select class="form-select" @bind="pageSize">
+                        <option value="10">10</option>
+                        <option value="20">20</option>
+                        <option value="50">50</option>
+                    </select>
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                    <button class="btn btn-secondary w-100" @onclick="LoadDraws">
+                        <i class="fas fa-search"></i> Search
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
+
+    @if (isLoading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+    else if (draws?.Items?.Any() == true)
+    {
+        <div class="card">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>House</th>
+                                <th>Draw Date</th>
+                                <th>Tickets Sold</th>
+                                <th>Participation %</th>
+                                <th>Winning Ticket</th>
+                                <th>Winner User ID</th>
+                                <th>Status</th>
+                                <th>Method</th>
+                                <th>Conducted At</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var draw in draws.Items)
+                            {
+                                <tr>
+                                    <td><strong>@draw.HouseTitle</strong></td>
+                                    <td>@draw.DrawDate.ToString("yyyy-MM-dd HH:mm")</td>
+                                    <td>@draw.TotalTicketsSold</td>
+                                    <td>@draw.TotalParticipationPercentage.ToString("F2")%</td>
+                                    <td>
+                                        @if (!string.IsNullOrEmpty(draw.WinningTicketNumber))
+                                        {
+                                            <span class="badge bg-success">@draw.WinningTicketNumber</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">-</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (draw.WinnerUserId.HasValue)
+                                        {
+                                            @draw.WinnerUserId.Value.ToString().Substring(0, 8)...
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">-</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-@GetStatusBadgeClass(draw.DrawStatus)">@draw.DrawStatus</span>
+                                    </td>
+                                    <td>@draw.DrawMethod</td>
+                                    <td>
+                                        @if (draw.ConductedAt.HasValue)
+                                        {
+                                            @draw.ConductedAt.Value.ToString("yyyy-MM-dd HH:mm")
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">-</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Pagination -->
+                @if (draws.TotalPages > 1)
+                {
+                    <nav>
+                        <ul class="pagination justify-content-center">
+                            <li class="page-item @(currentPage == 1 ? "disabled" : "")">
+                                <button class="page-link" @onclick="() => ChangePage(currentPage - 1)">Previous</button>
+                            </li>
+                            @for (int i = 1; i <= draws.TotalPages; i++)
+                            {
+                                <li class="page-item @(i == currentPage ? "active" : "")">
+                                    <button class="page-link" @onclick="() => ChangePage(i)">@i</button>
+                                </li>
+                            }
+                            <li class="page-item @(currentPage == draws.TotalPages ? "disabled" : "")">
+                                <button class="page-link" @onclick="() => ChangePage(currentPage + 1)">Next</button>
+                            </li>
+                        </ul>
+                    </nav>
+                }
+
+                <div class="text-muted text-center mt-3">
+                    Showing @((currentPage - 1) * pageSize + 1) to @(Math.Min(currentPage * pageSize, draws.TotalCount)) of @draws.TotalCount draws
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle"></i> No draws found.
+        </div>
+    }
 </div>
 
 @code {
+    private PagedResult<DrawDto>? draws;
+    private bool isLoading = true;
+    private int currentPage = 1;
+    private int pageSize = 20;
+    private string? statusFilter;
+
     protected override async Task OnInitializedAsync()
     {
-        // TODO: Implement draw listing
-        await Task.CompletedTask;
+        await LoadDraws();
+    }
+
+    private async Task LoadDraws()
+    {
+        isLoading = true;
+        try
+        {
+            draws = await DrawsService.GetDrawsAsync(currentPage, pageSize, null, statusFilter);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading draws: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task ChangePage(int page)
+    {
+        currentPage = page;
+        await LoadDraws();
+    }
+
+    private string GetStatusBadgeClass(string status)
+    {
+        return status switch
+        {
+            "Pending" => "warning",
+            "Completed" => "success",
+            "Cancelled" => "danger",
+            _ => "secondary"
+        };
     }
 }
-
