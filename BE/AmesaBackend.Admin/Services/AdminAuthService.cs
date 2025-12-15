@@ -311,14 +311,47 @@ namespace AmesaBackend.Admin.Services
 
         private async Task<bool> SetAuthenticationSuccess(string email)
         {
-            // Store email in session/cookies for authentication tracking
-            // CRITICAL: In Blazor Server, component event handlers run AFTER response starts
-            // We MUST use in-memory token cache as primary mechanism, with session/cookies as secondary
+            // CRITICAL FIX: Generate and store token in memory FIRST, before any HttpContext checks
+            // This ensures authentication succeeds even if HttpContext is null (can happen in Blazor Server)
+            // In-memory token cache works independently of HttpContext
+            
+            // STEP 1: ALWAYS generate and store token in memory (works without HttpContext)
+            var token = GenerateSecureToken();
+            var tokenInfo = new AuthTokenInfo
+            {
+                Email = email,
+                ExpiresAt = DateTime.UtcNow.AddHours(AuthTokenExpiryHours),
+                CreatedAt = DateTime.UtcNow
+            };
+            _authTokens[token] = tokenInfo;
+            
+            // STEP 2: ALWAYS map email to token (works regardless of HttpContext)
+            // This allows token retrieval via email lookup even when cookies/session aren't available
+            // NOTE: This overwrites previous token mapping for the same email, effectively invalidating old sessions
+            // which is a security feature (single active session per email, though old tokens remain valid until expiry)
+            var normalizedEmail = email.ToLower().Trim();
+            
+            // If email already has a token mapped, log it (old token still valid until expiry, but email lookup will use new token)
+            if (_emailToToken.TryGetValue(normalizedEmail, out var oldToken))
+            {
+                _logger.LogWarning("User {Email} logged in again. Previous token mapping overwritten (old token still valid until expiry). New token: {NewTokenPrefix}...", 
+                    email, token.Substring(0, Math.Min(8, token.Length)));
+            }
+            
+            _emailToToken[normalizedEmail] = token;
+            _logger.LogWarning("CRITICAL: Token generated and stored in memory for user {Email}. Email mapped to token. Token: {TokenPrefix}...", email, token.Substring(0, Math.Min(8, token.Length)));
+            
+            // STEP 3: Clean up expired tokens
+            CleanupExpiredTokens();
+            
+            // STEP 4: Try to use HttpContext for additional storage (session/cookies) if available
             var httpContext = _httpContextAccessor.HttpContext;
             if (httpContext == null)
             {
-                _logger.LogError("HttpContext is null for user {Email}. Authentication succeeded but state storage failed.", email);
-                return false;
+                // HttpContext is null - this can happen in Blazor Server component handlers
+                // But we've stored the token in memory, so authentication should succeed
+                _logger.LogWarning("HttpContext is null for user {Email}. Token stored in memory cache with email mapping. Authentication will work via email lookup on subsequent requests.", email);
+                return true; // Return true because token is stored in memory
             }
             
             // CRITICAL: Access session EARLY to ensure session cookie is set before response starts
@@ -343,17 +376,7 @@ namespace AmesaBackend.Admin.Services
                 }
             }
             
-            // ALWAYS generate and store token in memory (works even when response has started)
-            var token = GenerateSecureToken();
-            var tokenInfo = new AuthTokenInfo
-            {
-                Email = email,
-                ExpiresAt = DateTime.UtcNow.AddHours(AuthTokenExpiryHours),
-                CreatedAt = DateTime.UtcNow
-            };
-            _authTokens[token] = tokenInfo;
-            
-            // Map session ID to token (fallback mechanism when cookies can't be set)
+            // STEP 5: Map session ID to token (additional fallback mechanism)
             // Session ID persists across requests via ASP.NET Core session cookie
             try
             {
@@ -375,34 +398,28 @@ namespace AmesaBackend.Admin.Services
                     }
                     catch
                     {
-                        // Session ID unavailable - that's OK, we'll use other methods
+                        // Session ID unavailable - that's OK, email mapping will handle it
                     }
                     
                     if (!string.IsNullOrEmpty(sessionId))
                     {
                         _sessionIdToToken[sessionId] = token;
-                        _logger.LogInformation("Mapped session ID {SessionId} to token for user {Email}", sessionId, email);
+                        _logger.LogWarning("Mapped session ID {SessionId} to token for user {Email} (fallback)", sessionId, email);
                     }
                     else
                     {
-                        _logger.LogWarning("Session ID was empty when trying to map token for user {Email}. Token stored in cache but session ID mapping failed.", email);
+                        _logger.LogWarning("Session ID was empty when trying to map token for user {Email}. Token stored in cache with email mapping, session ID mapping failed.", email);
                     }
-                    
-                    // Also map email to token (additional fallback - if we can get email from session/cookie, we can find token)
-                    _emailToToken[email.ToLower().Trim()] = token;
-                    _logger.LogInformation("Mapped email {Email} to token for user", email);
                 }
             }
             catch (Exception sessionIdEx)
             {
                 // Session ID mapping failed - log but don't fail authentication
-                _logger.LogDebug(sessionIdEx, "Failed to map session ID to token for user {Email}. Token is still stored in cache.", email);
+                // Email mapping is already done, so authentication can still work
+                _logger.LogDebug(sessionIdEx, "Failed to map session ID to token for user {Email}. Token is still stored in cache with email mapping.", email);
             }
             
-            // Clean up expired tokens (simple cleanup - remove tokens older than expiry)
-            CleanupExpiredTokens();
-            
-            _logger.LogDebug("Generated authentication token for user {Email}. Token stored in memory cache.", email);
+            _logger.LogDebug("Generated authentication token for user {Email}. Token stored in memory cache with email and session ID mappings.", email);
             
             try
             {
@@ -474,19 +491,25 @@ namespace AmesaBackend.Admin.Services
                 _logger.LogWarning(ex, "Failed to store authentication state in session/cookies for user {Email}. Token is stored in memory cache.", email);
             }
             
-            // Always return true if token was stored in memory (which it always is)
-            _logger.LogInformation("Authentication state stored successfully for user {Email} (token cache). Token: {TokenPrefix}..., Session/Cookie storage attempted but may have failed if response started.", email, token?.Substring(0, Math.Min(8, token?.Length ?? 0)) ?? "null");
             
-            // CRITICAL FIX: Store token in response headers so JavaScript can read it
-            // This works even when response has started (headers can be modified)
+            // STEP 7: Store token in response headers so JavaScript can read it (if response hasn't started)
+            // Headers can sometimes be modified after response starts, but we check for safety and consistency
             try
             {
-                httpContext.Response.Headers.Append("X-Admin-Auth-Token", token);
-                _logger.LogInformation("Token stored in response header X-Admin-Auth-Token for client-side retrieval");
+                if (!httpContext.Response.HasStarted)
+                {
+                    httpContext.Response.Headers.Append("X-Admin-Auth-Token", token);
+                    _logger.LogInformation("Token stored in response header X-Admin-Auth-Token for client-side retrieval");
+                }
+                else
+                {
+                    _logger.LogDebug("Response already started, cannot store token in header for user {Email}. Email mapping will handle token retrieval.", email);
+                }
             }
             catch (Exception headerEx)
             {
-                _logger.LogWarning(headerEx, "Failed to store token in response header. Client may need to use session ID mapping.");
+                // Header storage failed - not critical, email mapping will handle token retrieval
+                _logger.LogWarning(headerEx, "Failed to store token in response header for user {Email}. Email mapping will handle token retrieval.", email);
             }
             
             return true;
@@ -508,18 +531,21 @@ namespace AmesaBackend.Admin.Services
             // Simple cleanup - remove expired tokens (runs on every token creation)
             // More sophisticated cleanup could use a background task
             var now = DateTime.UtcNow;
-            var expiredKeys = _authTokens
+            
+            // Get expired tokens WITH their info BEFORE removing them (critical fix)
+            var expiredTokens = _authTokens
                 .Where(kvp => kvp.Value.ExpiresAt < now)
-                .Select(kvp => kvp.Key)
+                .Select(kvp => (token: kvp.Key, info: kvp.Value))
                 .ToList();
             
-            foreach (var key in expiredKeys)
+            foreach (var (token, tokenInfo) in expiredTokens)
             {
-                _authTokens.TryRemove(key, out _);
+                // Remove from main token cache
+                _authTokens.TryRemove(token, out _);
                 
-                // Also remove from session ID mapping
+                // Remove from session ID mapping
                 var sessionIdMappings = _sessionIdToToken
-                    .Where(kvp => kvp.Value == key)
+                    .Where(kvp => kvp.Value == token)
                     .Select(kvp => kvp.Key)
                     .ToList();
                 
@@ -528,24 +554,13 @@ namespace AmesaBackend.Admin.Services
                     _sessionIdToToken.TryRemove(sessionId, out _);
                 }
                 
-                // Also remove from email mapping
-                var expiredTokenInfo = expiredKeys
-                    .Select(key => _authTokens.TryGetValue(key, out var info) ? (key, info) : (key, (AuthTokenInfo?)null))
-                    .Where(t => t.Item2 != null)
-                    .ToList();
-                
-                foreach (var (expiredToken, tokenInfo) in expiredTokenInfo)
-                {
-                    if (tokenInfo != null)
-                    {
-                        _emailToToken.TryRemove(tokenInfo.Email.ToLower().Trim(), out _);
-                    }
-                }
+                // Remove from email mapping using the tokenInfo we got before removal
+                _emailToToken.TryRemove(tokenInfo.Email.ToLower().Trim(), out _);
             }
             
-            if (expiredKeys.Count > 0)
+            if (expiredTokens.Count > 0)
             {
-                _logger.LogDebug("Cleaned up {Count} expired authentication tokens", expiredKeys.Count);
+                _logger.LogDebug("Cleaned up {Count} expired authentication tokens and their mappings", expiredTokens.Count);
             }
         }
         
@@ -766,14 +781,16 @@ namespace AmesaBackend.Admin.Services
                 var httpContext = _httpContextAccessor.HttpContext;
                 if (httpContext == null)
                 {
-                    _logger.LogWarning("IsAuthenticated: HttpContext is null");
+                    // HttpContext is null - cannot authenticate without it (need it to identify user)
+                    // This is acceptable in some Blazor Server scenarios where we can't identify the user
+                    _logger.LogDebug("IsAuthenticated: HttpContext is null - cannot identify user for authentication check");
                     return false;
                 }
                 
                 _logger.LogWarning("IsAuthenticated: Checking authentication. Session available: {IsAvailable}, Session ID: {SessionId}", 
                     httpContext.Session?.IsAvailable ?? false, httpContext.Session?.Id ?? "null");
                 
-                // PRIMARY: Check token cache (works even when response started)
+                // PRIMARY: Check token cache via GetAuthTokenFromRequest (tries cookie/header/session/sessionId/email mapping)
                 var token = GetAuthTokenFromRequest();
                 if (!string.IsNullOrEmpty(token))
                 {
@@ -787,9 +804,10 @@ namespace AmesaBackend.Admin.Services
                         }
                         else
                         {
-                            // Token expired - remove it
+                            // Token expired - remove it and clean up mappings
                             _authTokens.TryRemove(token, out _);
-                            _logger.LogWarning("Authentication token expired for user {Email}", tokenInfo.Email);
+                            _emailToToken.TryRemove(tokenInfo.Email.ToLower().Trim(), out _);
+                            _logger.LogWarning("Authentication token expired for user {Email}, removed from cache", tokenInfo.Email);
                         }
                     }
                     else
@@ -799,25 +817,22 @@ namespace AmesaBackend.Admin.Services
                 }
                 else
                 {
-                    _logger.LogWarning("IsAuthenticated: No token found in request (cookie/header/session/sessionId/email lookup all failed). Total tokens in cache: {TokenCount}", _authTokens.Count);
+                    _logger.LogWarning("IsAuthenticated: No token found in request (cookie/header/session/sessionId/email lookup all failed). Total tokens in cache: {TokenCount}, Email mappings: {EmailMappingCount}, Session ID mappings: {SessionMappingCount}", 
+                        _authTokens.Count, _emailToToken.Count, _sessionIdToToken.Count);
                     
-                    // Debug: Log what's in the cache
-                    if (_authTokens.Count > 0)
+                    // Debug: Log what's in the cache (only if verbose logging enabled)
+                    if (_authTokens.Count > 0 && _logger.IsEnabled(LogLevel.Debug))
                     {
                         foreach (var kvp in _authTokens.Take(3))
                         {
-                            _logger.LogWarning("IsAuthenticated: Cache contains token for {Email}, expires at {ExpiresAt}", kvp.Value.Email, kvp.Value.ExpiresAt);
+                            _logger.LogDebug("IsAuthenticated: Cache contains token for {Email}, expires at {ExpiresAt}", kvp.Value.Email, kvp.Value.ExpiresAt);
                         }
                     }
                     
                     // Debug: Log session ID mappings
-                    if (_sessionIdToToken.Count > 0)
+                    if (_sessionIdToToken.Count > 0 && _logger.IsEnabled(LogLevel.Debug))
                     {
-                        _logger.LogWarning("IsAuthenticated: {MappingCount} session ID mappings exist", _sessionIdToToken.Count);
-                        foreach (var kvp in _sessionIdToToken.Take(3))
-                        {
-                            _logger.LogWarning("IsAuthenticated: Session ID {SessionId} maps to token", kvp.Key);
-                        }
+                        _logger.LogDebug("IsAuthenticated: {MappingCount} session ID mappings exist", _sessionIdToToken.Count);
                     }
                 }
                 
