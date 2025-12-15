@@ -164,7 +164,8 @@ namespace AmesaBackend.Admin.Services
         public async Task<List<string>> GetCategoriesAsync()
         {
             return await _context.Translations
-                .Select(t => t.Category)
+                .Select(t => t.Category ?? string.Empty)
+                .Where(c => !string.IsNullOrEmpty(c))
                 .Distinct()
                 .OrderBy(c => c)
                 .ToListAsync();

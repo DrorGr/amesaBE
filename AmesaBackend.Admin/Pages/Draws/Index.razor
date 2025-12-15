@@ -95,7 +95,7 @@
                                     <td>
                                         @if (draw.WinnerUserId.HasValue)
                                         {
-                                            @draw.WinnerUserId.Value.ToString().Substring(0, 8)...
+                                            @(draw.WinnerUserId.Value.ToString().Substring(0, 8) + "...")
                                         }
                                         else
                                         {

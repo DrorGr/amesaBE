@@ -88,8 +88,8 @@
                             @foreach (var transaction in transactions.Items)
                             {
                                 <tr>
-                                    <td>@transaction.Id.ToString().Substring(0, 8)...</td>
-                                    <td>@transaction.UserId.ToString().Substring(0, 8)...</td>
+                                    <td>@(transaction.Id.ToString().Substring(0, 8) + "...")</td>
+                                    <td>@(transaction.UserId.ToString().Substring(0, 8) + "...")</td>
                                     <td>
                                         <span class="badge bg-@GetTypeBadgeClass(transaction.Type)">@transaction.Type</span>
                                     </td>

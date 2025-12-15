@@ -79,7 +79,7 @@
                                 <tr>
                                     <td><strong>@ticket.TicketNumber</strong></td>
                                     <td>@ticket.HouseTitle</td>
-                                    <td>@ticket.UserId.ToString().Substring(0, 8)...</td>
+                                    <td>@(ticket.UserId.ToString().Substring(0, 8) + "...")</td>
                                     <td>€@ticket.PurchasePrice.ToString("F2")</td>
                                     <td>
                                         <span class="badge bg-@GetStatusBadgeClass(ticket.Status)">@ticket.Status</span>
