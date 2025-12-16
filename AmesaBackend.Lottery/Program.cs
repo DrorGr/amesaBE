@@ -7,6 +7,10 @@ using AmesaBackend.Lottery.Data;
 using AmesaBackend.Lottery.Services;
 using AmesaBackend.Lottery.Services.Processors;
 using AmesaBackend.Lottery.Hubs;
+using AmesaBackend.Lottery.Configuration;
+using Microsoft.Extensions.Options;
+using Polly;
+using Polly.Extensions.Http;
 using AmesaBackend.Shared.Extensions;
 using AmesaBackend.Shared.Middleware.Extensions;
 using AmesaBackend.Auth.Data;
@@ -19,7 +23,8 @@ using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
-NpgsqlConnection.GlobalTypeMapper.EnableDynamicJson();
+// JSON support is enabled by default in Npgsql 7.0+
+// No need for GlobalTypeMapper.EnableDynamicJson() (obsolete)
 
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
@@ -117,6 +122,9 @@ builder.Services.AddDbContext<AmesaDbContext>(options =>
 // Lottery service requires Redis for house list caching and cache invalidation
 builder.Services.AddAmesaBackendShared(builder.Configuration, builder.Environment, requireRedis: true);
 
+// Configure Lottery settings
+builder.Services.Configure<LotterySettings>(builder.Configuration.GetSection("Lottery"));
+
 // Configure JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var secretKey = jwtSettings["SecretKey"] 
@@ -213,7 +221,12 @@ builder.Services.AddAuthentication(options =>
 builder.Services.AddScoped<IUserPreferencesService, UserPreferencesService>();
 builder.Services.AddScoped<ILotteryService, LotteryService>();
 builder.Services.AddScoped<IPromotionService, PromotionService>();
-builder.Services.AddScoped<IFileService, FileService>();
+builder.Services.AddScoped<IPromotionAuditService, PromotionAuditService>();
+builder.Services.AddScoped<IErrorSanitizer, ErrorSanitizer>();
+// IFileService and IHouseCacheService are available but not currently used
+// Uncomment if file upload or house cache invalidation functionality is needed
+// builder.Services.AddScoped<IFileService, FileService>();
+// builder.Services.AddScoped<IHouseCacheService, HouseCacheService>();
 builder.Services.AddScoped<AmesaBackend.Shared.Configuration.IConfigurationService, AmesaBackend.Lottery.Services.ConfigurationService>();
 
 // Reservation system services
@@ -230,15 +243,42 @@ if (rateLimitServiceType != null)
     builder.Services.AddScoped(typeof(IRateLimitService), typeof(RateLimitService));
 }
 
-// Register HttpClient for payment service with timeout configuration
+// Register HttpClient for payment service with timeout, retry, and circuit breaker policies
 builder.Services.AddHttpClient<IPaymentProcessor, PaymentProcessor>(client =>
 {
     var paymentServiceUrl = builder.Configuration["PaymentService:BaseUrl"] 
         ?? "http://amesa-backend-alb-509078867.eu-north-1.elb.amazonaws.com/api/v1";
     client.BaseAddress = new Uri(paymentServiceUrl);
-    client.Timeout = TimeSpan.FromSeconds(30); // 30 second timeout for payment requests
-    client.Timeout = TimeSpan.FromSeconds(30);
-});
+    var lotterySettings = builder.Configuration.GetSection("Lottery").Get<LotterySettings>() ?? new LotterySettings();
+    client.Timeout = TimeSpan.FromSeconds(lotterySettings.Payment.TimeoutSeconds);
+})
+.AddPolicyHandler(GetRetryPolicy())
+.AddPolicyHandler(GetCircuitBreakerPolicy());
+
+// Retry policy: Exponential backoff for transient HTTP errors
+static IAsyncPolicy<HttpResponseMessage> GetRetryPolicy()
+{
+    return HttpPolicyExtensions
+        .HandleTransientHttpError()
+        .OrResult(msg => msg.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+        .WaitAndRetryAsync(
+            retryCount: 3,
+            sleepDurationProvider: retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)),
+            onRetry: (outcome, timespan, retryCount, context) =>
+            {
+                // Log retry attempt (will be logged by PaymentProcessor)
+            });
+}
+
+// Circuit breaker policy: Open circuit after 5 consecutive failures, break for 30 seconds
+static IAsyncPolicy<HttpResponseMessage> GetCircuitBreakerPolicy()
+{
+    return HttpPolicyExtensions
+        .HandleTransientHttpError()
+        .CircuitBreakerAsync(
+            handledEventsAllowedBeforeBreaking: 5,
+            durationOfBreak: TimeSpan.FromSeconds(30));
+}
 
 // Register SQS client
 builder.Services.AddSingleton<IAmazonSQS>(sp =>
@@ -257,6 +297,9 @@ builder.Services.AddHostedService<LotteryCountdownService>();
 // Add SignalR for real-time updates
 builder.Services.AddSignalR();
 
+// Add CORS policy for frontend access
+builder.Services.AddAmesaCors(builder.Configuration);
+
 builder.Services.AddHealthChecks();
 
 var app = builder.Build();
@@ -273,6 +316,10 @@ if (builder.Configuration.GetValue<bool>("XRay:Enabled", false))
 app.UseAmesaSecurityHeaders(); // Security headers (before other middleware)
 app.UseAmesaMiddleware();
 app.UseAmesaLogging();
+
+// Add CORS early in pipeline (before routing)
+app.UseCors("AllowFrontend");
+
 app.UseResponseCaching(); // Must be before UseRouting for VaryByQueryKeys to work
 app.UseRouting();
 // Debug routing middleware (development only)

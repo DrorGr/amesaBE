@@ -20,8 +20,6 @@ var builder = WebApplication.CreateBuilder(args);
 // AddInMemoryCollection will override appsettings.json values
 builder.Configuration.LoadPaymentSecretsFromAws(builder.Environment);
 
-NpgsqlConnection.GlobalTypeMapper.EnableDynamicJson();
-
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
     .Enrich.FromLogContext()
@@ -54,6 +52,8 @@ builder.Services.AddDbContext<PaymentDbContext>(options =>
                 maxRetryCount: 3,
                 maxRetryDelay: TimeSpan.FromSeconds(30),
                 errorCodesToAdd: null);
+            // JSON support is enabled by default in Npgsql 7.0+
+            // No need for GlobalTypeMapper.EnableDynamicJson() (obsolete)
         });
     }
 
@@ -130,6 +130,9 @@ builder.Services.AddSingleton<ProductHandlers.IProductHandlerRegistry>(servicePr
     return registry;
 });
 
+// Add CORS policy for frontend access
+builder.Services.AddAmesaCors(builder.Configuration);
+
 builder.Services.AddHealthChecks();
 
 var app = builder.Build();
@@ -155,6 +158,10 @@ if (builder.Configuration.GetValue<bool>("XRay:Enabled", false))
 
 app.UseAmesaMiddleware();
 app.UseAmesaLogging();
+
+// Add CORS early in pipeline (before routing)
+app.UseCors("AllowFrontend");
+
 app.UseRouting();
 
 // Only use authentication if it was configured

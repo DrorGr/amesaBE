@@ -82,26 +82,6 @@ namespace AmesaBackend.Admin.Services
         {
             try
             {
-                _logger.LogWarning("=== AUTHENTICATE CALLED: email={Email}, passwordLength={Length} ===", email, password?.Length ?? 0);
-
-                // TEMPORARY: Hardcoded test user for debugging (REMOVE IN PRODUCTION)
-                // Check FIRST before any other validations
-                var normalizedEmail = email?.ToLower()?.Trim() ?? "";
-                var normalizedPassword = password?.Trim() ?? "";
-                
-                if (normalizedEmail == "test@admin.com" && normalizedPassword == "test1234")
-                {
-                    _logger.LogWarning("=== HARDCODED USER MATCHED - BYPASSING ALL CHECKS ===");
-                    _logger.LogWarning("TEMPORARY: Using hardcoded test user test@admin.com - REMOVE IN PRODUCTION");
-                    ClearFailedAttempts(normalizedEmail);
-                    _logger.LogInformation("Hardcoded test user test@admin.com authenticated successfully");
-                    var result = await SetAuthenticationSuccess("test@admin.com");
-                    _logger.LogWarning("=== SetAuthenticationSuccess returned: {Result} ===", result);
-                    return result;
-                }
-                
-                _logger.LogWarning("=== HARDCODED USER CHECK FAILED: normalizedEmail={Email}, passwordMatches={Matches} ===", normalizedEmail, normalizedPassword == "test1234");
-
                 _logger.LogDebug("Login attempt for email: {Email}", email);
 
                 // Check for account lockout

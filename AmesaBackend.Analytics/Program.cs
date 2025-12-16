@@ -8,7 +8,8 @@ using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
 
-NpgsqlConnection.GlobalTypeMapper.EnableDynamicJson();
+// JSON support is enabled by default in Npgsql 7.0+
+// No need for GlobalTypeMapper.EnableDynamicJson() (obsolete)
 
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
@@ -54,6 +55,9 @@ builder.Services.AddDbContext<AnalyticsDbContext>(options =>
 
 builder.Services.AddAmesaBackendShared(builder.Configuration, builder.Environment);
 
+// Add CORS policy for frontend access
+builder.Services.AddAmesaCors(builder.Configuration);
+
 // Add Services
 builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
 
@@ -73,6 +77,10 @@ if (builder.Configuration.GetValue<bool>("XRay:Enabled", false))
 app.UseAmesaSecurityHeaders(); // Security headers (before other middleware)
 app.UseAmesaMiddleware();
 app.UseAmesaLogging();
+
+// Add CORS early in pipeline (before routing)
+app.UseCors("AllowFrontend");
+
 app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();

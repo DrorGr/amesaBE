@@ -225,6 +225,7 @@ builder.Services.AddScoped<IChannelProvider, SocialMediaChannelProvider>();
 
 // Core services
 builder.Services.AddScoped<INotificationOrchestrator, NotificationOrchestrator>();
+builder.Services.AddScoped<IDeviceRegistrationService, DeviceRegistrationService>();
 builder.Services.AddScoped<ITemplateEngine, TemplateEngine>();
 builder.Services.AddScoped<INotificationTypeMappingService, NotificationTypeMappingService>();
 builder.Services.AddScoped<INotificationReadStateService, NotificationReadStateService>();
@@ -273,6 +274,9 @@ builder.Services.AddHealthChecks()
     .AddCheck<AmesaBackend.Notification.HealthChecks.WebPushChannelHealthCheck>("webpush_channel")
     .AddCheck<AmesaBackend.Notification.HealthChecks.TelegramChannelHealthCheck>("telegram_channel");
 
+// Add CORS policy for frontend access
+builder.Services.AddAmesaCors(builder.Configuration);
+
 var app = builder.Build();
 
 app.UseSwagger();
@@ -287,6 +291,9 @@ if (builder.Configuration.GetValue<bool>("XRay:Enabled", false))
 app.UseAmesaSecurityHeaders(); // Security headers (before other middleware)
 app.UseAmesaMiddleware();
 app.UseAmesaLogging();
+
+// Add CORS early in pipeline (before routing)
+app.UseCors("AllowFrontend");
 
 app.UseRouting();
 

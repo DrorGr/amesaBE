@@ -7,7 +7,8 @@ using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
 
-NpgsqlConnection.GlobalTypeMapper.EnableDynamicJson();
+// JSON support is enabled by default in Npgsql 7.0+
+// No need for GlobalTypeMapper.EnableDynamicJson() (obsolete)
 
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
@@ -34,21 +35,8 @@ builder.Services.AddControllers()
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Configure CORS for frontend access
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowFrontend", policy =>
-    {
-        var allowedOrigins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>() 
-            ?? new[] { "http://localhost:4200", "https://dpqbvdgnenckf.cloudfront.net" };
-        Log.Information("CORS allowed origins: {Origins}", string.Join(", ", allowedOrigins));
-        policy.WithOrigins(allowedOrigins)
-              .AllowAnyMethod()
-              .AllowAnyHeader()
-              .AllowCredentials()
-              .SetPreflightMaxAge(TimeSpan.FromHours(24));
-    });
-});
+// Add CORS policy for frontend access (using shared extension)
+builder.Services.AddAmesaCors(builder.Configuration);
 
 // Configure Entity Framework
 builder.Services.AddDbContext<ContentDbContext>(options =>
