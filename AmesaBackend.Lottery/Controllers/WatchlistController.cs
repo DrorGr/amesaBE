@@ -61,7 +61,7 @@ namespace AmesaBackend.Lottery.Controllers
                     Error = new ErrorResponse
                     {
                         Code = "INTERNAL_ERROR",
-                        Message = ex.Message
+                        Message = "An error occurred retrieving your watchlist."
                     }
                 });
             }
@@ -151,7 +151,7 @@ namespace AmesaBackend.Lottery.Controllers
                     Error = new ErrorResponse
                     {
                         Code = "INTERNAL_ERROR",
-                        Message = ex.Message
+                        Message = "An error occurred adding the house to your watchlist."
                     }
                 });
             }
@@ -206,7 +206,7 @@ namespace AmesaBackend.Lottery.Controllers
                     Error = new ErrorResponse
                     {
                         Code = "INTERNAL_ERROR",
-                        Message = ex.Message
+                        Message = "An error occurred removing the house from your watchlist."
                     }
                 });
             }
@@ -263,7 +263,7 @@ namespace AmesaBackend.Lottery.Controllers
                     Error = new ErrorResponse
                     {
                         Code = "INTERNAL_ERROR",
-                        Message = ex.Message
+                        Message = "An error occurred updating notification settings."
                     }
                 });
             }
@@ -305,7 +305,7 @@ namespace AmesaBackend.Lottery.Controllers
                     Error = new ErrorResponse
                     {
                         Code = "INTERNAL_ERROR",
-                        Message = ex.Message
+                        Message = "An error occurred retrieving your watchlist count."
                     }
                 });
             }

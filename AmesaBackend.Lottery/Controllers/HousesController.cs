@@ -8,7 +8,9 @@ using AmesaBackend.Lottery.Services;
 using AmesaBackend.Shared.Events;
 using AmesaBackend.Shared.Caching;
 using AmesaBackend.Shared.Helpers;
+using AmesaBackend.Auth.Services;
 using System.Security.Claims;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace AmesaBackend.Lottery.Controllers
 {
@@ -24,6 +26,7 @@ namespace AmesaBackend.Lottery.Controllers
         private readonly ICache _cache;
         private readonly ITicketReservationService? _reservationService;
         private readonly IRedisInventoryManager? _inventoryManager;
+        private readonly IRateLimitService? _rateLimitService;
 
         public HousesController(
             LotteryDbContext context, 
@@ -33,7 +36,8 @@ namespace AmesaBackend.Lottery.Controllers
             ICache cache,
             IPromotionService? promotionService = null,
             ITicketReservationService? reservationService = null,
-            IRedisInventoryManager? inventoryManager = null)
+            IRedisInventoryManager? inventoryManager = null,
+            IRateLimitService? rateLimitService = null)
         {
             _context = context;
             _eventPublisher = eventPublisher;
@@ -43,18 +47,13 @@ namespace AmesaBackend.Lottery.Controllers
             _cache = cache ?? throw new ArgumentNullException(nameof(cache));
             _reservationService = reservationService;
             _inventoryManager = inventoryManager;
+            _rateLimitService = rateLimitService;
         }
 
         [HttpGet("{id}")]
         [ResponseCache(Duration = 900)] // 15 minutes
         public async Task<ActionResult<AmesaBackend.Lottery.DTOs.ApiResponse<HouseDto>>> GetHouse(Guid id)
         {
-            // #region agent log
-            _logger.LogInformation("[DEBUG_ROUTING] HousesController.GetHouse called - Method: {Method}, Path: {Path}, Id: {Id}", 
-                HttpContext.Request.Method, 
-                HttpContext.Request.Path, 
-                id);
-            // #endregion
             try
             {
                 var house = await _context.Houses
@@ -909,6 +908,44 @@ namespace AmesaBackend.Lottery.Controllers
         }
 
         /// <summary>
+        /// Get list of users who favorited a house (service-to-service endpoint)
+        /// GET /api/v1/houses/{id}/favorites
+        /// </summary>
+        [HttpGet("{id}/favorites")]
+        [Microsoft.AspNetCore.Authorization.AllowAnonymous] // Service-to-service, protected by middleware
+        public async Task<ActionResult<AmesaBackend.Lottery.DTOs.ApiResponse<List<FavoriteUserDto>>>> GetHouseFavorites(Guid id)
+        {
+            try
+            {
+                var favoriteUserIds = await _lotteryService.GetHouseFavoriteUserIdsAsync(id);
+                var favorites = favoriteUserIds.Select(uid => new FavoriteUserDto { UserId = uid }).ToList();
+
+                return Ok(new AmesaBackend.Lottery.DTOs.ApiResponse<List<FavoriteUserDto>>
+                {
+                    Success = true,
+                    Data = favorites
+                });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new AmesaBackend.Lottery.DTOs.ApiResponse<List<FavoriteUserDto>>
+                {
+                    Success = false,
+                    Message = ex.Message
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting house favorites for house {HouseId}", id);
+                return StatusCode(500, new AmesaBackend.Lottery.DTOs.ApiResponse<List<FavoriteUserDto>>
+                {
+                    Success = false,
+                    Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = "An error occurred retrieving house favorites" }
+                });
+            }
+        }
+
+        /// <summary>
         /// Purchase tickets for a house (standard purchase endpoint)
         /// POST /api/v1/houses/{id}/tickets/purchase
         /// </summary>
@@ -931,6 +968,29 @@ namespace AmesaBackend.Lottery.Controllers
                         Success = false,
                         Message = "User not authenticated"
                     });
+                }
+
+                // Rate limiting: Limit purchase attempts per user
+                if (_rateLimitService != null)
+                {
+                    var rateLimitKey = $"purchase:user:{userId}";
+                    var canPurchase = await _rateLimitService.CheckRateLimitAsync(rateLimitKey, limit: 10, window: TimeSpan.FromMinutes(1));
+                    
+                    if (!canPurchase)
+                    {
+                        _logger.LogWarning("Rate limit exceeded for user {UserId} on purchase", userId);
+                        Response.Headers.Add("X-RateLimit-Limit", "10");
+                        Response.Headers.Add("X-RateLimit-Remaining", "0");
+                        Response.Headers.Add("X-RateLimit-Reset", DateTime.UtcNow.AddMinutes(1).ToString("R"));
+                        return StatusCode(429, new AmesaBackend.Lottery.DTOs.ApiResponse<PurchaseTicketsResponse>
+                        {
+                            Success = false,
+                            Message = "Rate limit exceeded. Please try again in a moment.",
+                            Error = new ErrorResponse { Code = "RATE_LIMIT_EXCEEDED", Message = "Too many purchase requests. Please wait before trying again." }
+                        });
+                    }
+
+                    await _rateLimitService.IncrementRateLimitAsync(rateLimitKey, TimeSpan.FromMinutes(1));
                 }
 
                 // Get house (read-only check - use AsNoTracking for performance)
@@ -1062,8 +1122,67 @@ namespace AmesaBackend.Lottery.Controllers
                     }
 
                     _logger.LogInformation(
-                        "Promotion {PromotionCode} applied: Original cost {OriginalCost}, Discount {Discount}, Final cost {FinalCost}",
+                        "Promotion {PromotionCode} validated: Original cost {OriginalCost}, Discount {Discount}, Final cost {FinalCost}",
                         request.PromotionCode, originalTotalCost, discountAmount, totalCost);
+                }
+
+                // Apply promotion usage BEFORE payment (fixes race condition)
+                // This ensures promotion is locked before payment is processed
+                if (appliedPromotionId.HasValue && !string.IsNullOrWhiteSpace(request.PromotionCode) && _promotionService != null)
+                {
+                    try
+                    {
+                        // Use a temporary transaction ID (will be updated after payment)
+                        var tempTransactionId = Guid.NewGuid();
+                        
+                        await _promotionService.ApplyPromotionAsync(new ApplyPromotionRequest
+                        {
+                            Code = request.PromotionCode,
+                            UserId = userId,
+                            HouseId = id,
+                            Amount = originalTotalCost, // Original amount before discount
+                            DiscountAmount = discountAmount,
+                            TransactionId = tempTransactionId // Temporary ID, will update after payment
+                        });
+
+                        _logger.LogInformation(
+                            "Promotion {PromotionCode} usage recorded BEFORE payment for user {UserId}",
+                            request.PromotionCode, userId);
+                    }
+                    catch (Exception promoEx)
+                    {
+                        // If promotion application fails, fail the purchase
+                        // Release reservation on promotion application failure
+                        if (reservationToken != null && _inventoryManager != null)
+                        {
+                            try
+                            {
+                                await _inventoryManager.ReleaseInventoryAsync(id, request.Quantity);
+                                _logger.LogInformation(
+                                    "Released reservation {ReservationToken} for house {HouseId} due to promotion application failure",
+                                    reservationToken, id);
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogWarning(ex, "Failed to release reservation {ReservationToken}", reservationToken);
+                            }
+                        }
+
+                        _logger.LogError(promoEx,
+                            "Failed to apply promotion {PromotionCode} for user {UserId}, house {HouseId}",
+                            request.PromotionCode, userId, id);
+
+                        return BadRequest(new AmesaBackend.Lottery.DTOs.ApiResponse<PurchaseTicketsResponse>
+                        {
+                            Success = false,
+                            Message = "Promotion application failed",
+                            Error = new ErrorResponse
+                            {
+                                Code = "PROMOTION_APPLICATION_FAILED",
+                                Message = "Failed to apply promotion code"
+                            }
+                        });
+                    }
                 }
 
                 // Process payment via Payment service (with discounted amount)
@@ -1108,46 +1227,21 @@ namespace AmesaBackend.Lottery.Controllers
                     Quantity = request.Quantity,
                     PaymentId = paymentResult.TransactionId,
                     UserId = userId,
-                    ReservationToken = reservationToken // Pass reservation token for confirmation
+                    ReservationToken = reservationToken, // Pass reservation token for confirmation
+                    PromotionCode = request.PromotionCode, // Pass promotion code for ticket tracking
+                    DiscountAmount = discountAmount > 0 ? discountAmount : null // Pass discount amount for ticket tracking
                 };
 
                 var ticketsResult = await _lotteryService.CreateTicketsFromPaymentAsync(createTicketsRequest);
 
-                // Record promotion usage after successful payment
-                if (appliedPromotionId.HasValue && !string.IsNullOrWhiteSpace(request.PromotionCode) && _promotionService != null)
+                // Note: Promotion usage was already recorded BEFORE payment to prevent race condition
+                // If we need to update the transaction ID in the promotion usage record, we can do it here
+                // For now, the promotion is already locked and tracked, so we just log success
+                if (appliedPromotionId.HasValue && !string.IsNullOrWhiteSpace(request.PromotionCode))
                 {
-                    try
-                    {
-                        await _promotionService.ApplyPromotionAsync(new ApplyPromotionRequest
-                        {
-                            Code = request.PromotionCode,
-                            UserId = userId,
-                            HouseId = id,
-                            Amount = originalTotalCost, // Original amount before discount
-                            DiscountAmount = discountAmount,
-                            TransactionId = paymentResult.TransactionId
-                        });
-
-                        _logger.LogInformation(
-                            "Promotion {PromotionCode} usage recorded for user {UserId}, transaction {TransactionId}",
-                            request.PromotionCode, userId, paymentResult.TransactionId);
-                    }
-                    catch (Exception promoEx)
-                    {
-                        // CRITICAL: Promotion discount was applied but usage not recorded
-                        // This creates data inconsistency - discount given but not tracked
-                        // Log as error with high severity for monitoring and manual reconciliation
-                        _logger.LogError(promoEx,
-                            "CRITICAL: Failed to record promotion usage after successful payment. " +
-                            "Promotion {PromotionCode} discount {DiscountAmount} was applied to transaction {TransactionId} " +
-                            "for user {UserId} but usage was not recorded. Manual reconciliation required.",
-                            request.PromotionCode, discountAmount, paymentResult.TransactionId, userId);
-                        
-                        // TODO: Consider implementing compensation logic:
-                        // 1. Create audit record for manual reconciliation
-                        // 2. Or attempt to reverse the discount (complex - would require payment service integration)
-                        // 3. Or mark transaction for review
-                    }
+                    _logger.LogInformation(
+                        "Promotion {PromotionCode} successfully applied and tracked for user {UserId}, transaction {TransactionId}",
+                        request.PromotionCode, userId, paymentResult.TransactionId);
                 }
 
                 // NEW: Confirm reservation after successful ticket creation

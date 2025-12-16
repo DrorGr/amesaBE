@@ -9,6 +9,7 @@ using AmesaBackend.Lottery.Data;
 using AmesaBackend.Shared.Helpers;
 using AmesaBackend.Shared.Caching;
 using AmesaBackend.Shared.Events;
+using AmesaBackend.Auth.Services;
 
 namespace AmesaBackend.Lottery.Controllers
 {
@@ -23,6 +24,9 @@ namespace AmesaBackend.Lottery.Controllers
         private readonly ICache? _cache;
         private readonly IEventPublisher? _eventPublisher;
         private readonly IPromotionService? _promotionService;
+        private readonly IErrorSanitizer? _errorSanitizer;
+        private readonly IWebHostEnvironment _environment;
+        private readonly IRateLimitService? _rateLimitService;
 
         public TicketsController(
             ILotteryService lotteryService, 
@@ -30,7 +34,10 @@ namespace AmesaBackend.Lottery.Controllers
             LotteryDbContext context,
             ICache? cache = null,
             IEventPublisher? eventPublisher = null,
-            IPromotionService? promotionService = null)
+            IPromotionService? promotionService = null,
+            IErrorSanitizer? errorSanitizer = null,
+            IWebHostEnvironment environment = null,
+            IRateLimitService? rateLimitService = null)
         {
             _lotteryService = lotteryService;
             _logger = logger;
@@ -38,6 +45,9 @@ namespace AmesaBackend.Lottery.Controllers
             _cache = cache;
             _eventPublisher = eventPublisher;
             _promotionService = promotionService;
+            _errorSanitizer = errorSanitizer;
+            _environment = environment;
+            _rateLimitService = rateLimitService;
         }
 
         [HttpGet]
@@ -89,23 +99,11 @@ namespace AmesaBackend.Lottery.Controllers
         [HttpGet("active")]
         public async Task<ActionResult<AmesaBackend.Lottery.DTOs.ApiResponse<List<LotteryTicketDto>>>> GetActiveEntries()
         {
-            // #region agent log
-            _logger.LogInformation("[DEBUG] TicketsController.GetActiveEntries:entry");
-            // #endregion
             try
             {
-                // #region agent log
-                _logger.LogInformation("[DEBUG] TicketsController.GetActiveEntries:before-user-claim");
-                // #endregion
                 var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                // #region agent log
-                _logger.LogInformation("[DEBUG] TicketsController.GetActiveEntries:after-user-claim userIdClaim={UserIdClaim}", userIdClaim);
-                // #endregion
                 if (userIdClaim == null || !Guid.TryParse(userIdClaim, out var userId))
                 {
-                    // #region agent log
-                    _logger.LogWarning("[DEBUG] TicketsController.GetActiveEntries:unauthorized");
-                    // #endregion
                     return Unauthorized(new AmesaBackend.Lottery.DTOs.ApiResponse<List<LotteryTicketDto>>
                     {
                         Success = false,
@@ -113,13 +111,7 @@ namespace AmesaBackend.Lottery.Controllers
                     });
                 }
 
-                // #region agent log
-                _logger.LogInformation("[DEBUG] TicketsController.GetActiveEntries:before-service-call userId={UserId}", userId);
-                // #endregion
                 var activeEntries = await _lotteryService.GetUserActiveEntriesAsync(userId);
-                // #region agent log
-                _logger.LogInformation("[DEBUG] TicketsController.GetActiveEntries:after-service-call userId={UserId} entriesCount={Count}", userId, activeEntries.Count);
-                // #endregion
 
                 return Ok(new AmesaBackend.Lottery.DTOs.ApiResponse<List<LotteryTicketDto>>
                 {
@@ -129,9 +121,6 @@ namespace AmesaBackend.Lottery.Controllers
             }
             catch (Exception ex)
             {
-                // #region agent log
-                _logger.LogError(ex, "[DEBUG] TicketsController.GetActiveEntries:exception exceptionType={Type} message={Message} stackTrace={StackTrace}", ex.GetType().Name, ex.Message, ex.StackTrace?.Substring(0, Math.Min(500, ex.StackTrace?.Length ?? 0)));
-                // #endregion
                 _logger.LogError(ex, "Error retrieving active entries");
                 return StatusCode(500, new AmesaBackend.Lottery.DTOs.ApiResponse<List<LotteryTicketDto>>
                 {
@@ -317,6 +306,30 @@ namespace AmesaBackend.Lottery.Controllers
                     });
                 }
 
+                // Rate limiting: Limit purchase attempts per user
+                if (_rateLimitService != null)
+                {
+                    var rateLimitKey = $"purchase:user:{userId}";
+                    var canPurchase = await _rateLimitService.CheckRateLimitAsync(rateLimitKey, limit: 10, window: TimeSpan.FromMinutes(1));
+                    
+                    if (!canPurchase)
+                    {
+                        _logger.LogWarning("Rate limit exceeded for user {UserId} on quick-entry", userId);
+                        Response.Headers.Add("X-RateLimit-Limit", "10");
+                        Response.Headers.Add("X-RateLimit-Remaining", "0");
+                        Response.Headers.Add("X-RateLimit-Reset", DateTime.UtcNow.AddMinutes(1).ToString("R"));
+                        return StatusCode(429, new AmesaBackend.Lottery.DTOs.ApiResponse<QuickEntryResponse>
+                        {
+                            Success = false,
+                            Message = "Rate limit exceeded. Please try again in a moment.",
+                            Error = new ErrorResponse { Code = "RATE_LIMIT_EXCEEDED", Message = "Too many requests. Please wait before trying again." }
+                        });
+                    }
+
+                    // Increment rate limit after check
+                    await _rateLimitService.IncrementRateLimitAsync(rateLimitKey, TimeSpan.FromMinutes(1));
+                }
+
                 // Check ID verification requirement
                 await _lotteryService.CheckVerificationRequirementAsync(userId);
 
@@ -421,7 +434,9 @@ namespace AmesaBackend.Lottery.Controllers
                     HouseId = request.HouseId,
                     Quantity = request.TicketCount,
                     PaymentId = paymentResult.TransactionId,
-                    UserId = userId
+                    UserId = userId,
+                    PromotionCode = request.PromotionCode, // Pass promotion code to store in tickets
+                    DiscountAmount = discountAmount > 0 ? discountAmount : null // Pass discount amount to store in tickets
                 };
 
                 var ticketsResult = await _lotteryService.CreateTicketsFromPaymentAsync(createTicketsRequest);
@@ -451,13 +466,31 @@ namespace AmesaBackend.Lottery.Controllers
                         _logger.LogError(ex,
                             "CRITICAL: Failed to record promotion usage after successful payment. " +
                             "Promotion {PromotionCode} discount {DiscountAmount} was applied to transaction {TransactionId} " +
-                            "for user {UserId} but usage was not recorded. Manual reconciliation required.",
+                            "for user {UserId} but usage was not recorded. Creating audit record for manual reconciliation.",
                             request.PromotionCode, discountAmount, paymentResult.TransactionId, userId);
                         
-                        // TODO: Consider implementing compensation logic:
-                        // 1. Create audit record for manual reconciliation
-                        // 2. Or attempt to reverse the discount (complex - would require payment service integration)
-                        // 3. Or mark transaction for review
+                        // Create audit record for manual reconciliation
+                        try
+                        {
+                            var auditService = HttpContext.RequestServices.GetService<IPromotionAuditService>();
+                            if (auditService != null)
+                            {
+                                await auditService.CreateAuditRecordAsync(
+                                    paymentResult.TransactionId,
+                                    userId,
+                                    request.PromotionCode,
+                                    discountAmount);
+                            }
+                            else
+                            {
+                                _logger.LogWarning("IPromotionAuditService not available, cannot create audit record");
+                            }
+                        }
+                        catch (Exception auditEx)
+                        {
+                            _logger.LogError(auditEx, "Failed to create promotion usage audit record for transaction {TransactionId}",
+                                paymentResult.TransactionId);
+                        }
                     }
                 }
 

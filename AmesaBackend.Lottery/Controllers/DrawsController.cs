@@ -29,7 +29,11 @@ namespace AmesaBackend.Lottery.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting draws");
-                return StatusCode(500, new AmesaBackend.Lottery.DTOs.ApiResponse<List<LotteryDrawDto>> { Success = false, Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = ex.Message } });
+                return StatusCode(500, new AmesaBackend.Lottery.DTOs.ApiResponse<List<LotteryDrawDto>> 
+                { 
+                    Success = false, 
+                    Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = "An error occurred retrieving draws." } 
+                });
             }
         }
 
@@ -47,8 +51,44 @@ namespace AmesaBackend.Lottery.Controllers
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error getting draw");
-                return StatusCode(500, new AmesaBackend.Lottery.DTOs.ApiResponse<LotteryDrawDto> { Success = false, Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = ex.Message } });
+                _logger.LogError(ex, "Error getting draw {DrawId}", id);
+                return StatusCode(500, new AmesaBackend.Lottery.DTOs.ApiResponse<LotteryDrawDto> 
+                { 
+                    Success = false, 
+                    Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = "An error occurred retrieving the draw." } 
+                });
+            }
+        }
+
+        [HttpGet("{id}/participants")]
+        [Microsoft.AspNetCore.Authorization.AllowAnonymous] // Service-to-service, protected by middleware
+        public async Task<ActionResult<AmesaBackend.Lottery.DTOs.ApiResponse<List<ParticipantDto>>>> GetDrawParticipants(Guid id)
+        {
+            try
+            {
+                var participants = await _lotteryService.GetDrawParticipantsAsync(id);
+                return Ok(new AmesaBackend.Lottery.DTOs.ApiResponse<List<ParticipantDto>> 
+                { 
+                    Success = true, 
+                    Data = participants 
+                });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new AmesaBackend.Lottery.DTOs.ApiResponse<List<ParticipantDto>> 
+                { 
+                    Success = false, 
+                    Message = ex.Message 
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting draw participants");
+                return StatusCode(500, new AmesaBackend.Lottery.DTOs.ApiResponse<List<ParticipantDto>> 
+                { 
+                    Success = false, 
+                    Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = "An error occurred retrieving draw participants" } 
+                });
             }
         }
 
@@ -72,7 +112,11 @@ namespace AmesaBackend.Lottery.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error conducting draw");
-                return StatusCode(500, new AmesaBackend.Lottery.DTOs.ApiResponse<object> { Success = false, Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = ex.Message } });
+                return StatusCode(500, new AmesaBackend.Lottery.DTOs.ApiResponse<object> 
+                { 
+                    Success = false, 
+                    Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = "An error occurred conducting the draw." } 
+                });
             }
         }
     }

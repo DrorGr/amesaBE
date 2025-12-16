@@ -2,7 +2,9 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using AmesaBackend.Lottery.DTOs;
 using AmesaBackend.Lottery.Services;
+using AmesaBackend.Auth.Services;
 using System.Security.Claims;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace AmesaBackend.Lottery.Controllers
 {
@@ -12,13 +14,16 @@ namespace AmesaBackend.Lottery.Controllers
     {
         private readonly IPromotionService _promotionService;
         private readonly ILogger<PromotionController> _logger;
+        private readonly IRateLimitService? _rateLimitService;
 
         public PromotionController(
             IPromotionService promotionService,
-            ILogger<PromotionController> logger)
+            ILogger<PromotionController> logger,
+            IRateLimitService? rateLimitService = null)
         {
             _promotionService = promotionService;
             _logger = logger;
+            _rateLimitService = rateLimitService;
         }
 
         /// <summary>
@@ -46,7 +51,7 @@ namespace AmesaBackend.Lottery.Controllers
                 {
                     Success = false,
                     Message = "An error occurred while retrieving promotions",
-                    Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = ex.Message }
+                    Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = "An error occurred retrieving promotions." }
                 });
             }
         }
@@ -85,7 +90,7 @@ namespace AmesaBackend.Lottery.Controllers
                 {
                     Success = false,
                     Message = "An error occurred while retrieving promotion",
-                    Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = ex.Message }
+                    Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = "An error occurred retrieving the promotion." }
                 });
             }
         }
@@ -124,7 +129,7 @@ namespace AmesaBackend.Lottery.Controllers
                 {
                     Success = false,
                     Message = "An error occurred while retrieving promotion",
-                    Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = ex.Message }
+                    Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = "An error occurred retrieving the promotion." }
                 });
             }
         }
@@ -174,7 +179,7 @@ namespace AmesaBackend.Lottery.Controllers
                 {
                     Success = false,
                     Message = "An error occurred while creating promotion",
-                    Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = ex.Message }
+                    Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = "An error occurred creating the promotion." }
                 });
             }
         }
@@ -215,7 +220,7 @@ namespace AmesaBackend.Lottery.Controllers
                 {
                     Success = false,
                     Message = "An error occurred while updating promotion",
-                    Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = ex.Message }
+                    Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = "An error occurred updating the promotion." }
                 });
             }
         }
@@ -301,7 +306,7 @@ namespace AmesaBackend.Lottery.Controllers
                 {
                     Success = false,
                     Message = "An error occurred while validating promotion",
-                    Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = ex.Message }
+                    Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = "An error occurred validating the promotion." }
                 });
             }
         }
@@ -368,7 +373,7 @@ namespace AmesaBackend.Lottery.Controllers
                 {
                     Success = false,
                     Message = "An error occurred while applying promotion",
-                    Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = ex.Message }
+                    Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = "An error occurred applying the promotion." }
                 });
             }
         }
@@ -498,7 +503,7 @@ namespace AmesaBackend.Lottery.Controllers
                 {
                     Success = false,
                     Message = "An error occurred while retrieving promotion statistics",
-                    Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = ex.Message }
+                    Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = "An error occurred retrieving promotion statistics." }
                 });
             }
         }

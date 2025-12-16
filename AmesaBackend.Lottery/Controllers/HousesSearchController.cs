@@ -41,11 +41,6 @@ namespace AmesaBackend.Lottery.Controllers
             [FromQuery] int? bedrooms = null,
             [FromQuery] int? bathrooms = null)
         {
-            // #region agent log
-            _logger.LogInformation("[DEBUG_ROUTING] HousesSearchController.GetHouses called - Method: {Method}, Path: {Path}, Query: {Query}", 
-                HttpContext.Request.Method, 
-                HttpContext.Request.Path, 
-                HttpContext.Request.QueryString);
             // #endregion
             try
             {

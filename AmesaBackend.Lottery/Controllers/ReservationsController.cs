@@ -14,15 +14,18 @@ namespace AmesaBackend.Lottery.Controllers
     {
         private readonly ITicketReservationService _reservationService;
         private readonly IRedisInventoryManager _inventoryManager;
+        private readonly IReservationProcessor _reservationProcessor;
         private readonly ILogger<ReservationsController> _logger;
 
         public ReservationsController(
             ITicketReservationService reservationService,
             IRedisInventoryManager inventoryManager,
+            IReservationProcessor reservationProcessor,
             ILogger<ReservationsController> logger)
         {
             _reservationService = reservationService;
             _inventoryManager = inventoryManager;
+            _reservationProcessor = reservationProcessor;
             _logger = logger;
         }
 
@@ -253,6 +256,76 @@ namespace AmesaBackend.Lottery.Controllers
                     {
                         Code = "INTERNAL_ERROR",
                         Message = "An error occurred retrieving your reservations."
+                    }
+                });
+            }
+        }
+
+        [HttpPost("{id}/process")]
+        public async Task<ActionResult<AmesaBackend.Lottery.DTOs.ApiResponse<object>>> ProcessReservation(Guid id)
+        {
+            try
+            {
+                if (!ControllerHelpers.TryGetUserId(User, out var userId))
+                {
+                    return Unauthorized(new AmesaBackend.Lottery.DTOs.ApiResponse<object>
+                    {
+                        Success = false,
+                        Error = new ErrorResponse
+                        {
+                            Code = "UNAUTHORIZED",
+                            Message = "Authentication required"
+                        }
+                    });
+                }
+
+                // Get reservation to verify ownership
+                var reservation = await _reservationService.GetReservationAsync(id, userId);
+                if (reservation == null)
+                {
+                    return NotFound(new AmesaBackend.Lottery.DTOs.ApiResponse<object>
+                    {
+                        Success = false,
+                        Error = new ErrorResponse
+                        {
+                            Code = "NOT_FOUND",
+                            Message = "Reservation not found"
+                        }
+                    });
+                }
+
+                // Process reservation
+                var result = await _reservationProcessor.ProcessReservationAsync(id);
+
+                if (!result.Success)
+                {
+                    return BadRequest(new AmesaBackend.Lottery.DTOs.ApiResponse<object>
+                    {
+                        Success = false,
+                        Error = new ErrorResponse
+                        {
+                            Code = "PROCESSING_FAILED",
+                            Message = result.ErrorMessage ?? "Failed to process reservation"
+                        }
+                    });
+                }
+
+                return Ok(new AmesaBackend.Lottery.DTOs.ApiResponse<object>
+                {
+                    Success = true,
+                    Message = "Reservation processed successfully"
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error processing reservation {ReservationId}", id);
+                return StatusCode(500, new AmesaBackend.Lottery.DTOs.ApiResponse<object>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "INTERNAL_ERROR",
+                        Message = "An error occurred processing the reservation."
                     }
                 });
             }
