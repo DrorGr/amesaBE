@@ -10,6 +10,8 @@ COPY ["AmesaBackend.Shared/AmesaBackend.Shared.csproj", "AmesaBackend.Shared/"]
 RUN dotnet restore "AmesaBackend.Lottery/AmesaBackend.Lottery.csproj"
 # Copy the rest of the source code
 COPY . .
+# Remove appsettings from other projects to avoid publish conflicts
+RUN find /src -maxdepth 2 -name "appsettings*.json" ! -path "/src/AmesaBackend.Lottery/*" -delete
 RUN dotnet build "AmesaBackend.Lottery/AmesaBackend.Lottery.csproj" -c Release -o /app/build
 
 FROM build AS publish
