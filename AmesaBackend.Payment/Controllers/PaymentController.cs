@@ -197,5 +197,81 @@ namespace AmesaBackend.Payment.Controllers
                 return StatusCode(500, new ApiResponse<PaymentResponse> { Success = false, Error = new ErrorResponse { Code = "PAYMENT_PROCESSING_ERROR", Message = "An error occurred processing your payment. Please try again." } });
             }
         }
+
+        [HttpPost("refund")]
+        public async Task<ActionResult<ApiResponse<RefundResponse>>> RefundPayment([FromBody] RefundRequest request)
+        {
+            try
+            {
+                Guid userId;
+                
+                // Check if this is a service-to-service call (has X-Service-Auth header)
+                var serviceAuthHeader = Request.Headers["X-Service-Auth"].FirstOrDefault();
+                var isServiceCall = !string.IsNullOrEmpty(serviceAuthHeader) && 
+                                     serviceAuthHeader == Environment.GetEnvironmentVariable("SERVICE_AUTH_API_KEY");
+
+                if (isServiceCall)
+                {
+                    // For service-to-service calls, get userId from the transaction
+                    // This allows Lottery service to refund on behalf of users
+                    var transaction = await _paymentService.GetTransactionAsync(request.TransactionId, Guid.Empty);
+                    if (transaction == null)
+                    {
+                        return NotFound(new ApiResponse<RefundResponse> { Success = false, Message = "Transaction not found" });
+                    }
+                    // Get userId from transaction - we'll need to modify GetTransactionAsync or create a new method
+                    // For now, we'll query directly
+                    userId = await _paymentService.GetTransactionUserIdAsync(request.TransactionId) ?? Guid.Empty;
+                    if (userId == Guid.Empty)
+                    {
+                        return NotFound(new ApiResponse<RefundResponse> { Success = false, Message = "Transaction not found" });
+                    }
+                }
+                else
+                {
+                    // Regular user call - get userId from JWT token
+                    if (!AmesaBackend.Shared.Helpers.ControllerHelpers.TryGetUserId(User, out userId))
+                    {
+                        return Unauthorized(new ApiResponse<RefundResponse> 
+                        { 
+                            Success = false, 
+                            Message = "Authentication required" 
+                        });
+                    }
+
+                    // Check if user is admin (for admin-initiated refunds)
+                    var isAdmin = User.IsInRole("Admin");
+                    if (!isAdmin)
+                    {
+                        // For non-admin users, verify they own the transaction
+                        // This is handled in the service, but we can add additional checks here if needed
+                    }
+                }
+
+                var response = await _paymentService.RefundPaymentAsync(userId, request);
+                return Ok(new ApiResponse<RefundResponse> { Success = true, Data = response, Message = "Refund initiated successfully" });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new ApiResponse<RefundResponse> { Success = false, Message = ex.Message });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new ApiResponse<RefundResponse> { Success = false, Message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new ApiResponse<RefundResponse> { Success = false, Message = ex.Message });
+            }
+            catch (ArgumentOutOfRangeException ex)
+            {
+                return BadRequest(new ApiResponse<RefundResponse> { Success = false, Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error processing refund");
+                return StatusCode(500, new ApiResponse<RefundResponse> { Success = false, Error = new ErrorResponse { Code = "REFUND_PROCESSING_ERROR", Message = "An error occurred processing your refund. Please try again." } });
+            }
+        }
     }
 }

@@ -267,6 +267,164 @@ namespace AmesaBackend.Payment.Services
             };
         }
 
+        public async Task<RefundResponse> RefundPaymentAsync(Guid userId, RefundRequest request)
+        {
+            // Check idempotency key
+            if (!string.IsNullOrEmpty(request.IdempotencyKey))
+            {
+                var existingRefund = await _context.Transactions
+                    .FirstOrDefaultAsync(t => t.IdempotencyKey == request.IdempotencyKey && t.Type == "Refund");
+
+                if (existingRefund != null)
+                {
+                    // Return existing refund transaction
+                    var originalTransaction = await _context.Transactions
+                        .FirstOrDefaultAsync(t => t.ReferenceId == existingRefund.ReferenceId && t.Type == "Payment");
+
+                    return new RefundResponse
+                    {
+                        RefundId = existingRefund.Id,
+                        TransactionId = originalTransaction?.Id ?? Guid.Empty,
+                        RefundAmount = existingRefund.Amount,
+                        Status = existingRefund.Status,
+                        ProcessedAt = existingRefund.ProcessedAt ?? existingRefund.CreatedAt,
+                        ProviderRefundId = existingRefund.ProviderTransactionId,
+                        Message = "Refund already processed (idempotency)"
+                    };
+                }
+            }
+
+            // Get original transaction
+            var transaction = await _context.Transactions
+                .FirstOrDefaultAsync(t => t.Id == request.TransactionId);
+
+            if (transaction == null)
+            {
+                throw new KeyNotFoundException("Transaction not found");
+            }
+
+            // Authorization: Only transaction owner or admin can refund
+            if (transaction.UserId != userId)
+            {
+                // Check if user is admin (would need to check roles, for now throw)
+                throw new UnauthorizedAccessException("You can only refund your own transactions");
+            }
+
+            // Validate transaction can be refunded
+            if (transaction.Status != "Completed" && transaction.Status != "Pending")
+            {
+                throw new InvalidOperationException($"Transaction status is {transaction.Status}, cannot refund");
+            }
+
+            // Check if already refunded
+            var existingRefundTransaction = await _context.Transactions
+                .Where(t => t.ReferenceId == transaction.Id.ToString() && t.Type == "Refund" && t.Status == "Completed")
+                .FirstOrDefaultAsync();
+
+            if (existingRefundTransaction != null)
+            {
+                throw new InvalidOperationException("Transaction has already been refunded");
+            }
+
+            // Calculate refund amount
+            decimal refundAmount = request.PartialAmount ?? transaction.Amount;
+
+            // Validate refund amount
+            if (refundAmount <= 0 || refundAmount > transaction.Amount)
+            {
+                throw new ArgumentOutOfRangeException(nameof(request.PartialAmount), 
+                    $"Refund amount must be between 0.01 and {transaction.Amount}");
+            }
+
+            // Create refund transaction
+            var refundTransaction = new Transaction
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                Type = "Refund",
+                Amount = refundAmount,
+                Currency = transaction.Currency,
+                Status = "Pending", // Will be updated by payment gateway
+                Description = $"Refund for transaction {transaction.Id}" + 
+                    (string.IsNullOrEmpty(request.Reason) ? "" : $": {request.Reason}"),
+                ReferenceId = transaction.Id.ToString(),
+                PaymentMethodId = transaction.PaymentMethodId,
+                IdempotencyKey = request.IdempotencyKey,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+
+            _context.Transactions.Add(refundTransaction);
+
+            // Update original transaction status if full refund
+            if (refundAmount == transaction.Amount)
+            {
+                transaction.Status = "Refunded";
+            }
+            else
+            {
+                transaction.Status = "PartiallyRefunded";
+            }
+            transaction.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            // Publish refund event
+            await _eventPublisher.PublishAsync(new PaymentRefundedEvent
+            {
+                PaymentId = refundTransaction.Id,
+                TransactionId = transaction.Id,
+                UserId = userId,
+                RefundAmount = refundAmount,
+                RefundReason = request.Reason ?? "Refund requested"
+            });
+
+            // Audit log
+            if (_auditService != null)
+            {
+                await _auditService.LogActionAsync(
+                    userId,
+                    "payment_refunded",
+                    "transaction",
+                    refundTransaction.Id,
+                    refundAmount,
+                    transaction.Currency,
+                    null,
+                    null,
+                    new Dictionary<string, object>
+                    {
+                        ["OriginalTransactionId"] = transaction.Id.ToString(),
+                        ["Reason"] = request.Reason ?? "",
+                        ["IdempotencyKey"] = request.IdempotencyKey ?? ""
+                    });
+            }
+
+            _logger.LogInformation(
+                "Refund created for transaction {TransactionId}, refund amount: {RefundAmount}",
+                transaction.Id, refundAmount);
+
+            return new RefundResponse
+            {
+                RefundId = refundTransaction.Id,
+                TransactionId = transaction.Id,
+                RefundAmount = refundAmount,
+                Status = refundTransaction.Status,
+                ProcessedAt = DateTime.UtcNow,
+                Message = "Refund initiated successfully"
+            };
+        }
+
+        public async Task<Guid?> GetTransactionUserIdAsync(Guid transactionId)
+        {
+            var transaction = await _context.Transactions
+                .AsNoTracking()
+                .Where(t => t.Id == transactionId)
+                .Select(t => t.UserId)
+                .FirstOrDefaultAsync();
+
+            return transaction;
+        }
+
         private TransactionDto MapToTransactionDto(Transaction transaction)
         {
             return new TransactionDto

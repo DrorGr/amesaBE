@@ -11,5 +11,7 @@ namespace AmesaBackend.Payment.Services
         Task<List<TransactionDto>> GetTransactionsAsync(Guid userId);
         Task<TransactionDto> GetTransactionAsync(Guid transactionId, Guid userId);
         Task<PaymentResponse> ProcessPaymentAsync(Guid userId, ProcessPaymentRequest request, string? ipAddress = null, string? userAgent = null);
+        Task<RefundResponse> RefundPaymentAsync(Guid userId, RefundRequest request);
+        Task<Guid?> GetTransactionUserIdAsync(Guid transactionId);
     }
 }

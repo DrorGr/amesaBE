@@ -148,4 +148,30 @@ namespace AmesaBackend.Payment.DTOs
     {
         public string PublishableKey { get; set; } = string.Empty;
     }
+
+    public class RefundRequest
+    {
+        [Required]
+        public Guid TransactionId { get; set; }
+
+        [StringLength(500)]
+        public string? Reason { get; set; }
+
+        [Range(0.01, 10000)]
+        public decimal? PartialAmount { get; set; }
+
+        [MaxLength(255)]
+        public string? IdempotencyKey { get; set; }
+    }
+
+    public class RefundResponse
+    {
+        public Guid RefundId { get; set; }
+        public Guid TransactionId { get; set; }
+        public decimal RefundAmount { get; set; }
+        public string Status { get; set; } = string.Empty;
+        public DateTime ProcessedAt { get; set; }
+        public string? ProviderRefundId { get; set; }
+        public string? Message { get; set; }
+    }
 }
