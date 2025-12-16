@@ -125,35 +125,47 @@ namespace AmesaBackend.Lottery.Services.Processors
                 var paymentServiceUrl = _configuration["PaymentService:BaseUrl"] 
                     ?? "http://amesa-backend-alb-509078867.eu-north-1.elb.amazonaws.com/api/v1";
 
+                // Get service auth token for service-to-service calls
+                var serviceAuthToken = Environment.GetEnvironmentVariable("SERVICE_AUTH_API_KEY");
+                
                 var request = new
                 {
                     TransactionId = transactionId,
-                    Amount = amount,
-                    Reason = "Ticket creation failed"
+                    PartialAmount = amount, // Use PartialAmount for partial refunds
+                    Reason = "Ticket creation failed - automatic refund",
+                    IdempotencyKey = $"refund_{transactionId}_{amount}" // Ensure idempotency
                 };
 
-                var response = await _httpClient.PostAsJsonAsync(
-                    $"{paymentServiceUrl}/payments/refund",
-                    request,
-                    cancellationToken);
+                var httpRequest = new HttpRequestMessage(HttpMethod.Post, $"{paymentServiceUrl}/payments/refund")
+                {
+                    Content = JsonContent.Create(request)
+                };
+
+                // Add service-to-service authentication header
+                if (!string.IsNullOrEmpty(serviceAuthToken))
+                {
+                    httpRequest.Headers.Add("X-Service-Auth", serviceAuthToken);
+                }
+
+                var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
 
                 if (response.IsSuccessStatusCode)
                 {
-                    var result = await response.Content.ReadFromJsonAsync<PaymentApiResponse>(
+                    var result = await response.Content.ReadFromJsonAsync<RefundApiResponse>(
                         new JsonSerializerOptions { PropertyNameCaseInsensitive = true },
                         cancellationToken);
 
-                    if (result?.Success == true)
+                    if (result?.Success == true && result.Data != null)
                     {
-                        _logger.LogInformation("Successfully refunded transaction {TransactionId}, amount {Amount}",
-                            transactionId, amount);
+                        _logger.LogInformation("Successfully refunded transaction {TransactionId}, refund amount {Amount}, refund ID {RefundId}",
+                            transactionId, result.Data.RefundAmount, result.Data.RefundId);
                         return true;
                     }
                 }
 
                 var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
-                _logger.LogWarning("Refund failed for transaction {TransactionId}: {Error}",
-                    transactionId, errorContent);
+                _logger.LogWarning("Refund failed for transaction {TransactionId}: Status {StatusCode}, Error {Error}",
+                    transactionId, response.StatusCode, errorContent);
                 return false;
             }
             catch (HttpRequestException ex)
@@ -187,6 +199,23 @@ namespace AmesaBackend.Lottery.Services.Processors
     {
         public string? TransactionId { get; set; }
         public string? ProviderTransactionId { get; set; }
+    }
+
+    public class RefundApiResponse
+    {
+        public bool Success { get; set; }
+        public RefundResponseData? Data { get; set; }
+        public string? Message { get; set; }
+    }
+
+    public class RefundResponseData
+    {
+        public Guid RefundId { get; set; }
+        public Guid TransactionId { get; set; }
+        public decimal RefundAmount { get; set; }
+        public string Status { get; set; } = string.Empty;
+        public DateTime ProcessedAt { get; set; }
+        public string? ProviderRefundId { get; set; }
     }
 }
 

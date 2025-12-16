@@ -4,6 +4,8 @@ using AmesaBackend.Lottery.DTOs;
 using AmesaBackend.Lottery.Models;
 using AmesaBackend.Auth.Services;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using AmesaBackend.Lottery.Configuration;
 
 namespace AmesaBackend.Lottery.Services
 {
@@ -13,20 +15,26 @@ namespace AmesaBackend.Lottery.Services
         private readonly IRedisInventoryManager _inventoryManager;
         private readonly ILotteryService _lotteryService;
         private readonly IRateLimitService? _rateLimitService;
+        private readonly IPromotionService? _promotionService;
         private readonly ILogger<TicketReservationService> _logger;
+        private readonly LotterySettings _settings;
 
         public TicketReservationService(
             LotteryDbContext context,
             IRedisInventoryManager inventoryManager,
             ILotteryService lotteryService,
             ILogger<TicketReservationService> logger,
-            IRateLimitService? rateLimitService = null)
+            IOptions<LotterySettings> settings,
+            IRateLimitService? rateLimitService = null,
+            IPromotionService? promotionService = null)
         {
             _context = context;
             _inventoryManager = inventoryManager;
             _lotteryService = lotteryService;
             _logger = logger;
+            _settings = settings.Value;
             _rateLimitService = rateLimitService;
+            _promotionService = promotionService;
         }
 
         public async Task<ReservationDto> CreateReservationAsync(CreateReservationRequest request, Guid houseId, Guid userId)
@@ -50,14 +58,20 @@ namespace AmesaBackend.Lottery.Services
             if (_rateLimitService != null)
             {
                 var userKey = $"reservation:user:{userId}";
-                var canReserve = await _rateLimitService.CheckRateLimitAsync(userKey, limit: 5, window: TimeSpan.FromHours(1));
+                var canReserve = await _rateLimitService.CheckRateLimitAsync(
+                    userKey, 
+                    limit: _settings.Reservation.RateLimit.PerUser, 
+                    window: TimeSpan.FromHours(_settings.Reservation.RateLimit.WindowHours));
                 if (!canReserve)
                 {
                     throw new InvalidOperationException("Rate limit exceeded. Please try again later.");
                 }
 
                 var userHouseKey = $"reservation:user:{userId}:house:{houseId}";
-                var canReserveHouse = await _rateLimitService.CheckRateLimitAsync(userHouseKey, limit: 10, window: TimeSpan.FromHours(1));
+                var canReserveHouse = await _rateLimitService.CheckRateLimitAsync(
+                    userHouseKey, 
+                    limit: _settings.Reservation.RateLimit.PerUserHouse, 
+                    window: TimeSpan.FromHours(_settings.Reservation.RateLimit.WindowHours));
                 if (!canReserveHouse)
                 {
                     throw new InvalidOperationException("Rate limit exceeded for this house. Please try again later.");
@@ -107,6 +121,41 @@ namespace AmesaBackend.Lottery.Services
 
                 // Calculate total price
                 var totalPrice = house.TicketPrice * request.Quantity;
+                decimal? discountAmount = null;
+                string? promotionCode = null;
+
+                // Validate and apply promotion code if provided
+                if (!string.IsNullOrWhiteSpace(request.PromotionCode) && _promotionService != null)
+                {
+                    var validation = await _promotionService.ValidatePromotionAsync(new ValidatePromotionRequest
+                    {
+                        Code = request.PromotionCode,
+                        UserId = userId,
+                        HouseId = houseId,
+                        Amount = totalPrice
+                    });
+
+                    if (!validation.IsValid)
+                    {
+                        await transaction.RollbackAsync();
+                        throw new InvalidOperationException(validation.Message ?? "Invalid promotion code");
+                    }
+
+                    // Apply discount
+                    discountAmount = validation.DiscountAmount;
+                    promotionCode = request.PromotionCode;
+                    totalPrice -= discountAmount.Value;
+
+                    // Ensure total price is not negative
+                    if (totalPrice < 0)
+                    {
+                        totalPrice = 0;
+                    }
+
+                    _logger.LogInformation(
+                        "Promotion {PromotionCode} applied to reservation: Original cost {OriginalCost}, Discount {Discount}, Final cost {FinalCost}",
+                        request.PromotionCode, house.TicketPrice * request.Quantity, discountAmount, totalPrice);
+                }
 
                 // Create reservation
                 var reservation = new TicketReservation
@@ -117,9 +166,11 @@ namespace AmesaBackend.Lottery.Services
                     Quantity = request.Quantity,
                     TotalPrice = totalPrice,
                     PaymentMethodId = request.PaymentMethodId,
+                    PromotionCode = promotionCode,
+                    DiscountAmount = discountAmount,
                     Status = "pending",
                     ReservationToken = reservationToken,
-                    ExpiresAt = DateTime.UtcNow.AddMinutes(5),
+                    ExpiresAt = DateTime.UtcNow.AddMinutes(_settings.Reservation.ExpiryMinutes),
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 };
@@ -254,6 +305,8 @@ namespace AmesaBackend.Lottery.Services
                 Quantity = reservation.Quantity,
                 TotalPrice = reservation.TotalPrice,
                 PaymentMethodId = reservation.PaymentMethodId,
+                PromotionCode = reservation.PromotionCode,
+                DiscountAmount = reservation.DiscountAmount,
                 Status = reservation.Status,
                 ReservationToken = reservation.ReservationToken,
                 ExpiresAt = reservation.ExpiresAt,

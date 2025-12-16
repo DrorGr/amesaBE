@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using AmesaBackend.Lottery.Data;
 using AmesaBackend.Lottery.Services;
 using AmesaBackend.Lottery.DTOs;
+using AmesaBackend.Shared.Events;
 
 namespace AmesaBackend.Lottery.Services
 {
@@ -11,11 +12,16 @@ namespace AmesaBackend.Lottery.Services
     {
         private readonly IServiceProvider _serviceProvider;
         private readonly ILogger<LotteryDrawService> _logger;
+        private readonly IEventPublisher? _eventPublisher;
 
-        public LotteryDrawService(IServiceProvider serviceProvider, ILogger<LotteryDrawService> logger)
+        public LotteryDrawService(
+            IServiceProvider serviceProvider, 
+            ILogger<LotteryDrawService> logger,
+            IEventPublisher? eventPublisher = null)
         {
             _serviceProvider = serviceProvider;
             _logger = logger;
+            _eventPublisher = eventPublisher;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -26,8 +32,8 @@ namespace AmesaBackend.Lottery.Services
                 {
                     using var scope = _serviceProvider.CreateScope();
                     var context = scope.ServiceProvider.GetRequiredService<LotteryDbContext>();
-                    // TODO: Implement IEventPublisher interface
-                    // var eventPublisher = scope.ServiceProvider.GetRequiredService<IEventPublisher>();
+                    // Get event publisher from scope (or use injected one)
+                    var eventPublisher = _eventPublisher ?? scope.ServiceProvider.GetService<IEventPublisher>();
 
                     // Check for lotteries that need to be drawn
                     var pendingDraws = await context.LotteryDraws
@@ -44,6 +50,7 @@ namespace AmesaBackend.Lottery.Services
                             var lotteryService = scope.ServiceProvider.GetRequiredService<ILotteryService>();
                             
                             // Conduct the draw using the LotteryService
+                            // Note: ConductDrawAsync already publishes LotteryDrawCompletedEvent and LotteryDrawWinnerSelectedEvent
                             var conductDrawRequest = new ConductDrawRequest
                             {
                                 DrawMethod = "random",
@@ -53,6 +60,9 @@ namespace AmesaBackend.Lottery.Services
                             await lotteryService.ConductDrawAsync(draw.Id, conductDrawRequest);
                             
                             _logger.LogInformation("Draw {DrawId} completed successfully", draw.Id);
+                            
+                            // Additional event publishing can be done here if needed
+                            // The main events are already published by ConductDrawAsync
                         }
                         catch (Exception ex)
                         {
@@ -60,6 +70,24 @@ namespace AmesaBackend.Lottery.Services
                             // Mark draw as failed
                             draw.DrawStatus = "Failed";
                             await context.SaveChangesAsync(stoppingToken);
+                            
+                            // Optionally publish draw failed event
+                            if (eventPublisher != null)
+                            {
+                                try
+                                {
+                                    await eventPublisher.PublishAsync(new LotteryDrawFailedEvent
+                                    {
+                                        DrawId = draw.Id,
+                                        HouseId = draw.HouseId,
+                                        FailureReason = ex.Message
+                                    });
+                                }
+                                catch (Exception eventEx)
+                                {
+                                    _logger.LogError(eventEx, "Failed to publish draw failed event for draw {DrawId}", draw.Id);
+                                }
+                            }
                         }
                     }
                 }

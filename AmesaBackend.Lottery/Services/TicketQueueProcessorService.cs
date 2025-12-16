@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
 using System.Text.Json;
 using AmesaBackend.Lottery.DTOs;
+using StackExchange.Redis;
 
 namespace AmesaBackend.Lottery.Services
 {
@@ -16,6 +17,12 @@ namespace AmesaBackend.Lottery.Services
         private readonly IConfiguration _configuration;
         private readonly IAmazonSQS _sqsClient;
         private readonly string? _queueUrl;
+        private const int MaxRetries = 3;
+        private const int RetryTrackingTTLHours = 24; // Keep retry count for 24 hours
+        
+        // Cached Redis instance for efficiency (lazy initialization, thread-safe)
+        private IConnectionMultiplexer? _redis;
+        private readonly object _redisLock = new object();
 
         public TicketQueueProcessorService(
             IServiceProvider serviceProvider,
@@ -82,12 +89,13 @@ namespace AmesaBackend.Lottery.Services
 
                 foreach (var message in response.Messages)
                 {
+                    Guid reservationId = Guid.Empty;
                     try
                     {
                         using var scope = _serviceProvider.CreateScope();
                         var reservationProcessor = scope.ServiceProvider.GetRequiredService<IReservationProcessor>();
 
-                        var reservationId = JsonSerializer.Deserialize<QueueMessage>(message.Body)?.ReservationId ?? Guid.Empty;
+                        reservationId = JsonSerializer.Deserialize<QueueMessage>(message.Body)?.ReservationId ?? Guid.Empty;
                         
                         if (reservationId == Guid.Empty)
                         {
@@ -96,22 +104,75 @@ namespace AmesaBackend.Lottery.Services
                             continue;
                         }
 
+                        // Get retry count from Redis (or default to 0)
+                        var retryCount = await GetRetryCountAsync(reservationId);
+
+                        if (retryCount >= MaxRetries)
+                        {
+                            _logger.LogError(
+                                "Reservation {ReservationId} exceeded max retries ({MaxRetries}), moving to dead letter handling. Manual intervention required.",
+                                reservationId, MaxRetries);
+                            
+                            // Log for manual review (DLQ equivalent)
+                            await LogDeadLetterMessageAsync(reservationId, "Max retries exceeded");
+                            
+                            // Delete message to prevent infinite retry loop
+                            await DeleteMessageAsync(message.ReceiptHandle, cancellationToken);
+                            
+                            // Clear retry count from Redis
+                            await ClearRetryCountAsync(reservationId);
+                            continue;
+                        }
+
                         var result = await reservationProcessor.ProcessReservationAsync(reservationId, cancellationToken);
 
                         if (result.Success)
                         {
                             await DeleteMessageAsync(message.ReceiptHandle, cancellationToken);
+                            await ClearRetryCountAsync(reservationId); // Clear retry count on success
                             _logger.LogInformation("Successfully processed reservation {ReservationId}", reservationId);
                         }
                         else
                         {
-                            _logger.LogWarning("Failed to process reservation {ReservationId}: {Error}", 
-                                reservationId, result.ErrorMessage);
+                            // Increment retry count in Redis
+                            var newRetryCount = await IncrementRetryCountAsync(reservationId);
+                            
+                            _logger.LogWarning(
+                                "Failed to process reservation {ReservationId}: {Error} (Retry {RetryCount}/{MaxRetries})", 
+                                reservationId, result.ErrorMessage, newRetryCount, MaxRetries);
+                            
+                            // Don't delete message - let it become visible again after visibility timeout
+                            // This allows for automatic retries
                         }
                     }
                     catch (Exception ex)
                     {
                         _logger.LogError(ex, "Error processing message {MessageId}", message.MessageId);
+                        
+                        // Only track retries if we have a valid reservation ID
+                        if (reservationId != Guid.Empty)
+                        {
+                            // Increment retry count on exception
+                            var retryCount = await IncrementRetryCountAsync(reservationId);
+                            
+                            if (retryCount >= MaxRetries)
+                            {
+                                _logger.LogError(
+                                    "Reservation {ReservationId} exceeded max retries ({MaxRetries}) due to exception. Moving to dead letter handling.",
+                                    reservationId, MaxRetries);
+                                
+                                await LogDeadLetterMessageAsync(reservationId, $"Exception: {ex.Message}");
+                                await DeleteMessageAsync(message.ReceiptHandle, cancellationToken);
+                                await ClearRetryCountAsync(reservationId);
+                            }
+                            // Otherwise, don't delete message - let it become visible again for retry
+                        }
+                        else
+                        {
+                            // Invalid message - delete it to prevent infinite retries
+                            _logger.LogWarning("Invalid message body, deleting message {MessageId}", message.MessageId);
+                            await DeleteMessageAsync(message.ReceiptHandle, cancellationToken);
+                        }
                     }
                 }
             }
@@ -119,6 +180,120 @@ namespace AmesaBackend.Lottery.Services
             {
                 _logger.LogError(ex, "Error receiving messages from SQS queue");
             }
+        }
+
+        private IConnectionMultiplexer? GetRedis()
+        {
+            // Return cached instance if available (double-check locking pattern)
+            if (_redis != null)
+            {
+                return _redis;
+            }
+            
+            lock (_redisLock)
+            {
+                // Double-check after acquiring lock
+                if (_redis != null)
+                {
+                    return _redis;
+                }
+                
+                try
+                {
+                    // Get Redis from service provider (registered as Singleton by AddAmesaBackendShared)
+                    // No need for scope since it's a Singleton - get it directly from root service provider
+                    _redis = _serviceProvider.GetService<IConnectionMultiplexer>();
+                    return _redis;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "Redis not available for retry tracking");
+                    return null;
+                }
+            }
+        }
+
+        private async Task<int> GetRetryCountAsync(Guid reservationId)
+        {
+            var redis = GetRedis();
+            if (redis == null)
+            {
+                return 0; // No Redis, assume first attempt
+            }
+
+            try
+            {
+                var db = redis.GetDatabase();
+                var key = $"sqs:retry:{reservationId}";
+                var value = await db.StringGetAsync(key);
+                
+                if (value.HasValue && int.TryParse(value, out var count))
+                {
+                    return count;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error getting retry count for reservation {ReservationId}", reservationId);
+            }
+            
+            return 0;
+        }
+
+        private async Task<int> IncrementRetryCountAsync(Guid reservationId)
+        {
+            var redis = GetRedis();
+            if (redis == null)
+            {
+                return 1; // No Redis, return 1 as first retry
+            }
+
+            try
+            {
+                var db = redis.GetDatabase();
+                var key = $"sqs:retry:{reservationId}";
+                var newCount = await db.StringIncrementAsync(key);
+                await db.KeyExpireAsync(key, TimeSpan.FromHours(RetryTrackingTTLHours));
+                return (int)newCount;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error incrementing retry count for reservation {ReservationId}", reservationId);
+                return 1; // Fallback to 1
+            }
+        }
+
+        private async Task ClearRetryCountAsync(Guid reservationId)
+        {
+            var redis = GetRedis();
+            if (redis == null)
+            {
+                return;
+            }
+
+            try
+            {
+                var db = redis.GetDatabase();
+                var key = $"sqs:retry:{reservationId}";
+                await db.KeyDeleteAsync(key);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error clearing retry count for reservation {ReservationId}", reservationId);
+            }
+        }
+
+        private async Task LogDeadLetterMessageAsync(Guid reservationId, string errorMessage)
+        {
+            // Log for manual review (DLQ equivalent)
+            // In production, you could send to CloudWatch Logs, SNS topic, or a dedicated DLQ table
+            _logger.LogError(
+                "DEAD LETTER: Reservation {ReservationId} failed after {MaxRetries} retries. " +
+                "Error: {Error}. Timestamp: {Timestamp}. Manual intervention required.",
+                reservationId, MaxRetries, errorMessage, DateTime.UtcNow);
+            
+            // Optionally: Store in database for manual review
+            // await _deadLetterService.LogFailedReservationAsync(reservationId, errorMessage);
         }
 
         private async Task DeleteMessageAsync(string receiptHandle, CancellationToken cancellationToken)

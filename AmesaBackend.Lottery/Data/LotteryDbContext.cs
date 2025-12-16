@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using AmesaBackend.Lottery.Models;
+using PromotionModel = AmesaBackend.Models.Promotion;
+using UserPromotionModel = AmesaBackend.Models.UserPromotion;
 
 namespace AmesaBackend.Lottery.Data
 {
@@ -16,6 +18,11 @@ namespace AmesaBackend.Lottery.Data
         public DbSet<UserWatchlist> UserWatchlist { get; set; }
         public DbSet<LotteryParticipants> LotteryParticipants { get; set; }
         public DbSet<TicketReservation> TicketReservations { get; set; }
+        public DbSet<PromotionUsageAudit> PromotionUsageAudits { get; set; }
+        
+        // Promotion entities from amesa_admin schema
+        public DbSet<PromotionModel> Promotions { get; set; }
+        public DbSet<UserPromotionModel> UserPromotions { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -50,6 +57,8 @@ namespace AmesaBackend.Lottery.Data
                 entity.HasIndex(e => e.HouseId);
                 entity.HasIndex(e => e.UserId);
                 entity.HasIndex(e => e.TicketNumber);
+                // Add unique constraint on TicketNumber per house to prevent duplicates
+                entity.HasIndex(e => new { e.HouseId, e.TicketNumber }).IsUnique();
                 entity.HasOne(e => e.House).WithMany(h => h.Tickets).HasForeignKey(e => e.HouseId);
             });
 
@@ -90,6 +99,41 @@ namespace AmesaBackend.Lottery.Data
                 entity.HasIndex(e => e.ExpiresAt).HasFilter($"[Status] = 'pending'");
                 entity.HasIndex(e => e.ReservationToken).IsUnique();
                 entity.HasOne(e => e.House).WithMany().HasForeignKey(e => e.HouseId).OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<PromotionUsageAudit>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.TransactionId).IsRequired();
+                entity.Property(e => e.UserId).IsRequired();
+                entity.Property(e => e.PromotionCode).IsRequired().HasMaxLength(50);
+                entity.Property(e => e.DiscountAmount).IsRequired().HasColumnType("decimal(10,2)");
+                entity.Property(e => e.Status).IsRequired().HasMaxLength(50);
+                entity.Property(e => e.ResolutionNotes).HasMaxLength(1000);
+                entity.HasIndex(e => e.TransactionId);
+                entity.HasIndex(e => e.UserId);
+                entity.HasIndex(e => e.Status);
+                entity.HasIndex(e => e.CreatedAt);
+                entity.HasIndex(e => new { e.Status, e.CreatedAt });
+            });
+
+            // Configure Promotion entity (from amesa_admin schema)
+            modelBuilder.Entity<PromotionModel>(entity =>
+            {
+                entity.ToTable("promotions", "amesa_admin");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.Code);
+                entity.HasIndex(e => e.IsActive);
+            });
+
+            // Configure UserPromotion entity (from amesa_admin schema)
+            modelBuilder.Entity<UserPromotionModel>(entity =>
+            {
+                entity.ToTable("user_promotions", "amesa_admin");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.UserId);
+                entity.HasIndex(e => e.PromotionId);
+                entity.HasIndex(e => new { e.UserId, e.PromotionId });
             });
         }
     }

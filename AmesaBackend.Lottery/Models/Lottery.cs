@@ -141,6 +141,12 @@ namespace AmesaBackend.Lottery.Models
 
         public Guid? PaymentId { get; set; }
 
+        [MaxLength(50)]
+        public string? PromotionCode { get; set; }
+
+        [Column(TypeName = "decimal(10,2)")]
+        public decimal? DiscountAmount { get; set; }
+
         public bool IsWinner { get; set; } = false;
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

@@ -10,6 +10,9 @@ using AmesaBackend.Auth.Services;
 using AmesaBackend.Auth.Data;
 using AmesaBackend.Auth.Models;
 using Microsoft.Extensions.Configuration;
+using StackExchange.Redis;
+using System.Text.Json;
+using Npgsql;
 using SharedConfigService = AmesaBackend.Shared.Configuration.IConfigurationService;
 
 namespace AmesaBackend.Lottery.Services
@@ -24,6 +27,7 @@ namespace AmesaBackend.Lottery.Services
         private readonly SharedConfigService? _configurationService;
         private readonly IHttpRequest? _httpRequest;
         private readonly IConfiguration? _configuration;
+        private readonly IConnectionMultiplexer? _redis;
 
         public LotteryService(
             LotteryDbContext context, 
@@ -33,7 +37,8 @@ namespace AmesaBackend.Lottery.Services
             SharedConfigService? configurationService = null,
             AuthDbContext? authContext = null,
             IHttpRequest? httpRequest = null,
-            IConfiguration? configuration = null)
+            IConfiguration? configuration = null,
+            IConnectionMultiplexer? redis = null)
         {
             _context = context;
             _authContext = authContext;
@@ -43,6 +48,7 @@ namespace AmesaBackend.Lottery.Services
             _configurationService = configurationService;
             _httpRequest = httpRequest;
             _configuration = configuration;
+            _redis = redis;
         }
 
         /// <summary>
@@ -128,6 +134,31 @@ namespace AmesaBackend.Lottery.Services
             }
 
             return MapToDrawDto(draw);
+        }
+
+        public async Task<List<ParticipantDto>> GetDrawParticipantsAsync(Guid drawId)
+        {
+            var draw = await _context.LotteryDraws
+                .Include(d => d.House)
+                .FirstOrDefaultAsync(d => d.Id == drawId);
+
+            if (draw == null)
+            {
+                throw new KeyNotFoundException($"Draw {drawId} not found");
+            }
+
+            // Get all tickets for this draw and group by user
+            var participants = await _context.LotteryTickets
+                .Where(t => t.HouseId == draw.HouseId && t.Status == "Active")
+                .GroupBy(t => t.UserId)
+                .Select(g => new ParticipantDto
+                {
+                    UserId = g.Key,
+                    TicketCount = g.Count()
+                })
+                .ToListAsync();
+
+            return participants;
         }
 
         public async Task ConductDrawAsync(Guid drawId, ConductDrawRequest request)
@@ -753,8 +784,8 @@ namespace AmesaBackend.Lottery.Services
                         };
                     }
 
-                    // Generate ticket numbers
-                    var baseTicketNumber = await GetNextTicketNumberAsync(request.HouseId);
+                    // Generate ticket numbers (atomic operation via Redis or SELECT FOR UPDATE)
+                    var baseTicketNumber = await GetNextTicketNumberAsync(request.HouseId, request.Quantity);
                     var tickets = new List<LotteryTicket>();
 
                     for (int i = 0; i < request.Quantity; i++)
@@ -762,10 +793,12 @@ namespace AmesaBackend.Lottery.Services
                         var ticket = new LotteryTicket
                         {
                             Id = Guid.NewGuid(),
-                            TicketNumber = $"{request.HouseId:N}-{baseTicketNumber + i:D6}",
+                            TicketNumber = $"{request.HouseId.ToString("N")[..8]}-{baseTicketNumber + i:D6}",
                             HouseId = request.HouseId,
                             UserId = request.UserId,
-                            PurchasePrice = house.TicketPrice,
+                            PurchasePrice = house.TicketPrice, // Original ticket price
+                            PromotionCode = request.PromotionCode, // Store promotion code used
+                            DiscountAmount = request.DiscountAmount, // Store discount amount applied
                             Status = "Active",
                             PurchaseDate = DateTime.UtcNow,
                             PaymentId = request.PaymentId,
@@ -882,12 +915,45 @@ namespace AmesaBackend.Lottery.Services
 
         /// <summary>
         /// Helper method to get next ticket number for a house
+        /// Uses Redis atomic increment (thread-safe) or database fallback with SELECT FOR UPDATE
         /// </summary>
-        private async Task<int> GetNextTicketNumberAsync(Guid houseId)
+        private async Task<int> GetNextTicketNumberAsync(Guid houseId, int quantity = 1)
         {
+            // Try Redis first for atomic increment
+            if (_redis != null)
+            {
+                try
+                {
+                    var db = _redis.GetDatabase();
+                    var key = $"lottery:ticket_number:{houseId}";
+                    
+                    // Atomically increment by quantity and get the starting number
+                    var result = await db.StringIncrementAsync(key, quantity);
+                    var startingNumber = (int)result - quantity + 1;
+                    
+                    // Ensure minimum value is 1
+                    if (startingNumber < 1)
+                    {
+                        // Reset if somehow negative
+                        await db.StringSetAsync(key, quantity);
+                        startingNumber = 1;
+                    }
+                    
+                    return startingNumber;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Redis ticket number generation failed for house {HouseId}, falling back to database", houseId);
+                    // Fall through to database method
+                }
+            }
+
+            // Fallback to database: Use SELECT FOR UPDATE to prevent race conditions
+            // This ensures atomicity within the Serializable transaction
             var maxTicket = await _context.LotteryTickets
-                .Where(t => t.HouseId == houseId)
-                .OrderByDescending(t => t.TicketNumber)
+                .FromSqlRaw(
+                    "SELECT * FROM amesa_lottery.lottery_tickets WHERE \"HouseId\" = {0} ORDER BY \"TicketNumber\" DESC LIMIT 1 FOR UPDATE",
+                    houseId)
                 .FirstOrDefaultAsync();
 
             if (maxTicket == null)
@@ -1239,6 +1305,88 @@ namespace AmesaBackend.Lottery.Services
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// Gets all user IDs who have favorited a specific house
+        /// Uses EF Core to load preferences and parses JSONB in memory
+        /// </summary>
+        public async Task<List<Guid>> GetHouseFavoriteUserIdsAsync(Guid houseId)
+        {
+            if (_authContext == null)
+            {
+                _logger.LogWarning("Auth context not available for getting favorite user IDs");
+                return new List<Guid>();
+            }
+
+            try
+            {
+                // Use EF Core to load all user preferences with JSON
+                var allPreferences = await _authContext.UserPreferences
+                    .Where(up => up.PreferencesJson != null && up.PreferencesJson != string.Empty)
+                    .ToListAsync();
+
+                var favoriteUserIds = new List<Guid>();
+
+                // Parse JSON for each user and check if house is in favorites
+                foreach (var pref in allPreferences)
+                {
+                    try
+                    {
+                        var jsonDoc = JsonDocument.Parse(pref.PreferencesJson);
+                        if (jsonDoc.RootElement.TryGetProperty("lotteryPreferences", out var lotteryPrefs) &&
+                            lotteryPrefs.TryGetProperty("favoriteHouseIds", out var favoriteIds) &&
+                            favoriteIds.ValueKind == JsonValueKind.Array)
+                        {
+                            foreach (var idElement in favoriteIds.EnumerateArray())
+                            {
+                                if (idElement.ValueKind == JsonValueKind.String &&
+                                    Guid.TryParse(idElement.GetString(), out var favoriteHouseId) &&
+                                    favoriteHouseId == houseId)
+                                {
+                                    favoriteUserIds.Add(pref.UserId);
+                                    break; // Found, move to next user
+                                }
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogDebug(ex, "Error parsing preferences JSON for user {UserId}", pref.UserId);
+                        // Continue with next user
+                    }
+                }
+
+                return favoriteUserIds;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting favorite user IDs for house {HouseId}", houseId);
+                return new List<Guid>();
+            }
+        }
+
+        /// <summary>
+        /// Gets all user IDs who are participants (have tickets) for a specific house
+        /// </summary>
+        public async Task<List<Guid>> GetHouseParticipantUserIdsAsync(Guid houseId)
+        {
+            try
+            {
+                // Query distinct user IDs from lottery tickets for this house
+                var participantUserIds = await _context.LotteryTickets
+                    .Where(t => t.HouseId == houseId && t.Status == "Active")
+                    .Select(t => t.UserId)
+                    .Distinct()
+                    .ToListAsync();
+
+                return participantUserIds;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting participant user IDs for house {HouseId}", houseId);
+                return new List<Guid>();
+            }
         }
     }
 }

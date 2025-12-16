@@ -94,6 +94,20 @@ namespace AmesaBackend.Lottery.DTOs
         /// Used to confirm inventory reservation after successful ticket creation
         /// </summary>
         public string? ReservationToken { get; set; }
+        
+        /// <summary>
+        /// Optional promotion code used for this purchase
+        /// Used to track which promotion was applied to these tickets
+        /// </summary>
+        [StringLength(50)]
+        public string? PromotionCode { get; set; }
+        
+        /// <summary>
+        /// Optional discount amount applied from promotion
+        /// Used to track discount per ticket for audit purposes
+        /// </summary>
+        [Range(0, 100000)]
+        public decimal? DiscountAmount { get; set; }
     }
 
     /// <summary>

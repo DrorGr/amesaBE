@@ -39,6 +39,12 @@ namespace AmesaBackend.Lottery.Models
 
         public Guid? PaymentTransactionId { get; set; }
 
+        [MaxLength(50)]
+        public string? PromotionCode { get; set; }
+
+        [Column(TypeName = "decimal(10,2)")]
+        public decimal? DiscountAmount { get; set; }
+
         public string? ErrorMessage { get; set; }
 
         [Required]

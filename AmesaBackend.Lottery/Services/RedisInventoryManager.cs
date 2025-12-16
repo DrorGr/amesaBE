@@ -28,7 +28,14 @@ namespace AmesaBackend.Lottery.Services
         {
             try
             {
-                // Lua script for atomic reserve operation
+                // Validate input
+                if (quantity <= 0)
+                {
+                    _logger.LogWarning("Invalid quantity {Quantity} for house {HouseId}", quantity, houseId);
+                    return false;
+                }
+
+                // Lua script for atomic reserve operation with bounds checking
                 var script = @"
                     local houseKey = 'lottery:inventory:' .. ARGV[1]
                     local reservedKey = 'lottery:inventory:' .. ARGV[1] .. ':reserved'
@@ -36,15 +43,33 @@ namespace AmesaBackend.Lottery.Services
                     local quantity = tonumber(ARGV[2])
                     local token = ARGV[3]
                     
+                    if quantity <= 0 then
+                        return 0
+                    end
+                    
                     local available = tonumber(redis.call('GET', houseKey)) or 0
+                    
+                    -- Bounds checking: Ensure available is non-negative
+                    if available < 0 then
+                        available = 0
+                    end
                     
                     if available < quantity then
                         return 0
                     end
                     
-                    -- Reserve inventory
-                    redis.call('DECRBY', houseKey, quantity)
-                    redis.call('INCRBY', reservedKey, quantity)
+                    -- Reserve inventory atomically
+                    local newAvailable = redis.call('DECRBY', houseKey, quantity)
+                    local newReserved = redis.call('INCRBY', reservedKey, quantity)
+                    
+                    -- Bounds checking: Ensure values don't go negative
+                    if newAvailable < 0 then
+                        -- Rollback: restore the values
+                        redis.call('INCRBY', houseKey, quantity)
+                        redis.call('DECRBY', reservedKey, quantity)
+                        return 0
+                    end
+                    
                     redis.call('SET', lockKey, '1', 'EX', 300)
                     
                     return 1
@@ -60,7 +85,7 @@ namespace AmesaBackend.Lottery.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error reserving inventory for house {HouseId}", houseId);
-                return false;
+                return false; // Fail-closed: Return false on error
             }
         }
 
@@ -68,34 +93,60 @@ namespace AmesaBackend.Lottery.Services
         {
             try
             {
+                // Validate input
+                if (quantity <= 0)
+                {
+                    _logger.LogWarning("Invalid quantity {Quantity} for house {HouseId}", quantity, houseId);
+                    return false;
+                }
+
                 var script = @"
                     local houseKey = 'lottery:inventory:' .. ARGV[1]
                     local reservedKey = 'lottery:inventory:' .. ARGV[1] .. ':reserved'
                     local quantity = tonumber(ARGV[2])
                     
+                    if quantity <= 0 then
+                        return 0
+                    end
+                    
                     local reserved = tonumber(redis.call('GET', reservedKey)) or 0
                     
+                    -- Bounds checking: Ensure reserved is non-negative
+                    if reserved < 0 then
+                        reserved = 0
+                    end
+                    
+                    -- Don't release more than reserved
                     if reserved < quantity then
                         quantity = reserved
                     end
                     
-                    redis.call('INCRBY', houseKey, quantity)
-                    redis.call('DECRBY', reservedKey, quantity)
+                    -- Release inventory atomically
+                    local newAvailable = redis.call('INCRBY', houseKey, quantity)
+                    local newReserved = redis.call('DECRBY', reservedKey, quantity)
+                    
+                    -- Bounds checking: Ensure reserved doesn't go negative
+                    if newReserved < 0 then
+                        -- Rollback: restore the values
+                        redis.call('DECRBY', houseKey, quantity)
+                        redis.call('INCRBY', reservedKey, quantity)
+                        return 0
+                    end
                     
                     return 1
                 ";
 
-                await _db.ScriptEvaluateAsync(
+                var result = await _db.ScriptEvaluateAsync(
                     script,
                     keys: Array.Empty<RedisKey>(),
                     values: new RedisValue[] { houseId.ToString(), quantity });
 
-                return true;
+                return (int)result == 1;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error releasing inventory for house {HouseId}", houseId);
-                return false;
+                return false; // Fail-closed: Return false on error
             }
         }
 
@@ -192,12 +243,20 @@ namespace AmesaBackend.Lottery.Services
                 var count = await _db.StringGetAsync(countKey);
                 var currentCount = count.HasValue ? (int)count : await GetParticipantCountFromDatabaseAsync(houseId);
 
+                // Bounds checking: Ensure count is non-negative
+                if (currentCount < 0)
+                {
+                    _logger.LogWarning("Negative participant count detected for house {HouseId}, resetting to 0", houseId);
+                    currentCount = 0;
+                }
+
                 return currentCount < house.MaxParticipants;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error checking participant cap for house {HouseId}", houseId);
-                return true; // Fail open
+                // Fail-closed for security: Return false on error to prevent unauthorized access
+                return false;
             }
         }
 
@@ -205,38 +264,66 @@ namespace AmesaBackend.Lottery.Services
         {
             try
             {
+                var house = await _context.Houses.FindAsync(houseId);
+                var maxParticipants = house?.MaxParticipants ?? 0;
+
+                // Atomic script that checks cap and adds participant in one operation
                 var script = @"
                     local participantsKey = 'lottery:participants:' .. ARGV[1] .. ':users'
                     local countKey = 'lottery:participants:' .. ARGV[1] .. ':count'
                     local userId = ARGV[2]
                     local maxParticipants = tonumber(ARGV[3])
                     
+                    -- Check if user is already a participant
+                    local isMember = redis.call('SISMEMBER', participantsKey, userId)
+                    if isMember == 1 then
+                        return 1  -- Already a participant, success
+                    end
+                    
                     if maxParticipants == 0 then
-                        -- No cap
+                        -- No cap: Add participant
                         redis.call('SADD', participantsKey, userId)
-                        redis.call('INCR', countKey)
+                        local newCount = redis.call('INCR', countKey)
+                        -- Bounds checking: Ensure count doesn't go negative
+                        if newCount < 0 then
+                            redis.call('DECR', countKey)
+                            redis.call('SREM', participantsKey, userId)
+                            return 0
+                        end
                         return 1
                     end
                     
+                    -- Check current count with bounds checking
                     local currentCount = tonumber(redis.call('GET', countKey)) or 0
+                    if currentCount < 0 then
+                        currentCount = 0
+                    end
                     
                     if currentCount >= maxParticipants then
+                        return 0  -- Cap reached
+                    end
+                    
+                    -- Add participant atomically
+                    redis.call('SADD', participantsKey, userId)
+                    local newCount = redis.call('INCR', countKey)
+                    
+                    -- Bounds checking: Ensure count doesn't go negative or exceed cap
+                    if newCount < 0 then
+                        -- Rollback
+                        redis.call('DECR', countKey)
+                        redis.call('SREM', participantsKey, userId)
                         return 0
                     end
                     
-                    local isMember = redis.call('SISMEMBER', participantsKey, userId)
-                    if isMember == 1 then
-                        return 1
+                    if newCount > maxParticipants then
+                        -- This shouldn't happen, but handle it
+                        redis.call('DECR', countKey)
+                        redis.call('SREM', participantsKey, userId)
+                        return 0
                     end
-                    
-                    redis.call('SADD', participantsKey, userId)
-                    redis.call('INCR', countKey)
                     
                     return 1
                 ";
-
-                var house = await _context.Houses.FindAsync(houseId);
-                var maxParticipants = house?.MaxParticipants ?? 0;
 
                 var result = await _db.ScriptEvaluateAsync(
                     script,
@@ -248,7 +335,7 @@ namespace AmesaBackend.Lottery.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error adding participant for house {HouseId}", houseId);
-                return false;
+                return false; // Fail-closed: Return false on error
             }
         }
 

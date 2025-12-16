@@ -261,6 +261,15 @@ namespace AmesaBackend.Lottery.DTOs
     }
 
     /// <summary>
+    /// Participant DTO for draw participants list
+    /// </summary>
+    public class ParticipantDto
+    {
+        public Guid UserId { get; set; }
+        public int TicketCount { get; set; }
+    }
+
+    /// <summary>
     /// Lottery participant statistics DTO
     /// </summary>
     public class LotteryParticipantStatsDto
@@ -312,5 +321,21 @@ namespace AmesaBackend.Lottery.DTOs
     {
         [Required]
         public bool Enabled { get; set; }
+    }
+
+    /// <summary>
+    /// Favorite user DTO for house favorites list
+    /// </summary>
+    public class FavoriteUserDto
+    {
+        public Guid UserId { get; set; }
+    }
+
+    /// <summary>
+    /// Participant user DTO for house participants list
+    /// </summary>
+    public class ParticipantUserDto
+    {
+        public Guid UserId { get; set; }
     }
 }

@@ -1,27 +1,34 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using System.Data;
-using AmesaBackend.Data;
+using AmesaBackend.Lottery.Data;
 using AmesaBackend.Models;
 using AmesaBackend.Lottery.DTOs;
 using AmesaBackend.Shared.Events;
+using AmesaBackend.Shared.Caching;
 using Microsoft.Extensions.Logging;
 
 namespace AmesaBackend.Lottery.Services
 {
     public class PromotionService : IPromotionService
     {
-        private readonly AmesaDbContext _context;
+        private readonly LotteryDbContext _context;
         private readonly IEventPublisher _eventPublisher;
+        private readonly ICache? _cache;
         private readonly ILogger<PromotionService> _logger;
+        private const string ActivePromotionsCacheKey = "promotions:active";
+        private const int ActivePromotionsCacheMinutes = 5;
+        private const int ValidationCacheMinutes = 1;
 
         public PromotionService(
-            AmesaDbContext context,
+            LotteryDbContext context,
             IEventPublisher eventPublisher,
-            ILogger<PromotionService> logger)
+            ILogger<PromotionService> logger,
+            ICache? cache = null)
         {
             _context = context;
             _eventPublisher = eventPublisher;
+            _cache = cache;
             _logger = logger;
         }
 
@@ -148,6 +155,9 @@ namespace AmesaBackend.Lottery.Services
 
             _logger.LogInformation("Promotion created: {PromotionId} - {Code}", promotion.Id, promotion.Code);
 
+            // Invalidate promotion caches
+            await InvalidatePromotionCachesAsync();
+
             return MapToDto(promotion);
         }
 
@@ -226,6 +236,9 @@ namespace AmesaBackend.Lottery.Services
 
             _logger.LogInformation("Promotion updated: {PromotionId}", promotion.Id);
 
+            // Invalidate promotion caches
+            await InvalidatePromotionCachesAsync();
+
             return MapToDto(promotion);
         }
 
@@ -245,6 +258,9 @@ namespace AmesaBackend.Lottery.Services
 
             _logger.LogInformation("Promotion soft deleted: {PromotionId}", promotion.Id);
 
+            // Invalidate promotion caches
+            await InvalidatePromotionCachesAsync();
+
             return true;
         }
 
@@ -258,6 +274,18 @@ namespace AmesaBackend.Lottery.Services
                     Message = "Promotion code is required",
                     ErrorCode = "PROMOTION_CODE_INVALID"
                 };
+            }
+
+            // Check cache first
+            var cacheKey = $"promotion:validate:{request.Code.ToUpper()}:{request.UserId}:{request.HouseId}:{request.Amount}";
+            if (_cache != null)
+            {
+                var cached = await _cache.GetRecordAsync<PromotionValidationResponse>(cacheKey);
+                if (cached != null)
+                {
+                    _logger.LogDebug("Promotion validation cache hit for code {Code}", request.Code);
+                    return cached;
+                }
             }
 
             var promotion = await _context.Promotions
@@ -359,13 +387,21 @@ namespace AmesaBackend.Lottery.Services
             // Calculate discount amount
             var discountAmount = CalculateDiscount(promotion, request.Amount);
 
-            return new PromotionValidationResponse
+            var response = new PromotionValidationResponse
             {
                 IsValid = true,
                 Promotion = MapToDto(promotion),
                 DiscountAmount = discountAmount,
                 Message = "Promotion is valid"
             };
+
+            // Cache validation result (TTL: 1 minute for validation results)
+            if (_cache != null)
+            {
+                await _cache.SetRecordAsync(cacheKey, response, TimeSpan.FromMinutes(ValidationCacheMinutes));
+            }
+
+            return response;
         }
 
         public async Task<PromotionUsageDto> ApplyPromotionAsync(ApplyPromotionRequest request)
@@ -380,16 +416,13 @@ namespace AmesaBackend.Lottery.Services
                 // This ensures the row is locked before we read it, preventing race conditions
                 var promotionCodeUpper = request.Code.ToUpper();
                 
-                // Execute a lock query first to acquire the row lock
-                // This prevents other transactions from modifying the promotion
-                await _context.Database.ExecuteSqlRawAsync(
-                    "SELECT 1 FROM amesa_admin.promotions WHERE UPPER(code) = {0} FOR UPDATE",
-                    promotionCodeUpper);
-                
-                // Now query the locked row - EF Core will map columns automatically
-                // The row remains locked until the transaction commits
+                // Use EF Core FromSqlRaw with parameters for row-level locking (FOR UPDATE)
+                // Parameters are safely parameterized by EF Core, preventing SQL injection
+                // Note: {0} syntax is parameterized, not string interpolation
                 var promotion = await _context.Promotions
-                    .Where(p => p.Code != null && p.Code.ToUpper() == promotionCodeUpper)
+                    .FromSqlRaw(
+                        "SELECT * FROM amesa_admin.promotions WHERE UPPER(code) = {0} FOR UPDATE",
+                        promotionCodeUpper)
                     .AsTracking() // Ensure entity is tracked for updates
                     .FirstOrDefaultAsync();
 
@@ -522,6 +555,18 @@ namespace AmesaBackend.Lottery.Services
 
         public async Task<List<PromotionDto>> GetAvailablePromotionsAsync(Guid userId, Guid? houseId)
         {
+            // Check cache first (cache key includes userId and houseId for user-specific results)
+            var cacheKey = $"promotions:available:{userId}:{houseId?.ToString() ?? "all"}";
+            if (_cache != null)
+            {
+                var cached = await _cache.GetRecordAsync<List<PromotionDto>>(cacheKey);
+                if (cached != null)
+                {
+                    _logger.LogDebug("Available promotions cache hit for user {UserId}, house {HouseId}", userId, houseId);
+                    return cached;
+                }
+            }
+
             var now = DateTime.UtcNow;
 
             var query = _context.Promotions
@@ -551,7 +596,15 @@ namespace AmesaBackend.Lottery.Services
                 .OrderByDescending(p => p.CreatedAt)
                 .ToListAsync();
 
-            return promotions.Select(MapToDto).ToList();
+            var result = promotions.Select(MapToDto).ToList();
+
+            // Cache result (TTL: 5 minutes for available promotions)
+            if (_cache != null)
+            {
+                await _cache.SetRecordAsync(cacheKey, result, TimeSpan.FromMinutes(ActivePromotionsCacheMinutes));
+            }
+
+            return result;
         }
 
         public async Task<PromotionAnalyticsDto> GetPromotionUsageStatsAsync(Guid promotionId)
@@ -678,6 +731,51 @@ namespace AmesaBackend.Lottery.Services
             {
                 // For fixed amount, use the value
                 return promotion.Value ?? 0;
+            }
+        }
+
+        /// <summary>
+        /// Invalidate all promotion-related caches
+        /// </summary>
+        /// <summary>
+        /// Invalidates promotion-related caches after create/update/delete operations.
+        /// 
+        /// Cache Invalidation Strategy:
+        /// - Active promotions list cache: Explicitly invalidated (immediate)
+        /// - Validation result caches: Natural expiration (1 minute TTL) - acceptable for validation results
+        /// - Available promotions caches: Natural expiration (5 minutes TTL) - acceptable for user-specific lists
+        /// 
+        /// Rationale:
+        /// - Validation caches are short-lived (1 min) and user-specific, so natural expiration is acceptable
+        /// - Available promotions caches are user-specific and house-specific, making pattern-based invalidation
+        ///   complex without Redis pattern matching support. Natural expiration (5 min) provides acceptable
+        ///   freshness while maintaining performance.
+        /// - Active promotions list is global and frequently accessed, so explicit invalidation ensures consistency
+        /// 
+        /// Future Enhancement:
+        /// If Redis pattern-based deletion is needed, consider using SCAN with pattern matching or implementing
+        /// cache versioning/timestamp in cache keys for more aggressive invalidation.
+        /// </summary>
+        private async Task InvalidatePromotionCachesAsync()
+        {
+            if (_cache == null)
+            {
+                return;
+            }
+
+            try
+            {
+                // Invalidate active promotions cache (global, explicitly invalidated for consistency)
+                await _cache.RemoveRecordAsync(ActivePromotionsCacheKey);
+                
+                // Note: Individual validation caches will expire naturally (1 minute TTL)
+                // Available promotions caches are user-specific and will expire naturally (5 minutes TTL)
+                // For more aggressive invalidation, we could use pattern-based deletion if Redis supports it
+                _logger.LogDebug("Promotion caches invalidated");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error invalidating promotion caches");
             }
         }
 

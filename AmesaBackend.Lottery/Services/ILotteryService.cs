@@ -15,6 +15,7 @@ namespace AmesaBackend.Lottery.Services
         Task<bool> AddHouseToFavoritesAsync(Guid userId, Guid houseId);
         Task<bool> RemoveHouseFromFavoritesAsync(Guid userId, Guid houseId);
         Task<List<HouseDto>> GetRecommendedHousesAsync(Guid userId, int limit = 10);
+        Task<List<Guid>> GetHouseFavoriteUserIdsAsync(Guid houseId);
         
         // Entry management methods
         Task<List<LotteryTicketDto>> GetUserActiveEntriesAsync(Guid userId);
@@ -28,6 +29,7 @@ namespace AmesaBackend.Lottery.Services
         Task<int> GetParticipantCountAsync(Guid houseId);
         Task<bool> CanUserEnterLotteryAsync(Guid userId, Guid houseId, bool useTransaction = true);
         Task<LotteryParticipantStatsDto> GetParticipantStatsAsync(Guid houseId);
+        Task<List<Guid>> GetHouseParticipantUserIdsAsync(Guid houseId);
         
         // Payment integration methods (called by Payment service)
         Task<CreateTicketsFromPaymentResponse> CreateTicketsFromPaymentAsync(CreateTicketsFromPaymentRequest request);
@@ -40,6 +42,9 @@ namespace AmesaBackend.Lottery.Services
         Task<Guid?> CreateProductForHouseAsync(Guid houseId, string houseTitle, decimal ticketPrice, Guid? createdBy);
         Task<Guid?> GetProductIdForHouseAsync(Guid houseId);
         Task<Dictionary<Guid, Guid?>> GetProductIdsForHousesAsync(List<Guid> houseIds);
+        
+        // Draw participants
+        Task<List<ParticipantDto>> GetDrawParticipantsAsync(Guid drawId);
     }
 
     /// <summary>

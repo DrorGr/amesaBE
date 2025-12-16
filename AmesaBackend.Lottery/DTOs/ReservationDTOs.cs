@@ -10,6 +10,8 @@ namespace AmesaBackend.Lottery.DTOs
         public int Quantity { get; set; }
         public decimal TotalPrice { get; set; }
         public Guid? PaymentMethodId { get; set; }
+        public string? PromotionCode { get; set; }
+        public decimal? DiscountAmount { get; set; }
         public string Status { get; set; } = string.Empty;
         public string ReservationToken { get; set; } = string.Empty;
         public DateTime ExpiresAt { get; set; }
@@ -27,6 +29,9 @@ namespace AmesaBackend.Lottery.DTOs
         public int Quantity { get; set; }
 
         public Guid? PaymentMethodId { get; set; }
+
+        [StringLength(50)]
+        public string? PromotionCode { get; set; }
     }
 
     public class InventoryStatus

@@ -172,5 +172,26 @@ namespace AmesaBackend.Lottery.DTOs
         public DateTime? FirstUsed { get; set; }
         public DateTime? LastUsed { get; set; }
     }
+
+    public class PromotionUsageAuditDto
+    {
+        public Guid Id { get; set; }
+        public Guid TransactionId { get; set; }
+        public Guid UserId { get; set; }
+        public string PromotionCode { get; set; } = string.Empty;
+        public decimal DiscountAmount { get; set; }
+        public string Status { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; }
+        public DateTime? ResolvedAt { get; set; }
+        public string? ResolutionNotes { get; set; }
+        public Guid? ResolvedByUserId { get; set; }
+    }
+
+    public class ResolvePromotionAuditRequest
+    {
+        [Required]
+        [StringLength(1000)]
+        public string ResolutionNotes { get; set; } = string.Empty;
+    }
 }
 
