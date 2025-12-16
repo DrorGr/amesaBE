@@ -106,9 +106,16 @@ namespace AmesaBackend.Shared.Events
         public string UnlockReason { get; set; } = string.Empty;
     }
 
+    /// <summary>
+    /// Event emitted when repeated failed login attempts are detected for a user.
+    /// </summary>
     public class FailedLoginAttemptsEvent : DomainEvent
     {
+        /// <summary>
+        /// The identifier of the affected user.
+        /// </summary>
         public Guid UserId { get; set; }
+
         public string Email { get; set; } = string.Empty;
         public int AttemptCount { get; set; }
         public string IpAddress { get; set; } = string.Empty;
@@ -243,6 +250,13 @@ namespace AmesaBackend.Shared.Events
         public Guid HouseId { get; set; }
         public DateTime DrawDate { get; set; }
         public int TotalTickets { get; set; }
+    }
+
+    public class LotteryDrawFailedEvent : DomainEvent
+    {
+        public Guid DrawId { get; set; }
+        public Guid HouseId { get; set; }
+        public string FailureReason { get; set; } = string.Empty;
     }
 
     public class LotteryEndedEvent : DomainEvent

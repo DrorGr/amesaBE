@@ -58,6 +58,9 @@ namespace AmesaBackend.Shared.Enums
         InProgress,
         Completed,
         Cancelled,
+        /// <summary>
+        /// The draw failed to complete successfully.
+        /// </summary>
         Failed
     }
 
@@ -67,6 +70,9 @@ namespace AmesaBackend.Shared.Enums
         Pending,
         Processing,
         Completed,
+        /// <summary>
+        /// The payment did not complete successfully.
+        /// </summary>
         Failed,
         Cancelled,
         Refunded
@@ -123,6 +129,9 @@ namespace AmesaBackend.Shared.Enums
         Scheduled,
         InTransit,
         Delivered,
+        /// <summary>
+        /// Delivery failed and requires attention.
+        /// </summary>
         Failed,
         Returned
     }

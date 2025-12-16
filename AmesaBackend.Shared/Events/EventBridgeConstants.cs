@@ -32,6 +32,9 @@ namespace AmesaBackend.Shared.Events
             // Payment Events
             public const string PaymentInitiated = "PaymentInitiated";
             public const string PaymentCompleted = "PaymentCompleted";
+            /// <summary>
+            /// Published when a payment fails.
+            /// </summary>
             public const string PaymentFailed = "PaymentFailed";
             public const string PaymentRefunded = "PaymentRefunded";
 
@@ -53,6 +56,9 @@ namespace AmesaBackend.Shared.Events
             // Notification Events
             public const string NotificationSent = "NotificationSent";
             public const string NotificationDelivered = "NotificationDelivered";
+            /// <summary>
+            /// Published when a notification cannot be sent or delivered.
+            /// </summary>
             public const string NotificationFailed = "NotificationFailed";
             public const string NotificationBounced = "NotificationBounced";
             public const string NotificationOpened = "NotificationOpened";

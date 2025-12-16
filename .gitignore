@@ -1,3 +1,15 @@
+# === Infrastructure helper scripts and temp keys (ignore untracked tooling artifacts) ===
+Infrastructure/*.ps1
+Infrastructure/*.sh
+Infrastructure/temp-*.json
+Infrastructure/firebase-adminsdk-key.json
+Infrastructure/sql/migrations/
+
+# === Database SQL dumps/copies (generated or staging) ===
+MetaData/Scripts/Database/*.sql
+
+# === Generated docs/exports ===
+investor-pitch-*.html
 # Build results
 [Dd]ebug/
 [Dd]ebugPublic/
@@ -52,6 +64,32 @@ bld/
 
 # Rider
 .idea/
+
+# Local helper scripts and temp secrets (not for source control)
+Infrastructure/aws-cli-commands.sh
+Infrastructure/create-secrets.ps1
+Infrastructure/create-secrets.sh
+Infrastructure/create-sns-fcm-v1.ps1
+Infrastructure/create-sns-from-json.ps1
+Infrastructure/create-sns-platforms-with-credentials.ps1
+Infrastructure/setup-all-missing-secrets.ps1
+Infrastructure/setup-all-missing-secrets.sh
+Infrastructure/setup-redis-secret.ps1
+Infrastructure/setup-ses-smtp.ps1
+Infrastructure/setup-sns-fcm.ps1
+Infrastructure/setup-sns-platforms.ps1
+Infrastructure/temp-*.json
+Infrastructure/firebase-adminsdk-key.json
+Infrastructure/sql/migrations/
+
+# Generated/duplicate database scripts
+MetaData/Scripts/Database/*copy*.sql
+
+# Generated audit/export artifacts
+MetaData/Documentation/Development/LOTTERY_DEEP_AUDIT_FIXES.md
+MetaData/Documentation/Development/LOTTERY_FIXES_AUDIT_REPORT.md
+MetaData/Documentation/Development/LOTTERY_RECOMMENDATIONS_IMPLEMENTATION.md
+investor-pitch-pdf*.html
 
 # User-specific files
 *.rsuser
