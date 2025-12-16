@@ -4,20 +4,15 @@ EXPOSE 8080
 
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
+# Copy project files for restore
 COPY ["AmesaBackend.Lottery/AmesaBackend.Lottery.csproj", "AmesaBackend.Lottery/"]
 COPY ["AmesaBackend.Shared/AmesaBackend.Shared.csproj", "AmesaBackend.Shared/"]
 RUN dotnet restore "AmesaBackend.Lottery/AmesaBackend.Lottery.csproj"
+# Copy the rest of the source code
 COPY . .
 RUN dotnet build "AmesaBackend.Lottery/AmesaBackend.Lottery.csproj" -c Release -o /app/build
 
 FROM build AS publish
-# Remove appsettings files from referenced projects to prevent publish conflicts
-RUN rm -f /src/AmesaBackend.Auth/appsettings*.json \
-    /src/AmesaBackend/appsettings*.json \
-    /src/AmesaBackend.Payment/appsettings*.json \
-    /src/AmesaBackend.Content/appsettings*.json \
-    /src/AmesaBackend.LotteryResults/appsettings*.json \
-    /src/AmesaBackend.Notification/appsettings*.json 2>/dev/null || true
 RUN dotnet publish "AmesaBackend.Lottery/AmesaBackend.Lottery.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
 FROM base AS final

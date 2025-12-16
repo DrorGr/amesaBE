@@ -4,18 +4,16 @@ EXPOSE 8080
 
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
+# Copy project files for restore
 COPY ["AmesaBackend.Notification/AmesaBackend.Notification.csproj", "AmesaBackend.Notification/"]
 COPY ["AmesaBackend.Shared/AmesaBackend.Shared.csproj", "AmesaBackend.Shared/"]
 RUN dotnet restore "AmesaBackend.Notification/AmesaBackend.Notification.csproj"
+# Copy the rest of the source code
 COPY . .
 RUN dotnet build "AmesaBackend.Notification/AmesaBackend.Notification.csproj" -c Release -o /app/build
 
 FROM build AS publish
-# Temporarily rename Auth's appsettings.json to prevent conflict during publish
-RUN mv /src/AmesaBackend.Auth/appsettings.json /src/AmesaBackend.Auth/appsettings.json.bak 2>/dev/null || true
 RUN dotnet publish "AmesaBackend.Notification/AmesaBackend.Notification.csproj" -c Release -o /app/publish /p:UseAppHost=false
-# Restore Auth's appsettings.json
-RUN mv /src/AmesaBackend.Auth/appsettings.json.bak /src/AmesaBackend.Auth/appsettings.json 2>/dev/null || true
 
 FROM base AS final
 WORKDIR /app
