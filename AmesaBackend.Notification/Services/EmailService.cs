@@ -61,6 +61,12 @@ namespace AmesaBackend.Notification.Services
             await SendEmailAsync(email, subject, body);
         }
 
+        public async Task SendPasswordResetEmailAsync(string email, string token)
+        {
+            // Alias for SendPasswordResetAsync for consistency
+            await SendPasswordResetAsync(email, token);
+        }
+
         public async Task SendWelcomeEmailAsync(string email, string name)
         {
             var subject = "Welcome to Amesa Lottery!";

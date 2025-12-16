@@ -15,6 +15,7 @@ namespace AmesaBackend.Notification.Data
         public DbSet<NotificationDelivery> NotificationDeliveries { get; set; }
         public DbSet<UserChannelPreference> UserChannelPreferences { get; set; }
         public DbSet<PushSubscription> PushSubscriptions { get; set; }
+        public DbSet<DeviceRegistration> DeviceRegistrations { get; set; }
         public DbSet<TelegramUserLink> TelegramUserLinks { get; set; }
         public DbSet<SocialMediaLink> SocialMediaLinks { get; set; }
         public DbSet<NotificationQueue> NotificationQueue { get; set; }
@@ -121,6 +122,21 @@ namespace AmesaBackend.Notification.Data
                 entity.Property(e => e.AuthKey).IsRequired();
                 entity.HasIndex(e => e.UserId).HasDatabaseName("idx_push_subscriptions_user_id");
                 entity.HasIndex(e => new { e.UserId, e.Endpoint }).IsUnique();
+            });
+
+            modelBuilder.Entity<DeviceRegistration>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.UserId).IsRequired();
+                entity.Property(e => e.DeviceToken).IsRequired().HasMaxLength(255);
+                entity.Property(e => e.Platform).IsRequired().HasMaxLength(50);
+                entity.Property(e => e.DeviceId).HasMaxLength(255);
+                entity.Property(e => e.DeviceName).HasMaxLength(255);
+                entity.Property(e => e.AppVersion).HasMaxLength(50);
+                entity.HasIndex(e => e.UserId);
+                entity.HasIndex(e => e.DeviceToken);
+                entity.HasIndex(e => new { e.UserId, e.DeviceToken }).IsUnique();
+                entity.HasIndex(e => new { e.UserId, e.Platform });
             });
 
             modelBuilder.Entity<TelegramUserLink>(entity =>

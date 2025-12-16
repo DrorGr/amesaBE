@@ -4,6 +4,7 @@ namespace AmesaBackend.Notification.Services
     {
         Task SendEmailVerificationAsync(string email, string token);
         Task SendPasswordResetAsync(string email, string token);
+        Task SendPasswordResetEmailAsync(string email, string token); // Alias for SendPasswordResetAsync
         Task SendWelcomeEmailAsync(string email, string name);
         Task SendLotteryWinnerNotificationAsync(string email, string name, string houseTitle, string ticketNumber);
         Task SendLotteryEndedNotificationAsync(string email, string name, string houseTitle, string? winnerName);

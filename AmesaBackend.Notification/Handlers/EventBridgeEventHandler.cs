@@ -33,23 +33,36 @@ namespace AmesaBackend.Notification.Handlers
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            // In a real implementation, this would use EventBridge rules and targets
-            // For now, this is a placeholder for event consumption
-            // In production, you'd use Lambda functions or SQS queues as EventBridge targets
+            // NOTE: This background service is a placeholder.
+            // Events are actually consumed via the EventBridgeController webhook endpoint (/api/v1/events/webhook).
+            // EventBridge is configured to send events to this webhook endpoint via API destination or custom integration.
+            // 
+            // If you want to use SQS queue consumption instead, you would:
+            // 1. Configure EventBridge rules to send events to an SQS queue
+            // 2. Implement SQS queue polling here
+            // 3. Process messages from the queue
+            //
+            // For now, this service just logs that it's running but doesn't actively consume events.
+            // All event consumption happens via the webhook endpoint.
             
-            _logger.LogInformation("EventBridge event handler started");
+            _logger.LogInformation(
+                "EventBridgeEventHandler background service started. " +
+                "Note: Events are consumed via EventBridgeController webhook endpoint at /api/v1/events/webhook. " +
+                "This background service is kept for potential future SQS queue consumption.");
             
+            // Keep service running but don't actively poll
+            // Events come via webhook endpoint
             while (!stoppingToken.IsCancellationRequested)
             {
                 try
                 {
-                    // Poll for events or use EventBridge rules to trigger this service
-                    // This is a simplified implementation
-                    await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+                    // Just keep the service alive - actual event consumption via webhook
+                    await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken);
+                    _logger.LogDebug("EventBridgeEventHandler background service heartbeat");
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error in EventBridge event handler");
+                    _logger.LogError(ex, "Error in EventBridge event handler background service");
                 }
             }
         }
@@ -113,9 +126,7 @@ namespace AmesaBackend.Notification.Handlers
             
             try
             {
-                // TODO: Implement SendPasswordResetEmailAsync method in IEmailService
-                // await emailService.SendPasswordResetEmailAsync(@event.Email, @event.ResetToken);
-                _logger.LogWarning("SendPasswordResetEmailAsync not implemented yet");
+                await emailService.SendPasswordResetEmailAsync(@event.Email, @event.ResetToken);
                 _logger.LogInformation("Password reset email sent to {Email}", @event.Email);
             }
             catch (Exception ex)
