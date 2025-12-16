@@ -1194,5 +1194,213 @@ namespace AmesaBackend.Notification.Controllers
         public List<string>? Channels { get; set; }
         public int? Priority { get; set; }
     }
+
+    [ApiController]
+    [Route("api/v1/devices")]
+    [Authorize]
+    public class DeviceRegistrationController : ControllerBase
+    {
+        private readonly IDeviceRegistrationService _deviceRegistrationService;
+        private readonly ILogger<DeviceRegistrationController> _logger;
+
+        public DeviceRegistrationController(
+            IDeviceRegistrationService deviceRegistrationService,
+            ILogger<DeviceRegistrationController> logger)
+        {
+            _deviceRegistrationService = deviceRegistrationService;
+            _logger = logger;
+        }
+
+        /// <summary>
+        /// Register a device for push notifications
+        /// POST /api/v1/devices/register
+        /// </summary>
+        [HttpPost("register")]
+        public async Task<ActionResult<ApiResponse<DeviceRegistrationDto>>> RegisterDevice([FromBody] RegisterDeviceRequest request)
+        {
+            try
+            {
+                if (!AmesaBackend.Shared.Helpers.ControllerHelpers.TryGetUserId(User, out var userId))
+                {
+                    return Unauthorized(new ApiResponse<DeviceRegistrationDto>
+                    {
+                        Success = false,
+                        Message = "Authentication required"
+                    });
+                }
+
+                var registration = await _deviceRegistrationService.RegisterDeviceAsync(
+                    userId,
+                    request.DeviceToken,
+                    request.Platform,
+                    request.DeviceId,
+                    request.DeviceName,
+                    request.AppVersion);
+
+                var dto = new DeviceRegistrationDto
+                {
+                    Id = registration.Id,
+                    UserId = registration.UserId,
+                    DeviceToken = registration.DeviceToken,
+                    Platform = registration.Platform,
+                    DeviceId = registration.DeviceId,
+                    DeviceName = registration.DeviceName,
+                    AppVersion = registration.AppVersion,
+                    IsActive = registration.IsActive,
+                    CreatedAt = registration.CreatedAt,
+                    UpdatedAt = registration.UpdatedAt,
+                    LastUsedAt = registration.LastUsedAt
+                };
+
+                return Ok(new ApiResponse<DeviceRegistrationDto>
+                {
+                    Success = true,
+                    Data = dto,
+                    Message = "Device registered successfully"
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error registering device");
+                return StatusCode(500, new ApiResponse<DeviceRegistrationDto>
+                {
+                    Success = false,
+                    Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = "An error occurred registering device" }
+                });
+            }
+        }
+
+        /// <summary>
+        /// Unregister a device
+        /// DELETE /api/v1/devices/unregister
+        /// </summary>
+        [HttpDelete("unregister")]
+        public async Task<ActionResult<ApiResponse<object>>> UnregisterDevice([FromBody] UnregisterDeviceRequest request)
+        {
+            try
+            {
+                if (!AmesaBackend.Shared.Helpers.ControllerHelpers.TryGetUserId(User, out var userId))
+                {
+                    return Unauthorized(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "Authentication required"
+                    });
+                }
+
+                var success = await _deviceRegistrationService.UnregisterDeviceAsync(userId, request.DeviceToken);
+
+                if (!success)
+                {
+                    return NotFound(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "Device not found"
+                    });
+                }
+
+                return Ok(new ApiResponse<object>
+                {
+                    Success = true,
+                    Message = "Device unregistered successfully"
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error unregistering device");
+                return StatusCode(500, new ApiResponse<object>
+                {
+                    Success = false,
+                    Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = "An error occurred unregistering device" }
+                });
+            }
+        }
+
+        /// <summary>
+        /// Get user's registered devices
+        /// GET /api/v1/devices
+        /// </summary>
+        [HttpGet]
+        public async Task<ActionResult<ApiResponse<List<DeviceRegistrationDto>>>> GetUserDevices()
+        {
+            try
+            {
+                if (!AmesaBackend.Shared.Helpers.ControllerHelpers.TryGetUserId(User, out var userId))
+                {
+                    return Unauthorized(new ApiResponse<List<DeviceRegistrationDto>>
+                    {
+                        Success = false,
+                        Message = "Authentication required"
+                    });
+                }
+
+                var devices = await _deviceRegistrationService.GetUserDevicesAsync(userId);
+                var dtos = devices.Select(d => new DeviceRegistrationDto
+                {
+                    Id = d.Id,
+                    UserId = d.UserId,
+                    DeviceToken = d.DeviceToken,
+                    Platform = d.Platform,
+                    DeviceId = d.DeviceId,
+                    DeviceName = d.DeviceName,
+                    AppVersion = d.AppVersion,
+                    IsActive = d.IsActive,
+                    CreatedAt = d.CreatedAt,
+                    UpdatedAt = d.UpdatedAt,
+                    LastUsedAt = d.LastUsedAt
+                }).ToList();
+
+                return Ok(new ApiResponse<List<DeviceRegistrationDto>>
+                {
+                    Success = true,
+                    Data = dtos
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting user devices");
+                return StatusCode(500, new ApiResponse<List<DeviceRegistrationDto>>
+                {
+                    Success = false,
+                    Error = new ErrorResponse { Code = "INTERNAL_ERROR", Message = "An error occurred retrieving devices" }
+                });
+            }
+        }
+    }
+
+    // DTOs for device registration
+    public class RegisterDeviceRequest
+    {
+        [Required]
+        public string DeviceToken { get; set; } = string.Empty;
+
+        [Required]
+        public string Platform { get; set; } = string.Empty; // "iOS", "Android", "Web"
+
+        public string? DeviceId { get; set; }
+        public string? DeviceName { get; set; }
+        public string? AppVersion { get; set; }
+    }
+
+    public class UnregisterDeviceRequest
+    {
+        [Required]
+        public string DeviceToken { get; set; } = string.Empty;
+    }
+
+    public class DeviceRegistrationDto
+    {
+        public Guid Id { get; set; }
+        public Guid UserId { get; set; }
+        public string DeviceToken { get; set; } = string.Empty;
+        public string Platform { get; set; } = string.Empty;
+        public string? DeviceId { get; set; }
+        public string? DeviceName { get; set; }
+        public string? AppVersion { get; set; }
+        public bool IsActive { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+        public DateTime? LastUsedAt { get; set; }
+    }
 }
 
