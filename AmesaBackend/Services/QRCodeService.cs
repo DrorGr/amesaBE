@@ -25,7 +25,7 @@ namespace AmesaBackend.Services
             _secretKey = _configuration["QRCode:SecretKey"] ?? "your-qr-code-secret-key-change-this-in-production";
         }
 
-        public async Task<string> GenerateQRCodeDataAsync(Guid lotteryResultId, string winnerTicketNumber, int prizePosition)
+        public Task<string> GenerateQRCodeDataAsync(Guid lotteryResultId, string winnerTicketNumber, int prizePosition)
         {
             try
             {
@@ -46,7 +46,7 @@ namespace AmesaBackend.Services
                 
                 _logger.LogInformation("Generated QR code for lottery result {LotteryResultId}", lotteryResultId);
                 
-                return finalQRData;
+                return Task.FromResult(finalQRData);
             }
             catch (Exception ex)
             {
@@ -55,16 +55,16 @@ namespace AmesaBackend.Services
             }
         }
 
-        public async Task<bool> ValidateQRCodeAsync(string qrCodeData)
+        public Task<bool> ValidateQRCodeAsync(string qrCodeData)
         {
             try
             {
                 if (string.IsNullOrEmpty(qrCodeData))
-                    return false;
+                    return Task.FromResult(false);
 
                 var parts = qrCodeData.Split('.');
                 if (parts.Length != 2)
-                    return false;
+                    return Task.FromResult(false);
 
                 var encodedData = parts[0];
                 var signature = parts[1];
@@ -72,26 +72,26 @@ namespace AmesaBackend.Services
                 // Verify signature
                 var expectedSignature = GenerateSignature(encodedData);
                 if (signature != expectedSignature)
-                    return false;
+                    return Task.FromResult(false);
 
                 // Decode and validate data
                 var jsonData = Encoding.UTF8.GetString(Convert.FromBase64String(encodedData));
                 var qrData = JsonSerializer.Deserialize<QRCodeData>(jsonData);
 
                 if (qrData == null)
-                    return false;
+                    return Task.FromResult(false);
 
                 // Check if QR code is not too old (e.g., valid for 1 year)
                 var maxAge = TimeSpan.FromDays(365);
                 if (DateTime.UtcNow - qrData.Timestamp > maxAge)
-                    return false;
+                    return Task.FromResult(false);
 
-                return true;
+                return Task.FromResult(true);
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Invalid QR code data: {QRCodeData}", qrCodeData);
-                return false;
+                return Task.FromResult(false);
             }
         }
 

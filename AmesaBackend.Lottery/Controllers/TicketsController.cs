@@ -25,7 +25,7 @@ namespace AmesaBackend.Lottery.Controllers
         private readonly IEventPublisher? _eventPublisher;
         private readonly IPromotionService? _promotionService;
         private readonly IErrorSanitizer? _errorSanitizer;
-        private readonly IWebHostEnvironment _environment;
+        private readonly IWebHostEnvironment? _environment;
         private readonly IRateLimitService? _rateLimitService;
 
         public TicketsController(
@@ -36,7 +36,7 @@ namespace AmesaBackend.Lottery.Controllers
             IEventPublisher? eventPublisher = null,
             IPromotionService? promotionService = null,
             IErrorSanitizer? errorSanitizer = null,
-            IWebHostEnvironment environment = null,
+            IWebHostEnvironment? environment = null,
             IRateLimitService? rateLimitService = null)
         {
             _lotteryService = lotteryService;

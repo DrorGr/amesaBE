@@ -9,19 +9,19 @@ namespace AmesaBackend.Services
             _logger = logger;
         }
 
-        public async Task<string> UploadFileAsync(Stream fileStream, string fileName, string contentType)
+        public Task<string> UploadFileAsync(Stream fileStream, string fileName, string contentType)
         {
             // TODO: Implement file upload to storage (local, S3, etc.)
             var filePath = $"uploads/{Guid.NewGuid()}_{fileName}";
             _logger.LogInformation("File uploaded: {FilePath}", filePath);
-            return filePath;
+            return Task.FromResult(filePath);
         }
 
-        public async Task<bool> DeleteFileAsync(string filePath)
+        public Task<bool> DeleteFileAsync(string filePath)
         {
             // TODO: Implement file deletion
             _logger.LogInformation("File deleted: {FilePath}", filePath);
-            return true;
+            return Task.FromResult(true);
         }
     }
 }
