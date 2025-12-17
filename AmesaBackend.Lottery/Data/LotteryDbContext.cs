@@ -124,6 +124,9 @@ namespace AmesaBackend.Lottery.Data
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => e.Code);
                 entity.HasIndex(e => e.IsActive);
+                // Ignore legacy navigation properties to keep this context focused
+                entity.Ignore(e => e.CreatedByUser);
+                entity.Ignore(e => e.UserPromotions);
             });
 
             // Configure UserPromotion entity (from amesa_admin schema)
@@ -134,6 +137,10 @@ namespace AmesaBackend.Lottery.Data
                 entity.HasIndex(e => e.UserId);
                 entity.HasIndex(e => e.PromotionId);
                 entity.HasIndex(e => new { e.UserId, e.PromotionId });
+                // Ignore navigation properties not mapped in this context
+                entity.Ignore(e => e.User);
+                entity.Ignore(e => e.Promotion);
+                entity.Ignore(e => e.Transaction);
             });
         }
     }
