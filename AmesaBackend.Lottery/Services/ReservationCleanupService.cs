@@ -54,88 +54,90 @@ namespace AmesaBackend.Lottery.Services
                         var context = scope.ServiceProvider.GetRequiredService<LotteryDbContext>();
                         var inventoryManager = scope.ServiceProvider.GetRequiredService<IRedisInventoryManager>();
 
-                        // Wrap cleanup in transaction for atomicity
-                        using var transaction = await context.Database.BeginTransactionAsync(
-                            System.Data.IsolationLevel.Serializable, stoppingToken);
-
-                        try
+                        // Use execution strategy to wrap the transaction so retries are supported
+                        var strategy = context.Database.CreateExecutionStrategy();
+                        await strategy.ExecuteAsync(async () =>
                         {
-                            // Re-query within transaction to get latest state (prevent race conditions)
-                            var expiredReservations = await context.TicketReservations
-                                .Where(r => r.Status == "pending" && r.ExpiresAt <= DateTime.UtcNow)
-                                .ToListAsync(stoppingToken);
+                            await using var transaction = await context.Database.BeginTransactionAsync(
+                                System.Data.IsolationLevel.Serializable, stoppingToken);
+                            try
+                            {
+                                // Re-query within transaction to get latest state (prevent race conditions)
+                                var expiredReservations = await context.TicketReservations
+                                    .Where(r => r.Status == "pending" && r.ExpiresAt <= DateTime.UtcNow)
+                                    .ToListAsync(stoppingToken);
 
-                            foreach (var reservation in expiredReservations)
+                                foreach (var reservation in expiredReservations)
+                                {
+                                    try
+                                    {
+                                        // Idempotency check: Verify reservation is still pending
+                                        var currentReservation = await context.TicketReservations
+                                            .FirstOrDefaultAsync(r => r.Id == reservation.Id, stoppingToken);
+
+                                        if (currentReservation == null || currentReservation.Status != "pending")
+                                        {
+                                            _logger.LogDebug(
+                                                "Reservation {ReservationId} already processed (status: {Status}), skipping",
+                                                reservation.Id, currentReservation?.Status ?? "deleted");
+                                            continue;
+                                        }
+
+                                        // Release inventory
+                                        var inventoryReleased = await inventoryManager.ReleaseInventoryAsync(
+                                            reservation.HouseId,
+                                            reservation.Quantity);
+
+                                        if (!inventoryReleased)
+                                        {
+                                            _logger.LogWarning(
+                                                "Failed to release inventory for reservation {ReservationId}, house {HouseId}",
+                                                reservation.Id, reservation.HouseId);
+                                            // Continue anyway - mark as expired
+                                        }
+
+                                        // Update reservation status atomically within transaction
+                                        currentReservation.Status = "expired";
+                                        currentReservation.UpdatedAt = DateTime.UtcNow;
+
+                                        _logger.LogInformation(
+                                            "Expired reservation {ReservationId} for house {HouseId}, released {Quantity} tickets",
+                                            reservation.Id, reservation.HouseId, reservation.Quantity);
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        _logger.LogError(ex,
+                                            "Error cleaning up expired reservation {ReservationId}",
+                                            reservation.Id);
+                                        // Continue with next reservation
+                                    }
+                                }
+
+                                await context.SaveChangesAsync(stoppingToken);
+                                await transaction.CommitAsync(stoppingToken);
+
+                                if (expiredReservations.Any())
+                                {
+                                    _logger.LogInformation(
+                                        "Cleaned up {Count} expired reservations",
+                                        expiredReservations.Count);
+                                }
+                            }
+                            catch (Exception ex)
                             {
                                 try
                                 {
-                                    // Idempotency check: Verify reservation is still pending
-                                    // (may have been processed by another instance)
-                                    var currentReservation = await context.TicketReservations
-                                        .FirstOrDefaultAsync(r => r.Id == reservation.Id, stoppingToken);
-
-                                    if (currentReservation == null || currentReservation.Status != "pending")
-                                    {
-                                        _logger.LogDebug(
-                                            "Reservation {ReservationId} already processed (status: {Status}), skipping",
-                                            reservation.Id, currentReservation?.Status ?? "deleted");
-                                        continue;
-                                    }
-
-                                    // Release inventory
-                                    var inventoryReleased = await inventoryManager.ReleaseInventoryAsync(
-                                        reservation.HouseId, 
-                                        reservation.Quantity);
-
-                                    if (!inventoryReleased)
-                                    {
-                                        _logger.LogWarning(
-                                            "Failed to release inventory for reservation {ReservationId}, house {HouseId}",
-                                            reservation.Id, reservation.HouseId);
-                                        // Continue anyway - mark as expired
-                                    }
-
-                                    // Update reservation status atomically within transaction
-                                    currentReservation.Status = "expired";
-                                    currentReservation.UpdatedAt = DateTime.UtcNow;
-                                    
-                                    _logger.LogInformation(
-                                        "Expired reservation {ReservationId} for house {HouseId}, released {Quantity} tickets",
-                                        reservation.Id, reservation.HouseId, reservation.Quantity);
+                                    await transaction.RollbackAsync(stoppingToken);
                                 }
-                                catch (Exception ex)
+                                catch (Exception rollbackEx)
                                 {
-                                    _logger.LogError(ex, 
-                                        "Error cleaning up expired reservation {ReservationId}", 
-                                        reservation.Id);
-                                    // Continue with next reservation
+                                    _logger.LogError(rollbackEx, "Error rolling back transaction in ReservationCleanupService");
                                 }
-                            }
 
-                            // Commit transaction
-                            await context.SaveChangesAsync(stoppingToken);
-                            await transaction.CommitAsync(stoppingToken);
-
-                            if (expiredReservations.Any())
-                            {
-                                _logger.LogInformation(
-                                    "Cleaned up {Count} expired reservations",
-                                    expiredReservations.Count);
+                                _logger.LogError(ex, "Error in reservation cleanup transaction, rolled back");
+                                throw;
                             }
-                        }
-                        catch (Exception ex)
-                        {
-                            try
-                            {
-                                await transaction.RollbackAsync(stoppingToken);
-                            }
-                            catch (Exception rollbackEx)
-                            {
-                                _logger.LogError(rollbackEx, "Error rolling back transaction in ReservationCleanupService");
-                            }
-                            _logger.LogError(ex, "Error in reservation cleanup transaction, rolled back");
-                            throw; // Rethrow to ensure finally block executes
-                        }
+                        });
                     }
                     finally
                     {
