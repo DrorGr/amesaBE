@@ -41,10 +41,15 @@ namespace AmesaBackend.Shared.Middleware
         {
             // Check if this is a service-to-service endpoint (marked with [AllowAnonymous] and specific paths)
             var path = context.Request.Path.Value ?? "";
+            // Match service-to-service endpoints only (exclude user-facing endpoints)
+            // User-facing favorites: /api/v1/houses/favorites, /api/v1/houses/favorites/count, /api/v1/houses/{id}/favorite
+            // Service endpoint: /api/v1/houses/{id}/favorites (get list of users who favorited a house)
             var isServiceEndpoint = path.Contains("/tickets/create-from-payment") || 
                                    path.Contains("/tickets/validate") ||
-                                   path.Contains("/draws/") && path.Contains("/participants") ||
-                                   path.Contains("/houses/") && (path.Contains("/favorites") || path.Contains("/participants/list")) ||
+                                   (path.Contains("/draws/") && path.Contains("/participants")) ||
+                                   // Only protect /houses/{id}/favorites (service endpoint), not /houses/favorites (user endpoint)
+                                   (path.Contains("/houses/") && System.Text.RegularExpressions.Regex.IsMatch(path, @"/houses/[^/]+/favorites$")) ||
+                                   (path.Contains("/houses/") && path.Contains("/participants/list")) ||
                                    path.Contains("/payments/refund") ||
                                    path.Contains("/gamification/award-points") ||
                                    path.Contains("/gamification/check-achievements");
