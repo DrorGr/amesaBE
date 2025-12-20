@@ -79,6 +79,16 @@ namespace AmesaBackend.Lottery.Hubs
             await hubContext.Clients.Group($"user_{userId}")
                 .SendAsync("ReservationStatusChanged", update);
         }
+
+        public static async Task BroadcastFavoriteUpdate(
+            this IHubContext<LotteryHub> hubContext,
+            Guid userId,
+            DTOs.FavoriteUpdateDto update,
+            CancellationToken cancellationToken = default)
+        {
+            await hubContext.Clients.Group($"user_{userId}")
+                .SendAsync("FavoriteUpdate", update, cancellationToken);
+        }
     }
 }
 

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authentication.Facebook;
+using AspNet.Security.OAuth.Apple;
 using Microsoft.AspNetCore.Authorization;
 using AmesaBackend.Auth.Services;
 using AmesaBackend.Auth.Models;
@@ -589,6 +590,271 @@ namespace AmesaBackend.Auth.Controllers
                     { "exception_type", ex.GetType().Name }
                 }));
             }
+        }
+
+        [HttpGet("apple")]
+        public async Task<IActionResult> AppleLogin()
+        {
+            try
+            {
+                var frontendUrl = _configuration["FrontendUrl"] ?? 
+                                 _configuration.GetSection("AllowedOrigins").Get<string[]>()?[0] ?? 
+                                 "https://dpqbvdgnenckf.cloudfront.net";
+
+                // Check if Apple OAuth is configured
+                var appleClientId = _configuration["Authentication:Apple:ClientId"];
+                var appleTeamId = _configuration["Authentication:Apple:TeamId"];
+                var appleKeyId = _configuration["Authentication:Apple:KeyId"];
+                var applePrivateKey = _configuration["Authentication:Apple:PrivateKey"];
+                
+                if (string.IsNullOrWhiteSpace(appleClientId) || 
+                    string.IsNullOrWhiteSpace(appleTeamId) || 
+                    string.IsNullOrWhiteSpace(appleKeyId) || 
+                    string.IsNullOrWhiteSpace(applePrivateKey))
+                {
+                    _logger.LogWarning("Apple OAuth not configured - missing required credentials");
+                    return BadRequest(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Error = new ErrorResponse
+                        {
+                            Code = "OAUTH_NOT_CONFIGURED",
+                            Message = "Apple OAuth is not configured. Please configure ClientId, TeamId, KeyId, and PrivateKey in appsettings.json or AWS Secrets Manager.",
+                            Details = new Dictionary<string, object>
+                            {
+                                { "provider", "Apple" },
+                                { "missing", GetMissingAppleConfig(appleClientId, appleTeamId, appleKeyId, applePrivateKey) },
+                                { "secretId", _configuration["Authentication:Apple:SecretId"] ?? "amesa-apple-oauth" }
+                            }
+                        }
+                    });
+                }
+
+                // Verify that the authentication scheme is registered
+                var authSchemeProvider = HttpContext.RequestServices.GetRequiredService<IAuthenticationSchemeProvider>();
+                var appleScheme = await authSchemeProvider.GetSchemeAsync(AppleAuthenticationDefaults.AuthenticationScheme);
+                
+                if (appleScheme == null)
+                {
+                    _logger.LogError("Apple OAuth authentication scheme is not registered. This usually means credentials were not loaded at startup.");
+                    return StatusCode(500, new ApiResponse<object>
+                    {
+                        Success = false,
+                        Error = new ErrorResponse
+                        {
+                            Code = "OAUTH_SCHEME_NOT_REGISTERED",
+                            Message = "Apple OAuth authentication scheme is not registered. Please verify AWS Secrets Manager secret 'amesa-apple-oauth' exists and contains valid credentials.",
+                            Details = new Dictionary<string, object>
+                            {
+                                { "provider", "Apple" },
+                                { "secretId", _configuration["Authentication:Apple:SecretId"] ?? "amesa-apple-oauth" },
+                                { "hasClientId", !string.IsNullOrWhiteSpace(appleClientId) },
+                                { "hasTeamId", !string.IsNullOrWhiteSpace(appleTeamId) },
+                                { "hasKeyId", !string.IsNullOrWhiteSpace(appleKeyId) },
+                                { "hasPrivateKey", !string.IsNullOrWhiteSpace(applePrivateKey) }
+                            }
+                        }
+                    });
+                }
+
+                _logger.LogInformation("Initiating Apple OAuth login");
+                
+                var properties = new AuthenticationProperties
+                {
+                    RedirectUri = $"{frontendUrl}/auth/callback",
+                    AllowRefresh = true
+                };
+                
+                return Challenge(properties, AppleAuthenticationDefaults.AuthenticationScheme);
+            }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("No authenticationScheme", StringComparison.OrdinalIgnoreCase) || 
+                                                         ex.Message.Contains("authentication scheme", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogError(ex, "Apple OAuth authentication scheme not registered. Exception: {ExceptionType}, Message: {Message}", 
+                    ex.GetType().Name, ex.Message);
+                return StatusCode(500, new ApiResponse<object>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "OAUTH_SCHEME_NOT_REGISTERED",
+                        Message = "Apple OAuth authentication scheme is not registered. Please verify AWS Secrets Manager secret 'amesa-apple-oauth' exists and contains valid credentials.",
+                        Details = new Dictionary<string, object>
+                        {
+                            { "provider", "Apple" },
+                            { "secretId", _configuration["Authentication:Apple:SecretId"] ?? "amesa-apple-oauth" },
+                            { "exception_type", ex.GetType().Name },
+                            { "exception_message", ex.Message }
+                        }
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error initiating Apple OAuth. Exception: {ExceptionType}, Message: {Message}, StackTrace: {StackTrace}", 
+                    ex.GetType().Name, ex.Message, ex.StackTrace);
+                return StatusCode(500, new ApiResponse<object>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "OAUTH_INIT_FAILED",
+                        Message = "An error occurred while initiating Apple OAuth login.",
+                        Details = new Dictionary<string, object>
+                        {
+                            { "provider", "Apple" },
+                            { "exception_type", ex.GetType().Name },
+                            { "exception_message", ex.Message }
+                        }
+                    }
+                });
+            }
+        }
+
+        [HttpGet("apple-callback")]
+        [AllowAnonymous]
+        public async Task<IActionResult> AppleCallback()
+        {
+            try
+            {
+                // Rate limiting for OAuth callback endpoint
+                var clientIp = HttpContext.Items["ClientIp"]?.ToString() 
+                    ?? HttpContext.Connection.RemoteIpAddress?.ToString() 
+                    ?? HttpContext.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0].Trim()
+                    ?? HttpContext.Request.Headers["X-Real-Ip"].FirstOrDefault()
+                    ?? "unknown";
+                var rateLimitKey = $"oauth:apple-callback:{clientIp}";
+                
+                var isAllowed = await _rateLimitService.IncrementAndCheckRateLimitAsync(rateLimitKey, 10, TimeSpan.FromMinutes(15));
+                var frontendUrl = _configuration["FrontendUrl"] ?? "https://dpqbvdgnenckf.cloudfront.net";
+                
+                if (!isAllowed)
+                {
+                    _logger.LogWarning("OAuth callback rate limit exceeded for IP: {ClientIp}, Provider: Apple", clientIp);
+                    return Redirect(BuildErrorRedirectUrl("OAUTH_RATE_LIMIT_EXCEEDED", "Apple", new Dictionary<string, object>
+                    {
+                        { "ip", clientIp },
+                        { "retry_after_minutes", 15 }
+                    }));
+                }
+
+                var appleResult = await HttpContext.AuthenticateAsync(AppleAuthenticationDefaults.AuthenticationScheme);
+                
+                if (!appleResult.Succeeded)
+                {
+                    var failureReason = appleResult.Failure?.Message ?? "Unknown";
+                    _logger.LogWarning("Apple OAuth callback: Authentication failed. Reason: {Reason}, Failure: {Failure}", 
+                        failureReason, appleResult.Failure?.ToString() ?? "None");
+                    return Redirect(BuildErrorRedirectUrl("OAUTH_AUTHENTICATION_FAILED", "Apple", new Dictionary<string, object>
+                    {
+                        { "reason", failureReason }
+                    }));
+                }
+
+                var email = appleResult.Principal?.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
+                var tempToken = appleResult.Properties?.Items.TryGetValue("temp_token", out var token) == true 
+                    ? token 
+                    : Request.Query["temp_token"].FirstOrDefault();
+                
+                // If not found in properties, try to get it from email cache (fallback)
+                if (string.IsNullOrEmpty(tempToken) && !string.IsNullOrEmpty(email))
+                {
+                    var emailHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(email.ToLowerInvariant())));
+                    var emailCacheKey = $"oauth_temp_token_{emailHash}";
+                    var cachedTokenBytes = await _distributedCache.GetAsync(emailCacheKey);
+                    if (cachedTokenBytes != null && cachedTokenBytes.Length > 0)
+                    {
+                        tempToken = System.Text.Encoding.UTF8.GetString(cachedTokenBytes);
+                        _logger.LogInformation("Apple OAuth callback: Found temp_token from email cache");
+                        await _distributedCache.RemoveAsync(emailCacheKey);
+                    }
+                }
+                
+                if (!string.IsNullOrEmpty(tempToken))
+                {
+                    _logger.LogInformation("Apple OAuth callback: Found temp_token, redirecting to frontend with code");
+                    await HttpContext.SignOutAsync("Cookies");
+                    await HttpContext.SignOutAsync(AppleAuthenticationDefaults.AuthenticationScheme);
+                    return Redirect($"{frontendUrl}/auth/callback?code={Uri.EscapeDataString(tempToken)}");
+                }
+                
+                _logger.LogWarning("Apple OAuth callback: temp_token not found, using fallback");
+                if (!string.IsNullOrEmpty(email))
+                {
+                    _logger.LogInformation("Fallback: Processing Apple OAuth callback for: {Email}", email);
+                    var appleId = appleResult.Principal?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                    var firstName = appleResult.Principal?.FindFirst(System.Security.Claims.ClaimTypes.GivenName)?.Value;
+                    var lastName = appleResult.Principal?.FindFirst(System.Security.Claims.ClaimTypes.Surname)?.Value;
+
+                    if (!string.IsNullOrEmpty(appleId))
+                    {
+                        var authResponse = await _authService.CreateOrUpdateOAuthUserAsync(
+                            email: email,
+                            providerId: appleId,
+                            provider: AuthProvider.Apple,
+                            firstName: firstName,
+                            lastName: lastName,
+                            dateOfBirth: null,
+                            gender: null,
+                            profileImageUrl: null
+                        );
+
+                        var fallbackTempToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+                        var cacheKey = $"oauth_token_{fallbackTempToken}";
+                        
+                        var cacheExpiration = TimeSpan.FromMinutes(
+                            _configuration.GetValue<int>("SecuritySettings:OAuthTokenCacheExpirationMinutes", 5));
+                        var cacheData = new OAuthTokenCache
+                        {
+                            AccessToken = authResponse.Response.AccessToken,
+                            RefreshToken = authResponse.Response.RefreshToken,
+                            ExpiresAt = authResponse.Response.ExpiresAt,
+                            IsNewUser = authResponse.IsNewUser,
+                            UserAlreadyExists = !authResponse.IsNewUser
+                        };
+                        var cacheJson = JsonSerializer.Serialize(cacheData, _jsonOptions);
+                        var cacheBytes = System.Text.Encoding.UTF8.GetBytes(cacheJson);
+                        var cacheOptions = new DistributedCacheEntryOptions
+                        {
+                            AbsoluteExpirationRelativeToNow = cacheExpiration
+                        };
+                        await _distributedCache.SetAsync(cacheKey, cacheBytes, cacheOptions);
+
+                        await HttpContext.SignOutAsync("Cookies");
+                        await HttpContext.SignOutAsync(AppleAuthenticationDefaults.AuthenticationScheme);
+                        return Redirect($"{frontendUrl}/auth/callback?code={Uri.EscapeDataString(fallbackTempToken)}");
+                    }
+                }
+
+                _logger.LogWarning("Apple OAuth callback: Could not process callback - missing required data (email or appleId)");
+                await HttpContext.SignOutAsync("Cookies");
+                await HttpContext.SignOutAsync(AppleAuthenticationDefaults.AuthenticationScheme);
+                return Redirect(BuildErrorRedirectUrl("OAUTH_MISSING_DATA", "Apple", new Dictionary<string, object>
+                {
+                    { "missing", "email or appleId" }
+                }));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error processing Apple OAuth callback. Exception: {ExceptionType}, Message: {Message}, StackTrace: {StackTrace}", 
+                    ex.GetType().Name, ex.Message, ex.StackTrace);
+                await HttpContext.SignOutAsync("Cookies");
+                await HttpContext.SignOutAsync(AppleAuthenticationDefaults.AuthenticationScheme);
+                return Redirect(BuildErrorRedirectUrl("OAUTH_PROCESSING_ERROR", "Apple", new Dictionary<string, object>
+                {
+                    { "exception_type", ex.GetType().Name }
+                }));
+            }
+        }
+
+        private string GetMissingAppleConfig(string? clientId, string? teamId, string? keyId, string? privateKey)
+        {
+            var missing = new List<string>();
+            if (string.IsNullOrWhiteSpace(clientId)) missing.Add("ClientId");
+            if (string.IsNullOrWhiteSpace(teamId)) missing.Add("TeamId");
+            if (string.IsNullOrWhiteSpace(keyId)) missing.Add("KeyId");
+            if (string.IsNullOrWhiteSpace(privateKey)) missing.Add("PrivateKey");
+            return string.Join(", ", missing);
         }
 
         [HttpPost("exchange")]

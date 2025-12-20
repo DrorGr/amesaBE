@@ -3,6 +3,10 @@ using AmesaBackend.LotteryResults.Data;
 using AmesaBackend.LotteryResults.Models;
 using AmesaBackend.LotteryResults.Services;
 using AmesaBackend.Shared.Events;
+using AmesaBackend.Shared.Rest;
+using AmesaBackend.Shared.Contracts;
+using Microsoft.Extensions.Configuration;
+using System.Text.Json;
 
 namespace AmesaBackend.LotteryResults.Services
 {
@@ -15,17 +19,23 @@ namespace AmesaBackend.LotteryResults.Services
         private readonly IQRCodeService _qrCodeService;
         private readonly IEventPublisher _eventPublisher;
         private readonly ILogger<LotteryResultsService> _logger;
+        private readonly IHttpRequest? _httpRequest;
+        private readonly IConfiguration? _configuration;
 
         public LotteryResultsService(
             LotteryResultsDbContext context,
             IQRCodeService qrCodeService,
             IEventPublisher eventPublisher,
-            ILogger<LotteryResultsService> logger)
+            ILogger<LotteryResultsService> logger,
+            IHttpRequest? httpRequest = null,
+            IConfiguration? configuration = null)
         {
             _context = context;
             _qrCodeService = qrCodeService;
             _eventPublisher = eventPublisher;
             _logger = logger;
+            _httpRequest = httpRequest;
+            _configuration = configuration;
         }
 
         /// <summary>
@@ -107,6 +117,75 @@ namespace AmesaBackend.LotteryResults.Services
                     WinnerUserId = winnerUserId,
                     WinnerTicketId = winnerTicketId
                 });
+
+                // Gamification integration (award points on win and check achievements)
+                if (_httpRequest != null && _configuration != null)
+                {
+                    try
+                    {
+                        var lotteryServiceUrl = _configuration["LotteryService:BaseUrl"]
+                            ?? Environment.GetEnvironmentVariable("LOTTERY_SERVICE_URL")
+                            ?? "http://amesa-backend-alb-509078867.eu-north-1.elb.amazonaws.com";
+
+                        // Call Lottery service's gamification endpoint to award points
+                        var awardPointsRequest = new
+                        {
+                            UserId = winnerUserId,
+                            Points = 100, // +100 points for winning
+                            Reason = "Lottery Win",
+                            ReferenceId = result.Id
+                        };
+
+                        var token = string.Empty; // Service-to-service auth will be handled by middleware
+                        await _httpRequest.PostRequest<object>(
+                            $"{lotteryServiceUrl}/api/v1/gamification/award-points",
+                            awardPointsRequest,
+                            token);
+
+                        _logger.LogInformation("Awarded 100 points to winner {WinnerUserId} for lottery win", winnerUserId);
+
+                        // Check for win-based achievements
+                        var checkAchievementsRequest = new
+                        {
+                            UserId = winnerUserId,
+                            ActionType = "Win",
+                            ActionData = new
+                            {
+                                DrawId = drawId,
+                                PrizeValue = finalPrizeValue,
+                                ResultId = result.Id
+                            }
+                        };
+
+                        // Use dynamic response since AchievementDto is in a different service
+                        var achievementsResponse = await _httpRequest.PostRequest<StandardApiResponse<object>>(
+                            $"{lotteryServiceUrl}/api/v1/gamification/check-achievements",
+                            checkAchievementsRequest,
+                            token);
+
+                        if (achievementsResponse?.Success == true && achievementsResponse.Data != null)
+                        {
+                            // Try to extract count from response (Data should be a list)
+                            if (achievementsResponse.Data is System.Text.Json.JsonElement jsonElement &&
+                                jsonElement.ValueKind == System.Text.Json.JsonValueKind.Array)
+                            {
+                                var count = jsonElement.GetArrayLength();
+                                if (count > 0)
+                                {
+                                    _logger.LogInformation(
+                                        "Unlocked {Count} achievement(s) for winner {WinnerUserId}",
+                                        count,
+                                        winnerUserId);
+                                }
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        // Log but don't fail result creation if gamification fails
+                        _logger.LogWarning(ex, "Failed to update gamification for winner {WinnerUserId} after lottery win", winnerUserId);
+                    }
+                }
 
                 return result;
             }

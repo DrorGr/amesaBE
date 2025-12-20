@@ -3,7 +3,8 @@
 @using AmesaBackend.Admin.Services
 @using AmesaBackend.Admin.DTOs
 @inject IDrawsService DrawsService
-@inject NavigationManager Navigation
+@inject IHousesService HousesService
+@inject IJSRuntime JSRuntime
 
 <PageTitle>Draws - Amesa Admin</PageTitle>
 
@@ -182,12 +183,48 @@
     }
 </div>
 
+<!-- Conduct Draw Modal -->
+@if (showConductModal)
+{
+    <div class="modal fade show" style="display: block;" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Conduct Draw</h5>
+                    <button type="button" class="btn-close" @onclick="CloseConductDrawModal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to conduct the draw for <strong>@conductDrawHouseTitle</strong>?</p>
+                    <p class="text-muted">This action cannot be undone.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseConductDrawModal">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="ConfirmConductDraw" disabled="@isConducting">
+                        @if (isConducting)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                        }
+                        Conduct Draw
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
 @code {
     private PagedResult<DrawDto>? draws;
+    private List<HouseDto>? houses;
     private bool isLoading = true;
     private int currentPage = 1;
     private int pageSize = 20;
     private string? statusFilter;
+    private string? houseIdFilter;
+    private Guid? selectedDrawId;
+    private string conductDrawHouseTitle = string.Empty;
+    private bool showConductModal = false;
+    private bool isConducting = false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -199,7 +236,7 @@
     {
         try
         {
-            var housesResult = await HousesService.GetHousesAsync(1, 1000); // Get all houses for dropdown
+            var housesResult = await HousesService.GetHousesAsync(1, 1000, null, null); // Get all houses for dropdown
             houses = housesResult.Items.ToList();
         }
         catch (Exception ex)
@@ -213,7 +250,8 @@
         isLoading = true;
         try
         {
-            draws = await DrawsService.GetDrawsAsync(currentPage, pageSize, houseIdFilter, statusFilter);
+            Guid? houseId = string.IsNullOrWhiteSpace(houseIdFilter) ? null : Guid.Parse(houseIdFilter);
+            draws = await DrawsService.GetDrawsAsync(currentPage, pageSize, houseId, statusFilter);
         }
         catch (Exception ex)
         {

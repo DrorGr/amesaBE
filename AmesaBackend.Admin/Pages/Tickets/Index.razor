@@ -22,7 +22,24 @@
     <div class="card mb-4">
         <div class="card-body">
             <div class="row g-3">
-                <div class="col-md-3">
+                <div class="col-md-2">
+                    <label class="form-label">House</label>
+                    <select class="form-select" @bind="houseIdFilter">
+                        <option value="">All Houses</option>
+                        @if (houses != null)
+                        {
+                            @foreach (var house in houses)
+                            {
+                                <option value="@house.Id">@house.Title</option>
+                            }
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">User ID</label>
+                    <input type="text" class="form-control" @bind="userIdFilter" placeholder="User ID (UUID)" />
+                </div>
+                <div class="col-md-2">
                     <label class="form-label">Status</label>
                     <select class="form-select" @bind="statusFilter">
                         <option value="">All Statuses</option>

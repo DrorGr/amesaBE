@@ -165,6 +165,15 @@ namespace AmesaBackend.Notification.DTOs
         public DateTime CreatedAt { get; set; }
     }
 
+    public class TelegramLinkStatusDto
+    {
+        public bool IsLinked { get; set; }
+        public bool Verified { get; set; }
+        public long TelegramUserId { get; set; }
+        public string? TelegramUsername { get; set; }
+        public DateTime? LinkedAt { get; set; }
+    }
+
     public class TelegramLinkRequest
     {
         [Required]

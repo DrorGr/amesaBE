@@ -24,6 +24,7 @@ public static class AwsSecretsConfiguration
             var oauthAwsRegion = tempConfig["Aws:Region"] ?? Environment.GetEnvironmentVariable("AWS_REGION") ?? "eu-north-1";
             var googleSecretId = tempConfig["Authentication:Google:SecretId"] ?? "amesa-google_people_API";
             var metaSecretId = tempConfig["Authentication:Meta:SecretId"] ?? "amesa-meta-oauth";
+            var appleSecretId = tempConfig["Authentication:Apple:SecretId"] ?? "amesa-apple-oauth";
             
             var configValues = new Dictionary<string, string?>();
             var client = new AmazonSecretsManagerClient(Amazon.RegionEndpoint.GetBySystemName(oauthAwsRegion));
@@ -149,6 +150,70 @@ public static class AwsSecretsConfiguration
                 Log.Error(ex, "Error loading Meta OAuth secret {SecretId} from AWS Secrets Manager", metaSecretId);
             }
 
+            // Load Apple OAuth credentials
+            try
+            {
+                var appleRequest = new GetSecretValueRequest
+                {
+                    SecretId = appleSecretId
+                };
+
+                var appleResponse = client.GetSecretValueAsync(appleRequest).GetAwaiter().GetResult();
+
+                if (!string.IsNullOrWhiteSpace(appleResponse.SecretString))
+                {
+                    var secretJson = JsonDocument.Parse(appleResponse.SecretString);
+
+                    if (secretJson.RootElement.TryGetProperty("ClientId", out var clientIdValue))
+                    {
+                        var clientId = clientIdValue.GetString();
+                        if (!string.IsNullOrWhiteSpace(clientId))
+                        {
+                            configValues["Authentication:Apple:ClientId"] = clientId;
+                            Log.Information("Loaded Apple ClientId from AWS Secrets Manager secret {SecretId}", appleSecretId);
+                        }
+                    }
+
+                    if (secretJson.RootElement.TryGetProperty("TeamId", out var teamIdValue))
+                    {
+                        var teamId = teamIdValue.GetString();
+                        if (!string.IsNullOrWhiteSpace(teamId))
+                        {
+                            configValues["Authentication:Apple:TeamId"] = teamId;
+                            Log.Information("Loaded Apple TeamId from AWS Secrets Manager secret {SecretId}", appleSecretId);
+                        }
+                    }
+
+                    if (secretJson.RootElement.TryGetProperty("KeyId", out var keyIdValue))
+                    {
+                        var keyId = keyIdValue.GetString();
+                        if (!string.IsNullOrWhiteSpace(keyId))
+                        {
+                            configValues["Authentication:Apple:KeyId"] = keyId;
+                            Log.Information("Loaded Apple KeyId from AWS Secrets Manager secret {SecretId}", appleSecretId);
+                        }
+                    }
+
+                    if (secretJson.RootElement.TryGetProperty("PrivateKey", out var privateKeyValue))
+                    {
+                        var privateKey = privateKeyValue.GetString();
+                        if (!string.IsNullOrWhiteSpace(privateKey))
+                        {
+                            configValues["Authentication:Apple:PrivateKey"] = privateKey;
+                            Log.Information("Loaded Apple PrivateKey from AWS Secrets Manager secret {SecretId}", appleSecretId);
+                        }
+                    }
+                }
+            }
+            catch (ResourceNotFoundException)
+            {
+                Log.Warning("AWS Secrets Manager secret {SecretId} not found. Apple OAuth may not work correctly.", appleSecretId);
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Error loading Apple OAuth secret {SecretId} from AWS Secrets Manager", appleSecretId);
+            }
+
             // Add all loaded values to configuration
             if (configValues.Count > 0)
             {
@@ -166,6 +231,12 @@ public static class AwsSecretsConfiguration
                 {
                     var appIdPreview = metaAppId.Length > 10 ? metaAppId.Substring(0, 10) + "..." : metaAppId;
                     Log.Information("Meta OAuth AppId loaded (preview): {AppIdPreview}", appIdPreview);
+                }
+                
+                if (configValues.TryGetValue("Authentication:Apple:ClientId", out var appleClientId) && !string.IsNullOrWhiteSpace(appleClientId))
+                {
+                    var clientIdPreview = appleClientId.Length > 10 ? appleClientId.Substring(0, 10) + "..." : appleClientId;
+                    Log.Information("Apple OAuth ClientId loaded (preview): {ClientIdPreview}", clientIdPreview);
                 }
             }
             else

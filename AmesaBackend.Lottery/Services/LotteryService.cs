@@ -3,13 +3,16 @@ using Microsoft.EntityFrameworkCore.Storage;
 using AmesaBackend.Lottery.Data;
 using AmesaBackend.Lottery.DTOs;
 using AmesaBackend.Lottery.Models;
+using AmesaBackend.Lottery.Hubs;
 using AmesaBackend.Shared.Events;
 using AmesaBackend.Shared.Rest;
 using AmesaBackend.Shared.Contracts;
+using AmesaBackend.Shared.Caching;
 using AmesaBackend.Auth.Services;
 using AmesaBackend.Auth.Data;
 using AmesaBackend.Auth.Models;
 using Microsoft.Extensions.Configuration;
+using Microsoft.AspNetCore.SignalR;
 using StackExchange.Redis;
 using System.Text.Json;
 using Npgsql;
@@ -28,6 +31,9 @@ namespace AmesaBackend.Lottery.Services
         private readonly IHttpRequest? _httpRequest;
         private readonly IConfiguration? _configuration;
         private readonly IConnectionMultiplexer? _redis;
+        private readonly IHubContext<LotteryHub>? _hubContext;
+        private readonly ICache? _cache;
+        private readonly IGamificationService? _gamificationService;
 
         public LotteryService(
             LotteryDbContext context, 
@@ -38,7 +44,10 @@ namespace AmesaBackend.Lottery.Services
             AuthDbContext? authContext = null,
             IHttpRequest? httpRequest = null,
             IConfiguration? configuration = null,
-            IConnectionMultiplexer? redis = null)
+            IConnectionMultiplexer? redis = null,
+            IHubContext<LotteryHub>? hubContext = null,
+            ICache? cache = null,
+            IGamificationService? gamificationService = null)
         {
             _context = context;
             _authContext = authContext;
@@ -49,6 +58,9 @@ namespace AmesaBackend.Lottery.Services
             _httpRequest = httpRequest;
             _configuration = configuration;
             _redis = redis;
+            _hubContext = hubContext;
+            _cache = cache;
+            _gamificationService = gamificationService;
         }
 
         /// <summary>
@@ -274,13 +286,67 @@ namespace AmesaBackend.Lottery.Services
             return new Random(seedHash);
         }
 
-        public async Task<List<HouseDto>> GetUserFavoriteHousesAsync(Guid userId)
+        public async Task<List<HouseDto>> GetUserFavoriteHousesAsync(Guid userId, int page = 1, int limit = 20, string? sortBy = null, string? sortOrder = null, CancellationToken cancellationToken = default)
         {
+            // Validate pagination parameters
+            if (page < 1) page = 1;
+            if (limit < 1) limit = 20;
+            if (limit > 100) limit = 100;
+
+            // Validate sorting parameters
+            if (string.IsNullOrWhiteSpace(sortBy)) sortBy = "dateAdded";
+            if (string.IsNullOrWhiteSpace(sortOrder)) sortOrder = "asc";
+            sortBy = sortBy.ToLowerInvariant();
+            sortOrder = sortOrder.ToLowerInvariant();
+
+            // Validate sortBy values
+            var validSortByValues = new[] { "dateadded", "price", "location", "title" };
+            if (!validSortByValues.Contains(sortBy))
+            {
+                _logger.LogWarning("Invalid sortBy value '{SortBy}' for user {UserId}, defaulting to 'dateadded'", sortBy, userId);
+                sortBy = "dateadded";
+            }
+
+            // Validate sortOrder values
+            if (sortOrder != "asc" && sortOrder != "desc")
+            {
+                _logger.LogWarning("Invalid sortOrder value '{SortOrder}' for user {UserId}, defaulting to 'asc'", sortOrder, userId);
+                sortOrder = "asc";
+            }
+
             List<Guid> favoriteHouseIds;
             
             if (_userPreferencesService != null)
             {
-                favoriteHouseIds = await _userPreferencesService.GetFavoriteHouseIdsAsync(userId);
+                // Check cache for favorite IDs first
+                var favoriteIdsCacheKey = $"lottery:favorites:{userId}";
+                if (_cache != null)
+                {
+                    try
+                    {
+                        var cachedIds = await _cache.GetRecordAsync<List<Guid>>(favoriteIdsCacheKey);
+                        if (cachedIds != null)
+                        {
+                            favoriteHouseIds = cachedIds;
+                            _logger.LogDebug("Cache hit for favorite house IDs for user {UserId}", userId);
+                        }
+                        else
+                        {
+                            favoriteHouseIds = await _userPreferencesService.GetFavoriteHouseIdsAsync(userId, cancellationToken);
+                            // Cache the IDs with 5-minute TTL
+                            await _cache.SetRecordAsync(favoriteIdsCacheKey, favoriteHouseIds, TimeSpan.FromMinutes(5));
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to get favorite house IDs from cache for user {UserId}, falling back to database", userId);
+                        favoriteHouseIds = await _userPreferencesService.GetFavoriteHouseIdsAsync(userId, cancellationToken);
+                    }
+                }
+                else
+                {
+                    favoriteHouseIds = await _userPreferencesService.GetFavoriteHouseIdsAsync(userId, cancellationToken);
+                }
             }
             else
             {
@@ -293,44 +359,451 @@ namespace AmesaBackend.Lottery.Services
                 return new List<HouseDto>();
             }
 
-            var houses = await _context.Houses
+            // Check cache for houses list (only for default sort/pagination to avoid cache key complexity)
+            List<HouseDto>? cachedHouses = null;
+            
+            if (_cache != null && page == 1 && limit == 20 && sortBy == "dateadded" && sortOrder == "asc")
+            {
+                // Only cache the first page with default sorting to avoid cache key explosion
+                // Create cache key only when it will be used
+                var favoriteHousesCacheKey = $"lottery:favorites:houses:{userId}:{sortBy}:{sortOrder}";
+                try
+                {
+                    cachedHouses = await _cache.GetRecordAsync<List<HouseDto>>(favoriteHousesCacheKey);
+                    if (cachedHouses != null)
+                    {
+                        _logger.LogDebug("Cache hit for favorite houses list for user {UserId}", userId);
+                        return cachedHouses;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to get favorite houses from cache for user {UserId}, falling back to database", userId);
+                }
+            }
+
+            // Get all houses first (before pagination) for sorting
+            var allHouses = await _context.Houses
                 .Include(h => h.Images.OrderBy(img => img.DisplayOrder))
                 .Where(h => favoriteHouseIds.Contains(h.Id) && h.DeletedAt == null)
-                .OrderBy(h => favoriteHouseIds.IndexOf(h.Id))
-                .ToListAsync();
+                .ToListAsync(cancellationToken);
 
-            return houses.Select(MapToHouseDto).ToList();
+            var houseDtos = allHouses.Select(MapToHouseDto).ToList();
+
+            // Apply sorting
+            if (sortBy == "dateadded")
+            {
+                // Sort by DateAdded from JSONB with fallback to CreatedAt or array order
+                // Note: DateAdded may not be available for all favorites, so we use fallback
+                var dateAddedMap = new Dictionary<Guid, DateTime>();
+                
+                // Try to extract DateAdded from user preferences JSONB
+                if (_userPreferencesService != null)
+                {
+                    try
+                    {
+                        var preferences = await _userPreferencesService.GetUserPreferencesAsync(userId, cancellationToken);
+                        if (preferences != null && !string.IsNullOrEmpty(preferences.PreferencesJson))
+                        {
+                            try
+                            {
+                                var jsonDoc = System.Text.Json.JsonDocument.Parse(preferences.PreferencesJson);
+                                if (jsonDoc.RootElement.TryGetProperty("lotteryPreferences", out var lotteryPrefs))
+                                {
+                                    if (lotteryPrefs.TryGetProperty("favoriteHouseIds", out var favoriteIds))
+                                    {
+                                        if (favoriteIds.ValueKind == System.Text.Json.JsonValueKind.Array)
+                                        {
+                                            foreach (var idElement in favoriteIds.EnumerateArray())
+                                            {
+                                                Guid? houseId = null;
+                                                DateTime? dateAdded = null;
+                                                
+                                                if (idElement.ValueKind == System.Text.Json.JsonValueKind.Object)
+                                                {
+                                                    // Object format: { "houseId": "...", "dateAdded": "..." }
+                                                    if (idElement.TryGetProperty("houseId", out var houseIdProp) && 
+                                                        houseIdProp.ValueKind == System.Text.Json.JsonValueKind.String)
+                                                    {
+                                                        if (Guid.TryParse(houseIdProp.GetString(), out var guid))
+                                                        {
+                                                            houseId = guid;
+                                                        }
+                                                    }
+                                                    
+                                                    if (idElement.TryGetProperty("dateAdded", out var dateAddedProp) &&
+                                                        dateAddedProp.ValueKind == System.Text.Json.JsonValueKind.String)
+                                                    {
+                                                        if (DateTime.TryParse(dateAddedProp.GetString(), out var parsedDate))
+                                                        {
+                                                            dateAdded = parsedDate;
+                                                        }
+                                                    }
+                                                }
+                                                else if (idElement.ValueKind == System.Text.Json.JsonValueKind.String)
+                                                {
+                                                    // String format: just the GUID (no DateAdded available)
+                                                    if (Guid.TryParse(idElement.GetString(), out var guid))
+                                                    {
+                                                        houseId = guid;
+                                                    }
+                                                }
+                                                
+                                                if (houseId.HasValue && dateAdded.HasValue)
+                                                {
+                                                    dateAddedMap[houseId.Value] = dateAdded.Value;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                jsonDoc.Dispose();
+                            }
+                            catch (Exception jsonEx)
+                            {
+                                _logger.LogWarning(jsonEx, "Failed to parse DateAdded from preferences JSON for sorting, using fallback");
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to get DateAdded for sorting, using fallback");
+                    }
+                }
+                
+                // Sort by DateAdded with fallback to CreatedAt, then by favoriteHouseIds order
+                var idOrder = favoriteHouseIds.Select((id, index) => new { Id = id, Index = index })
+                    .ToDictionary(x => x.Id, x => x.Index);
+                
+                houseDtos = sortOrder == "desc"
+                    ? houseDtos.OrderByDescending(h => dateAddedMap.GetValueOrDefault(h.Id, h.CreatedAt))
+                        .ThenByDescending(h => idOrder.GetValueOrDefault(h.Id, int.MaxValue)).ToList()
+                    : houseDtos.OrderBy(h => dateAddedMap.GetValueOrDefault(h.Id, h.CreatedAt))
+                        .ThenBy(h => idOrder.GetValueOrDefault(h.Id, int.MaxValue)).ToList();
+            }
+            else if (sortBy == "price")
+            {
+                houseDtos = sortOrder == "desc" 
+                    ? houseDtos.OrderByDescending(h => h.Price).ToList()
+                    : houseDtos.OrderBy(h => h.Price).ToList();
+            }
+            else if (sortBy == "location")
+            {
+                houseDtos = sortOrder == "desc"
+                    ? houseDtos.OrderByDescending(h => h.Location).ToList()
+                    : houseDtos.OrderBy(h => h.Location).ToList();
+            }
+            else if (sortBy == "title")
+            {
+                houseDtos = sortOrder == "desc"
+                    ? houseDtos.OrderByDescending(h => h.Title).ToList()
+                    : houseDtos.OrderBy(h => h.Title).ToList();
+            }
+            // Default to dateAdded if invalid sortBy
+            else
+            {
+                var idOrder = favoriteHouseIds.Select((id, index) => new { Id = id, Index = index })
+                    .ToDictionary(x => x.Id, x => x.Index);
+                houseDtos = houseDtos.OrderBy(h => idOrder.GetValueOrDefault(h.Id, int.MaxValue)).ToList();
+            }
+
+            // Apply pagination after sorting
+            var skip = (page - 1) * limit;
+            var paginatedDtos = houseDtos.Skip(skip).Take(limit).ToList();
+
+            // Cache the full sorted list (first page only) for default sort to improve performance
+            // Note: We cache the full sorted list (houseDtos) rather than paginated result to enable
+            // fast retrieval of subsequent pages from cache. The cache key is only created when needed.
+            if (_cache != null && page == 1 && limit == 20 && sortBy == "dateadded" && sortOrder == "asc" && paginatedDtos.Count > 0)
+            {
+                try
+                {
+                    // Create cache key only when caching (matches the key used for retrieval above)
+                    var favoriteHousesCacheKey = $"lottery:favorites:houses:{userId}:{sortBy}:{sortOrder}";
+                    // Cache the full sorted list (not just paginated) for future use
+                    await _cache.SetRecordAsync(favoriteHousesCacheKey, houseDtos, TimeSpan.FromMinutes(5));
+                    _logger.LogDebug("Cached favorite houses list for user {UserId}", userId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to cache favorite houses list for user {UserId}", userId);
+                    // Don't fail the operation if caching fails
+                }
+            }
+
+            return paginatedDtos;
         }
 
-        public async Task<bool> AddHouseToFavoritesAsync(Guid userId, Guid houseId)
+        public async Task<int> GetUserFavoriteHousesCountAsync(Guid userId, CancellationToken cancellationToken = default)
+        {
+            // Check cache first for fast path
+            var favoriteIdsCacheKey = $"lottery:favorites:{userId}";
+            if (_cache != null)
+            {
+                try
+                {
+                    var cachedIds = await _cache.GetRecordAsync<List<Guid>>(favoriteIdsCacheKey);
+                    if (cachedIds != null && cachedIds.Count > 0)
+                    {
+                        // Filter out deleted houses from cached IDs to match GetUserFavoriteHousesAsync behavior
+                        var validHouseIds = await _context.Houses
+                            .AsNoTracking()
+                            .Where(h => cachedIds.Contains(h.Id) && h.DeletedAt == null)
+                            .Select(h => h.Id)
+                            .ToListAsync(cancellationToken);
+                        
+                        _logger.LogDebug("Cache hit for favorite house IDs count for user {UserId} (filtered deleted: {Count})", userId, validHouseIds.Count);
+                        return validHouseIds.Count;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to get favorite house IDs count from cache for user {UserId}, falling back to database", userId);
+                }
+            }
+
+            // Fallback to database - filter out deleted houses to match GetUserFavoriteHousesAsync behavior
+            if (_userPreferencesService != null)
+            {
+                var favoriteHouseIds = await _userPreferencesService.GetFavoriteHouseIdsAsync(userId, cancellationToken);
+                
+                // Filter out deleted houses to ensure count matches actual results
+                if (favoriteHouseIds.Count > 0)
+                {
+                    var validHouseIds = await _context.Houses
+                        .AsNoTracking()
+                        .Where(h => favoriteHouseIds.Contains(h.Id) && h.DeletedAt == null)
+                        .Select(h => h.Id)
+                        .ToListAsync(cancellationToken);
+                    
+                    return validHouseIds.Count;
+                }
+                
+                return 0;
+            }
+
+            _logger.LogWarning("UserPreferencesService not available, returning 0 for favorites count");
+            return 0;
+        }
+
+        public async Task<DTOs.FavoriteOperationResult> AddHouseToFavoritesAsync(Guid userId, Guid houseId, CancellationToken cancellationToken = default)
         {
             if (_userPreferencesService == null)
             {
                 _logger.LogWarning("UserPreferencesService not available");
-                return false;
+                return DTOs.FavoriteOperationResult.CreateError(DTOs.FavoriteOperationError.ServiceUnavailable());
             }
 
             // Verify house exists (read-only query - use AsNoTracking for performance)
             var house = await _context.Houses
                 .AsNoTracking()
-                .FirstOrDefaultAsync(h => h.Id == houseId);
-            if (house == null || house.DeletedAt != null)
+                .FirstOrDefaultAsync(h => h.Id == houseId, cancellationToken);
+            if (house == null)
             {
-                return false;
+                _logger.LogWarning("House {HouseId} does not exist, cannot add to favorites for user {UserId}", houseId, userId);
+                return DTOs.FavoriteOperationResult.CreateError(DTOs.FavoriteOperationError.HouseNotFound());
+            }
+            if (house.DeletedAt != null)
+            {
+                _logger.LogWarning("House {HouseId} is soft-deleted, cannot add to favorites for user {UserId}", houseId, userId);
+                return DTOs.FavoriteOperationResult.CreateError(DTOs.FavoriteOperationError.HouseNotFound());
             }
 
-            return await _userPreferencesService.AddHouseToFavoritesAsync(userId, houseId);
+            // Check if already in favorites (direct check - no need to fetch all houses)
+            var existingFavorites = await _userPreferencesService.GetFavoriteHouseIdsAsync(userId, cancellationToken);
+            if (existingFavorites.Contains(houseId))
+            {
+                _logger.LogDebug("House {HouseId} is already in favorites for user {UserId}", houseId, userId);
+                return DTOs.FavoriteOperationResult.CreateError(DTOs.FavoriteOperationError.AlreadyFavorite());
+            }
+
+            var success = await _userPreferencesService.AddHouseToFavoritesAsync(userId, houseId, cancellationToken);
+            
+            if (!success)
+            {
+                _logger.LogWarning("Failed to add house {HouseId} to favorites for user {UserId}", houseId, userId);
+                return DTOs.FavoriteOperationResult.CreateError(DTOs.FavoriteOperationError.ServiceUnavailable());
+            }
+            
+            // Invalidate cache on successful add
+            if (_cache != null)
+            {
+                const int maxRetries = 3;
+                var retryCount = 0;
+                var cacheInvalidated = false;
+                
+                while (retryCount < maxRetries && !cacheInvalidated && !cancellationToken.IsCancellationRequested)
+                {
+                    try
+                    {
+                        var favoriteIdsCacheKey = $"lottery:favorites:{userId}";
+                        // Use Redis pattern matching to invalidate all cache keys for this user's favorite houses (including all sort variations)
+                        // Redis uses glob-style patterns: * matches any characters
+                        var cachePattern = $"lottery:favorites:houses:{userId}:*";
+                        await _cache.RemoveRecordAsync(favoriteIdsCacheKey);
+                        await _cache.DeleteByRegex(cachePattern);
+                        cacheInvalidated = true;
+                        _logger.LogDebug("Invalidated cache for user {UserId} after adding favorite {HouseId} (attempt {Attempt})", userId, houseId, retryCount + 1);
+                    }
+                    catch (Exception ex)
+                    {
+                        retryCount++;
+                        if (retryCount >= maxRetries || cancellationToken.IsCancellationRequested)
+                        {
+                            if (cancellationToken.IsCancellationRequested)
+                            {
+                                _logger.LogInformation("Cache invalidation cancelled for user {UserId} after adding favorite {HouseId}", userId, houseId);
+                            }
+                            else
+                            {
+                                _logger.LogError(ex, "Failed to invalidate cache for user {UserId} after adding favorite {HouseId} after {Retries} attempts", userId, houseId, maxRetries);
+                            }
+                            break; // Exit retry loop
+                        }
+                        else
+                        {
+                            _logger.LogWarning(ex, "Failed to invalidate cache for user {UserId} after adding favorite {HouseId}, retrying ({Attempt}/{MaxRetries})", userId, houseId, retryCount, maxRetries);
+                            await Task.Delay(100 * retryCount, cancellationToken); // Exponential backoff
+                        }
+                    }
+                }
+            }
+            
+            // NOTE: Gamification points are awarded by UserPreferencesService.AddHouseToFavoritesAsync
+            // No need to award points here to avoid duplicate awards
+            
+            // Broadcast SignalR update if operation was successful
+            if (_hubContext != null)
+            {
+                try
+                {
+                    var update = new FavoriteUpdateDto
+                    {
+                        HouseId = houseId,
+                        UpdateType = "added",
+                        HouseTitle = house.Title,
+                        Timestamp = DateTime.UtcNow
+                    };
+                    await _hubContext.BroadcastFavoriteUpdate(userId, update, cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to broadcast favorite update for house {HouseId} to user {UserId}", houseId, userId);
+                    // Don't fail the operation if SignalR broadcast fails
+                }
+            }
+
+            return DTOs.FavoriteOperationResult.CreateSuccess();
         }
 
-        public async Task<bool> RemoveHouseFromFavoritesAsync(Guid userId, Guid houseId)
+        public async Task<DTOs.FavoriteOperationResult> RemoveHouseFromFavoritesAsync(Guid userId, Guid houseId, CancellationToken cancellationToken = default)
         {
             if (_userPreferencesService == null)
             {
                 _logger.LogWarning("UserPreferencesService not available");
-                return false;
+                return DTOs.FavoriteOperationResult.CreateError(DTOs.FavoriteOperationError.ServiceUnavailable());
             }
 
-            return await _userPreferencesService.RemoveHouseFromFavoritesAsync(userId, houseId);
+            // Check if in favorites first (direct check - no need to fetch house if not in favorites)
+            var existingFavorites = await _userPreferencesService.GetFavoriteHouseIdsAsync(userId, cancellationToken);
+            if (!existingFavorites.Contains(houseId))
+            {
+                _logger.LogDebug("House {HouseId} is not in favorites for user {UserId}", houseId, userId);
+                return DTOs.FavoriteOperationResult.CreateError(DTOs.FavoriteOperationError.NotInFavorites());
+            }
+
+            // Verify house exists (read-only query - use AsNoTracking for performance)
+            var house = await _context.Houses
+                .AsNoTracking()
+                .FirstOrDefaultAsync(h => h.Id == houseId, cancellationToken);
+            if (house == null)
+            {
+                _logger.LogWarning("House {HouseId} does not exist, cannot remove from favorites for user {UserId}", houseId, userId);
+                return DTOs.FavoriteOperationResult.CreateError(DTOs.FavoriteOperationError.HouseNotFound());
+            }
+            if (house.DeletedAt != null)
+            {
+                _logger.LogWarning("House {HouseId} is soft-deleted, cannot remove from favorites for user {UserId}", houseId, userId);
+                return DTOs.FavoriteOperationResult.CreateError(DTOs.FavoriteOperationError.HouseNotFound());
+            }
+
+            var success = await _userPreferencesService.RemoveHouseFromFavoritesAsync(userId, houseId, cancellationToken);
+            
+            if (!success)
+            {
+                _logger.LogWarning("Failed to remove house {HouseId} from favorites for user {UserId}", houseId, userId);
+                return DTOs.FavoriteOperationResult.CreateError(DTOs.FavoriteOperationError.ServiceUnavailable());
+            }
+            
+            // Invalidate cache on successful remove
+            if (_cache != null)
+            {
+                const int maxRetries = 3;
+                var retryCount = 0;
+                var cacheInvalidated = false;
+                
+                while (retryCount < maxRetries && !cacheInvalidated && !cancellationToken.IsCancellationRequested)
+                {
+                    try
+                    {
+                        var favoriteIdsCacheKey = $"lottery:favorites:{userId}";
+                        // Use Redis pattern matching to invalidate all cache keys for this user's favorite houses (including all sort variations)
+                        // Redis uses glob-style patterns: * matches any characters
+                        var cachePattern = $"lottery:favorites:houses:{userId}:*";
+                        await _cache.RemoveRecordAsync(favoriteIdsCacheKey);
+                        await _cache.DeleteByRegex(cachePattern);
+                        cacheInvalidated = true;
+                        _logger.LogDebug("Invalidated cache for user {UserId} after removing favorite {HouseId} (attempt {Attempt})", userId, houseId, retryCount + 1);
+                    }
+                    catch (Exception ex)
+                    {
+                        retryCount++;
+                        if (retryCount >= maxRetries || cancellationToken.IsCancellationRequested)
+                        {
+                            if (cancellationToken.IsCancellationRequested)
+                            {
+                                _logger.LogInformation("Cache invalidation cancelled for user {UserId} after removing favorite {HouseId}", userId, houseId);
+                            }
+                            else
+                            {
+                                _logger.LogError(ex, "Failed to invalidate cache for user {UserId} after removing favorite {HouseId} after {Retries} attempts", userId, houseId, maxRetries);
+                            }
+                            break; // Exit retry loop
+                        }
+                        else
+                        {
+                            _logger.LogWarning(ex, "Failed to invalidate cache for user {UserId} after removing favorite {HouseId}, retrying ({Attempt}/{MaxRetries})", userId, houseId, retryCount, maxRetries);
+                            await Task.Delay(100 * retryCount, cancellationToken); // Exponential backoff
+                        }
+                    }
+                }
+            }
+            
+            // Broadcast SignalR update if operation was successful
+            if (_hubContext != null)
+            {
+                try
+                {
+                    // Reuse house title from validation query above
+                    string? houseTitle = house?.Title;
+
+                    var update = new FavoriteUpdateDto
+                    {
+                        HouseId = houseId,
+                        UpdateType = "removed",
+                        HouseTitle = houseTitle,
+                        Timestamp = DateTime.UtcNow
+                    };
+                    await _hubContext.BroadcastFavoriteUpdate(userId, update, cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to broadcast favorite update for house {HouseId} to user {UserId}", houseId, userId);
+                    // Don't fail the operation if SignalR broadcast fails
+                }
+            }
+
+            return DTOs.FavoriteOperationResult.CreateSuccess();
         }
 
         public async Task<List<HouseDto>> GetRecommendedHousesAsync(Guid userId, int limit = 10)
@@ -391,7 +864,7 @@ namespace AmesaBackend.Lottery.Services
         {
             var tickets = await _context.LotteryTickets
                 .Include(t => t.House)
-                .Where(t => t.UserId == userId && t.Status == "Active")
+                .Where(t => t.UserId == userId && t.Status.ToLower() == "active")
                 .OrderByDescending(t => t.PurchaseDate)
                 .ToListAsync();
 
@@ -404,7 +877,7 @@ namespace AmesaBackend.Lottery.Services
                 .Where(t => t.UserId == userId)
                 .ToListAsync();
 
-            var activeTickets = tickets.Where(t => t.Status == "Active").ToList();
+            var activeTickets = tickets.Where(t => t.Status.ToLower() == "active").ToList();
             var winningTickets = tickets.Where(t => t.IsWinner).ToList();
             var totalSpending = tickets.Sum(t => t.PurchasePrice);
 
@@ -426,18 +899,76 @@ namespace AmesaBackend.Lottery.Services
             var winRate = totalEntries > 0 ? (decimal)winningTickets.Count / totalEntries : 0;
             var avgSpending = totalEntries > 0 ? totalSpending / totalEntries : 0;
 
+            // Calculate TotalWinnings from payment service
+            decimal totalWinnings = 0;
+            try
+            {
+                if (_httpRequest != null && _configuration != null)
+                {
+                    var paymentServiceUrl = _configuration["PaymentService:BaseUrl"] 
+                        ?? Environment.GetEnvironmentVariable("PAYMENT_SERVICE_URL")
+                        ?? "http://amesa-backend-alb-509078867.eu-north-1.elb.amazonaws.com/api/v1";
+
+                    var token = string.Empty; // Will be automatically added by HttpRequestService from HttpContext
+
+                    // Call payment service to get transactions
+                    var transactionsResponse = await _httpRequest.GetRequest<TransactionsApiResponse>(
+                        $"{paymentServiceUrl}/payment/transactions",
+                        token);
+
+                    if (transactionsResponse != null && transactionsResponse.Success && transactionsResponse.Data != null)
+                    {
+                        // Filter for winning transactions: Type="Payout" or "Winning", Status="Completed"
+                        var winningTransactions = transactionsResponse.Data
+                            .Where(t => (t.Type.Equals("Payout", StringComparison.OrdinalIgnoreCase) || 
+                                        t.Type.Equals("Winning", StringComparison.OrdinalIgnoreCase)) &&
+                                       t.Status.Equals("Completed", StringComparison.OrdinalIgnoreCase))
+                            .ToList();
+
+                        totalWinnings = winningTransactions.Sum(t => t.Amount);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // Log warning but don't fail the request - return 0 for TotalWinnings
+                _logger.LogWarning(ex, "Failed to calculate TotalWinnings from payment service for user {UserId}. Returning 0.", userId);
+            }
+
+            // Get gamification data if available
+            UserGamificationDto? gamification = null;
+            if (_gamificationService != null)
+            {
+                try
+                {
+                    gamification = await _gamificationService.GetUserGamificationAsync(userId);
+                }
+                catch (Exception ex)
+                {
+                    // Log warning but don't fail the request - gamification is optional
+                    _logger.LogWarning(ex, "Failed to get gamification data for user {UserId}. Continuing without gamification data.", userId);
+                }
+            }
+
             return new UserLotteryStatsDto
             {
                 TotalEntries = totalEntries,
                 ActiveEntries = activeTickets.Count,
                 TotalWins = winningTickets.Count,
                 TotalSpending = totalSpending,
-                TotalWinnings = 0, // Will be populated from transactions if available
+                TotalWinnings = totalWinnings,
                 WinRate = winRate,
                 AverageSpendingPerEntry = avgSpending,
                 FavoriteHouseId = favoriteHouseId,
                 MostActiveMonth = mostActiveMonth,
-                LastEntryDate = tickets.OrderByDescending(t => t.PurchaseDate).FirstOrDefault()?.PurchaseDate
+                LastEntryDate = tickets.OrderByDescending(t => t.PurchaseDate).FirstOrDefault()?.PurchaseDate,
+                // Gamification fields (nullable for backward compatibility)
+                Points = gamification?.TotalPoints,
+                Level = gamification?.CurrentLevel,
+                Tier = gamification?.CurrentTier,
+                CurrentStreak = gamification?.CurrentStreak,
+                LongestStreak = gamification?.LongestStreak,
+                RecentAchievements = gamification?.RecentAchievements?.Take(5).ToList()
             };
         }
 
@@ -816,6 +1347,51 @@ namespace AmesaBackend.Lottery.Services
                         "Created {Count} tickets from payment {PaymentId} for user {UserId}, house {HouseId}",
                         tickets.Count, request.PaymentId, request.UserId, request.HouseId);
 
+                    // Gamification integration (after successful ticket creation)
+                    if (_gamificationService != null)
+                    {
+                        try
+                        {
+                            // Award points: +10 per ticket
+                            var pointsPerTicket = 10;
+                            var totalPoints = tickets.Count * pointsPerTicket;
+                            await _gamificationService.AwardPointsAsync(
+                                request.UserId, 
+                                totalPoints, 
+                                "Ticket Purchase", 
+                                request.PaymentId);
+
+                            // Update streak
+                            await _gamificationService.UpdateStreakAsync(request.UserId);
+
+                            // Check if this is first entry
+                            var totalEntries = await _context.LotteryTickets
+                                .Where(t => t.UserId == request.UserId)
+                                .CountAsync();
+                            
+                            if (totalEntries == tickets.Count)
+                            {
+                                // First entry - award bonus points
+                                await _gamificationService.AwardPointsAsync(
+                                    request.UserId, 
+                                    50, 
+                                    "First Entry Bonus", 
+                                    request.PaymentId);
+                            }
+
+                            // Check achievements
+                            await _gamificationService.CheckAchievementsAsync(
+                                request.UserId, 
+                                "EntryPurchase", 
+                                new { ticketCount = totalEntries });
+                        }
+                        catch (Exception ex)
+                        {
+                            // Log but don't fail ticket creation if gamification fails
+                            _logger.LogWarning(ex, "Gamification integration failed for user {UserId} after ticket creation", request.UserId);
+                        }
+                    }
+
                     return new CreateTicketsFromPaymentResponse
                     {
                         TicketNumbers = tickets.Select(t => t.TicketNumber).ToList(),
@@ -1112,6 +1688,37 @@ namespace AmesaBackend.Lottery.Services
             public DateTime Timestamp { get; set; }
         }
 
+        /// <summary>
+        /// Transactions API response wrapper from Payment service
+        /// Matches Payment.DTOs.ApiResponse format
+        /// </summary>
+        private class TransactionsApiResponse
+        {
+            public bool Success { get; set; }
+            public List<TransactionDto>? Data { get; set; }
+            public string? Message { get; set; }
+            public PaymentErrorResponse? Error { get; set; }
+            public DateTime Timestamp { get; set; }
+        }
+
+        /// <summary>
+        /// Transaction DTO from Payment service
+        /// Matches Payment.DTOs.TransactionDto format
+        /// </summary>
+        private class TransactionDto
+        {
+            public Guid Id { get; set; }
+            public string Type { get; set; } = string.Empty;
+            public decimal Amount { get; set; }
+            public string Currency { get; set; } = string.Empty;
+            public string Status { get; set; } = string.Empty;
+            public string? Description { get; set; }
+            public string? ReferenceId { get; set; }
+            public string? ProviderTransactionId { get; set; }
+            public DateTime? ProcessedAt { get; set; }
+            public DateTime CreatedAt { get; set; }
+        }
+
         private class ProductDto
         {
             public Guid Id { get; set; }
@@ -1307,6 +1914,393 @@ namespace AmesaBackend.Lottery.Services
             return result;
         }
 
+        public async Task<BulkFavoritesResponse> BulkAddFavoritesAsync(Guid userId, List<Guid> houseIds, CancellationToken cancellationToken = default)
+        {
+            var response = new BulkFavoritesResponse();
+
+            if (houseIds.Count == 0)
+            {
+                response.TotalRequested = 0;
+                return response;
+            }
+
+            // Remove duplicates first, then set TotalRequested to reflect unique count
+            var uniqueHouseIds = houseIds.Distinct().ToList();
+            response.TotalRequested = uniqueHouseIds.Count; // Set after deduplication
+            
+            if (uniqueHouseIds.Count != houseIds.Count)
+            {
+                _logger.LogInformation("Removed {DuplicateCount} duplicate house IDs from bulk add request for user {UserId}", 
+                    houseIds.Count - uniqueHouseIds.Count, userId);
+            }
+
+            // Pre-validate all house IDs exist and are not soft-deleted (batch query for performance)
+            var validHouseIds = await _context.Houses
+                .AsNoTracking()
+                .Where(h => uniqueHouseIds.Contains(h.Id) && h.DeletedAt == null)
+                .Select(h => h.Id)
+                .ToListAsync(cancellationToken);
+
+            var invalidHouseIds = uniqueHouseIds.Except(validHouseIds).ToList();
+            if (invalidHouseIds.Count > 0)
+            {
+                _logger.LogWarning("Bulk add request for user {UserId} contains {InvalidCount} invalid or deleted house IDs", userId, invalidHouseIds.Count);
+                // Add invalid house IDs to errors immediately
+                foreach (var invalidId in invalidHouseIds)
+                {
+                    response.Failed++;
+                    response.Errors.Add(new BulkFavoriteError
+                    {
+                        HouseId = invalidId,
+                        ErrorCode = "HOUSE_NOT_FOUND",
+                        ErrorMessage = "House does not exist or has been deleted"
+                    });
+                }
+            }
+
+            // Only process valid house IDs
+            foreach (var houseId in validHouseIds)
+            {
+                try
+                {
+                    var result = await AddHouseToFavoritesAsync(userId, houseId, cancellationToken);
+                    if (result.Success)
+                    {
+                        response.Successful++;
+                        response.SuccessfulHouseIds.Add(houseId);
+                    }
+                    else
+                    {
+                        response.Failed++;
+                        response.Errors.Add(new BulkFavoriteError
+                        {
+                            HouseId = houseId,
+                            ErrorCode = result.Error?.Code ?? "ADD_FAILED",
+                            ErrorMessage = result.Error?.Message ?? "Failed to add house to favorites"
+                        });
+                    }
+                }
+                catch (Exception ex)
+                {
+                    response.Failed++;
+                    response.Errors.Add(new BulkFavoriteError
+                    {
+                        HouseId = houseId,
+                        ErrorCode = "EXCEPTION",
+                        ErrorMessage = "An error occurred while processing this house"
+                    });
+                    _logger.LogError(ex, "Error adding house {HouseId} to favorites in bulk operation for user {UserId}", houseId, userId);
+                }
+            }
+
+            return response;
+        }
+
+        public async Task<BulkFavoritesResponse> BulkRemoveFavoritesAsync(Guid userId, List<Guid> houseIds, CancellationToken cancellationToken = default)
+        {
+            var response = new BulkFavoritesResponse();
+
+            if (houseIds.Count == 0)
+            {
+                response.TotalRequested = 0;
+                return response;
+            }
+
+            // Remove duplicates first, then set TotalRequested to reflect unique count
+            var uniqueHouseIds = houseIds.Distinct().ToList();
+            response.TotalRequested = uniqueHouseIds.Count; // Set after deduplication
+            
+            if (uniqueHouseIds.Count != houseIds.Count)
+            {
+                _logger.LogInformation("Removed {DuplicateCount} duplicate house IDs from bulk remove request for user {UserId}", 
+                    houseIds.Count - uniqueHouseIds.Count, userId);
+            }
+
+            // Pre-validate all house IDs exist and are not soft-deleted (batch query for performance)
+            var validHouseIds = await _context.Houses
+                .AsNoTracking()
+                .Where(h => uniqueHouseIds.Contains(h.Id) && h.DeletedAt == null)
+                .Select(h => h.Id)
+                .ToListAsync(cancellationToken);
+
+            var invalidHouseIds = uniqueHouseIds.Except(validHouseIds).ToList();
+            if (invalidHouseIds.Count > 0)
+            {
+                _logger.LogWarning("Bulk remove request for user {UserId} contains {InvalidCount} invalid or deleted house IDs", userId, invalidHouseIds.Count);
+                // Add invalid house IDs to errors immediately
+                foreach (var invalidId in invalidHouseIds)
+                {
+                    response.Failed++;
+                    response.Errors.Add(new BulkFavoriteError
+                    {
+                        HouseId = invalidId,
+                        ErrorCode = "HOUSE_NOT_FOUND",
+                        ErrorMessage = "House does not exist or has been deleted"
+                    });
+                }
+            }
+
+            // Only process valid house IDs
+            foreach (var houseId in validHouseIds)
+            {
+                try
+                {
+                    var result = await RemoveHouseFromFavoritesAsync(userId, houseId, cancellationToken);
+                    if (result.Success)
+                    {
+                        response.Successful++;
+                        response.SuccessfulHouseIds.Add(houseId);
+                    }
+                    else
+                    {
+                        response.Failed++;
+                        response.Errors.Add(new BulkFavoriteError
+                        {
+                            HouseId = houseId,
+                            ErrorCode = result.Error?.Code ?? "REMOVE_FAILED",
+                            ErrorMessage = result.Error?.Message ?? "Failed to remove house from favorites"
+                        });
+                    }
+                }
+                catch (Exception ex)
+                {
+                    response.Failed++;
+                    response.Errors.Add(new BulkFavoriteError
+                    {
+                        HouseId = houseId,
+                        ErrorCode = "EXCEPTION",
+                        ErrorMessage = "An error occurred while processing this house"
+                    });
+                    _logger.LogError(ex, "Error removing house {HouseId} from favorites in bulk operation for user {UserId}", houseId, userId);
+                }
+            }
+
+            return response;
+        }
+
+        public async Task<FavoritesAnalyticsDto> GetFavoritesAnalyticsAsync(CancellationToken cancellationToken = default)
+        {
+            var analytics = new FavoritesAnalyticsDto();
+
+            if (_authContext == null)
+            {
+                _logger.LogWarning("AuthContext not available for analytics");
+                return analytics;
+            }
+
+            try
+            {
+                // Limit to prevent memory issues with large datasets (process max 10,000 user preferences)
+                const int maxPreferencesToProcess = 10000;
+                
+                // Get user preferences in batches (optimized: no N+1, but with limit for memory protection)
+                var allPreferences = await _authContext.UserPreferences
+                    .AsNoTracking()
+                    .Where(p => p.PreferencesJson != null && p.PreferencesJson != "{}")
+                    .Take(maxPreferencesToProcess)
+                    .ToListAsync(cancellationToken);
+                
+                if (allPreferences.Count >= maxPreferencesToProcess)
+                {
+                    _logger.LogWarning("Analytics query hit maximum preferences limit ({MaxLimit}). Results may be incomplete.", maxPreferencesToProcess);
+                }
+
+                var favoriteCounts = new Dictionary<Guid, int>();
+                var uniqueUsers = new HashSet<Guid>();
+                var favoritesByDate = new Dictionary<string, int>(); // Track favorites by date
+
+                // Parse JSONB directly in memory (much faster than individual service calls)
+                int processedCount = 0;
+                foreach (var pref in allPreferences)
+                {
+                    // Check cancellation token periodically (every 100 items) to allow responsive cancellation
+                    if (processedCount > 0 && processedCount % 100 == 0)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                    }
+                    
+                    System.Text.Json.JsonDocument? jsonDoc = null;
+                    try
+                    {
+                        if (string.IsNullOrEmpty(pref.PreferencesJson))
+                            continue;
+
+                        try
+                        {
+                            jsonDoc = System.Text.Json.JsonDocument.Parse(pref.PreferencesJson);
+                        }
+                        catch (System.Text.Json.JsonException jsonEx)
+                        {
+                            _logger.LogWarning(jsonEx, "Failed to parse JSONB for user {UserId}, skipping", pref.UserId);
+                            continue; // Skip malformed JSON
+                        }
+                        
+                        if (jsonDoc == null)
+                            continue;
+                            
+                        if (jsonDoc.RootElement.TryGetProperty("lotteryPreferences", out var lotteryPrefs))
+                        {
+                            if (lotteryPrefs.TryGetProperty("favoriteHouseIds", out var favoriteIds))
+                            {
+                                if (favoriteIds.ValueKind == System.Text.Json.JsonValueKind.Array)
+                                {
+                                    // OPTIMIZATION: Build DateAdded map once (O(n)) instead of O(n²) nested loop
+                                    var dateAddedMap = new Dictionary<Guid, DateTime?>();
+                                    var houseIdList = new List<Guid>();
+                                    
+                                    // Single pass through array to extract both house IDs and DateAdded
+                                    int favoriteIndex = 0;
+                                    foreach (var idElement in favoriteIds.EnumerateArray())
+                                    {
+                                        // Check cancellation token in nested loop (every 50 favorite items)
+                                        if (favoriteIndex > 0 && favoriteIndex % 50 == 0)
+                                        {
+                                            cancellationToken.ThrowIfCancellationRequested();
+                                        }
+                                        favoriteIndex++;
+                                        
+                                        Guid? houseId = null;
+                                        DateTime? dateAdded = null;
+                                        
+                                        if (idElement.ValueKind == System.Text.Json.JsonValueKind.Object)
+                                        {
+                                            // Object format: { "houseId": "...", "dateAdded": "..." }
+                                            if (idElement.TryGetProperty("houseId", out var houseIdProp) && 
+                                                houseIdProp.ValueKind == System.Text.Json.JsonValueKind.String)
+                                            {
+                                                if (Guid.TryParse(houseIdProp.GetString(), out var guid))
+                                                {
+                                                    houseId = guid;
+                                                }
+                                            }
+                                            
+                                            if (idElement.TryGetProperty("dateAdded", out var dateAddedProp) &&
+                                                dateAddedProp.ValueKind == System.Text.Json.JsonValueKind.String)
+                                            {
+                                                if (DateTime.TryParse(dateAddedProp.GetString(), out var parsedDate))
+                                                {
+                                                    dateAdded = parsedDate;
+                                                }
+                                            }
+                                        }
+                                        else if (idElement.ValueKind == System.Text.Json.JsonValueKind.String)
+                                        {
+                                            // String format: just the GUID (no DateAdded available)
+                                            if (Guid.TryParse(idElement.GetString(), out var guid))
+                                            {
+                                                houseId = guid;
+                                            }
+                                        }
+                                        
+                                        if (houseId.HasValue)
+                                        {
+                                            houseIdList.Add(houseId.Value);
+                                            if (dateAdded.HasValue)
+                                            {
+                                                dateAddedMap[houseId.Value] = dateAdded.Value;
+                                            }
+                                        }
+                                    }
+
+                                    if (houseIdList.Count > 0)
+                                    {
+                                        uniqueUsers.Add(pref.UserId);
+                                        analytics.TotalFavorites += houseIdList.Count;
+
+                                        // Track favorites by date using pre-built map (O(1) lookup instead of O(n))
+                                        int houseIndex = 0;
+                                        foreach (var houseId in houseIdList)
+                                        {
+                                            // Check cancellation token in nested loop (every 50 houses)
+                                            if (houseIndex > 0 && houseIndex % 50 == 0)
+                                            {
+                                                cancellationToken.ThrowIfCancellationRequested();
+                                            }
+                                            houseIndex++;
+                                            
+                                            favoriteCounts.TryGetValue(houseId, out var count);
+                                            favoriteCounts[houseId] = count + 1;
+                                            
+                                            // Get DateAdded from map (O(1) lookup)
+                                            var dateAdded = dateAddedMap.GetValueOrDefault(houseId);
+                                            
+                                            // Fallback to UpdatedAt or CreatedAt if DateAdded is missing
+                                            if (!dateAdded.HasValue)
+                                            {
+                                                dateAdded = pref.UpdatedAt;
+                                            }
+                                            
+                                            if (dateAdded.HasValue)
+                                            {
+                                                var dateKey = dateAdded.Value.ToString("yyyy-MM-dd");
+                                                favoritesByDate.TryGetValue(dateKey, out var dateCount);
+                                                favoritesByDate[dateKey] = dateCount + 1;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Error parsing favorites for user {UserId} in analytics", pref.UserId);
+                        // Continue with next user
+                    }
+                    finally
+                    {
+                        // Dispose JsonDocument to free memory
+                        jsonDoc?.Dispose();
+                        processedCount++;
+                    }
+                }
+
+                // Populate FavoritesByDate (last 30 days for performance)
+                var thirtyDaysAgo = DateTime.UtcNow.AddDays(-30);
+                analytics.FavoritesByDate = favoritesByDate
+                    .Where(kvp => DateTime.TryParse(kvp.Key, out var date) && date >= thirtyDaysAgo)
+                    .OrderByDescending(kvp => kvp.Key)
+                    .Take(30)
+                    .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+
+                analytics.UniqueUsers = uniqueUsers.Count;
+
+                // Get most favorited houses (batch query instead of N+1)
+                var mostFavorited = favoriteCounts
+                    .OrderByDescending(kvp => kvp.Value)
+                    .Take(10)
+                    .ToList();
+
+                if (mostFavorited.Count > 0)
+                {
+                    var houseIds = mostFavorited.Select(kvp => kvp.Key).ToList();
+                    var houses = await _context.Houses
+                        .AsNoTracking()
+                        .Where(h => houseIds.Contains(h.Id))
+                        .ToDictionaryAsync(h => h.Id, h => h.Title, cancellationToken);
+
+                    foreach (var (houseId, count) in mostFavorited)
+                    {
+                        if (houses.TryGetValue(houseId, out var houseTitle))
+                        {
+                            analytics.MostFavoritedHouses.Add(new MostFavoritedHouseDto
+                            {
+                                HouseId = houseId,
+                                HouseTitle = houseTitle,
+                                FavoriteCount = count
+                            });
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error generating favorites analytics");
+            }
+
+            return analytics;
+        }
+
         /// <summary>
         /// Gets all user IDs who have favorited a specific house
         /// Uses EF Core to load preferences and parses JSONB in memory
@@ -1390,3 +2384,4 @@ namespace AmesaBackend.Lottery.Services
         }
     }
 }
+

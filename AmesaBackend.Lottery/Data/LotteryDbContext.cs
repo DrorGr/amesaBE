@@ -20,6 +20,11 @@ namespace AmesaBackend.Lottery.Data
         public DbSet<TicketReservation> TicketReservations { get; set; }
         public DbSet<PromotionUsageAudit> PromotionUsageAudits { get; set; }
         
+        // Gamification entities
+        public DbSet<UserGamification> UserGamification { get; set; }
+        public DbSet<UserAchievement> UserAchievements { get; set; }
+        public DbSet<PointsHistory> PointsHistory { get; set; }
+        
         // Promotion entities from amesa_admin schema
         public DbSet<PromotionModel> Promotions { get; set; }
         public DbSet<UserPromotionModel> UserPromotions { get; set; }
@@ -141,6 +146,41 @@ namespace AmesaBackend.Lottery.Data
                 entity.Ignore(e => e.User);
                 entity.Ignore(e => e.Promotion);
                 entity.Ignore(e => e.Transaction);
+            });
+
+            // Configure Gamification entities
+            modelBuilder.Entity<UserGamification>(entity =>
+            {
+                entity.HasKey(e => e.UserId);
+                entity.Property(e => e.TotalPoints).IsRequired();
+                entity.Property(e => e.CurrentLevel).IsRequired();
+                entity.Property(e => e.CurrentTier).IsRequired().HasMaxLength(20);
+                entity.Property(e => e.CurrentStreak).IsRequired();
+                entity.Property(e => e.LongestStreak).IsRequired();
+            });
+
+            modelBuilder.Entity<UserAchievement>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.UserId).IsRequired();
+                entity.Property(e => e.AchievementType).IsRequired().HasMaxLength(50);
+                entity.Property(e => e.AchievementName).IsRequired().HasMaxLength(100);
+                entity.Property(e => e.AchievementIcon).HasMaxLength(20);
+                entity.HasIndex(e => e.UserId);
+                entity.HasIndex(e => new { e.UserId, e.UnlockedAt });
+                // Unique constraint on user, type, and name to prevent duplicates
+                entity.HasIndex(e => new { e.UserId, e.AchievementType, e.AchievementName }).IsUnique();
+            });
+
+            modelBuilder.Entity<PointsHistory>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.UserId).IsRequired();
+                entity.Property(e => e.PointsChange).IsRequired();
+                entity.Property(e => e.Reason).IsRequired().HasMaxLength(100);
+                entity.HasIndex(e => e.UserId);
+                entity.HasIndex(e => new { e.UserId, e.CreatedAt });
+                entity.HasIndex(e => e.Reason);
             });
         }
     }

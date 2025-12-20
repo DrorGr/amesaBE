@@ -35,6 +35,9 @@ authBuilder.AddGoogleOAuth(builder.Configuration, builder.Environment);
 // Configure Meta/Facebook OAuth (if credentials are configured)
 authBuilder.AddMetaOAuth(builder.Configuration);
 
+// Configure Apple OAuth (if credentials are configured)
+authBuilder.AddAppleOAuth(builder.Configuration, builder.Environment);
+
 // Configure Authorization policies
 builder.Services.AddAuthAuthorization();
 
@@ -72,6 +75,9 @@ finally
 {
     Log.CloseAndFlush();
 }
+
+// Make Program class accessible to test projects
+public partial class Program { }
 
 // Make Program class accessible to test projects
 public partial class Program { }

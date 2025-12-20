@@ -16,6 +16,11 @@
             </h1>
             <p class="text-muted">Manage translation keys and values</p>
         </div>
+        <div class="col-auto d-flex align-items-end">
+            <button class="btn btn-primary" @onclick="ShowCreateModal">
+                <i class="fas fa-plus"></i> Create Translation
+            </button>
+        </div>
     </div>
 
     <!-- Filters -->
@@ -160,6 +165,94 @@
     }
 </div>
 
+<!-- Translation Edit/Create Modal -->
+@if (showTranslationModal)
+{
+    <div class="modal fade show" style="display: block;" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@(isEditing ? "Edit Translation" : "Create Translation")</h5>
+                    <button type="button" class="btn-close" @onclick="CloseTranslationModal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Key <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" @bind="editKey" disabled="@isEditing" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Language Code <span class="text-danger">*</span></label>
+                        <select class="form-select" @bind="editLanguageCode" disabled="@isEditing">
+                            <option value="">Select Language</option>
+                            @if (languages != null)
+                            {
+                                @foreach (var lang in languages)
+                                {
+                                    <option value="@lang">@lang.ToUpper()</option>
+                                }
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Category</label>
+                        <input type="text" class="form-control" @bind="editCategory" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Value <span class="text-danger">*</span></label>
+                        <textarea class="form-control" rows="3" @bind="editValue"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseTranslationModal">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="SaveTranslation" disabled="@isSaving">
+                        @if (isSaving)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                        }
+                        @(isEditing ? "Update" : "Create")
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+<!-- Delete Confirmation Modal -->
+@if (showDeleteModal)
+{
+    <div class="modal fade show" style="display: block;" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Delete Translation</h5>
+                    <button type="button" class="btn-close" @onclick="CloseDeleteModal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to delete this translation?</p>
+                    <div class="alert alert-warning">
+                        <strong>Key:</strong> @deleteKey<br />
+                        <strong>Language:</strong> @deleteLanguageCode<br />
+                        <strong>Value:</strong> @deleteValue
+                    </div>
+                    <p class="text-danger">This action cannot be undone.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseDeleteModal">Cancel</button>
+                    <button type="button" class="btn btn-danger" @onclick="ConfirmDelete" disabled="@isDeleting">
+                        @if (isDeleting)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                        }
+                        Delete
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
 @code {
     private PagedResult<TranslationDto>? translations;
     private List<string>? languages;
@@ -170,6 +263,22 @@
     private string? languageFilter;
     private string? categoryFilter;
     private string? searchTerm;
+    
+    // Edit modal variables
+    private bool isEditing = false;
+    private string editKey = string.Empty;
+    private string editLanguageCode = string.Empty;
+    private string editCategory = string.Empty;
+    private string editValue = string.Empty;
+    private bool showTranslationModal = false;
+    private bool isSaving = false;
+    
+    // Delete modal variables
+    private string deleteKey = string.Empty;
+    private string deleteLanguageCode = string.Empty;
+    private string deleteValue = string.Empty;
+    private bool showDeleteModal = false;
+    private bool isDeleting = false;
 
     protected override async Task OnInitializedAsync()
     {

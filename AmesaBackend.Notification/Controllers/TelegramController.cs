@@ -31,6 +31,53 @@ namespace AmesaBackend.Notification.Controllers
             _botClient = botClient;
         }
 
+        [HttpGet("status")]
+        [Authorize]
+        public async Task<ActionResult<DTOs.ApiResponse<TelegramLinkStatusDto>>> GetStatus()
+        {
+            try
+            {
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+                {
+                    return Unauthorized(new DTOs.ApiResponse<TelegramLinkStatusDto>
+                    {
+                        Success = false,
+                        Message = "Invalid user authentication"
+                    });
+                }
+
+                var link = await _context.TelegramUserLinks
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(l => l.UserId == userId);
+
+                var status = new TelegramLinkStatusDto
+                {
+                    IsLinked = link != null,
+                    Verified = link?.Verified ?? false,
+                    TelegramUserId = link?.TelegramUserId ?? 0,
+                    TelegramUsername = link?.TelegramUsername,
+                    LinkedAt = link?.CreatedAt
+                };
+
+                return Ok(new DTOs.ApiResponse<TelegramLinkStatusDto>
+                {
+                    Success = true,
+                    Data = status,
+                    Message = "Telegram link status retrieved successfully"
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting Telegram link status");
+                return StatusCode(500, new DTOs.ApiResponse<TelegramLinkStatusDto>
+                {
+                    Success = false,
+                    Message = "Failed to retrieve Telegram link status"
+                });
+            }
+        }
+
         [HttpPost("link")]
         [Authorize]
         public async Task<ActionResult<DTOs.ApiResponse<TelegramLinkDto>>> RequestLink()

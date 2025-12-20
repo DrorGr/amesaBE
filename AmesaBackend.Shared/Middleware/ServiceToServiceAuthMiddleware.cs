@@ -45,7 +45,9 @@ namespace AmesaBackend.Shared.Middleware
                                    path.Contains("/tickets/validate") ||
                                    path.Contains("/draws/") && path.Contains("/participants") ||
                                    path.Contains("/houses/") && (path.Contains("/favorites") || path.Contains("/participants/list")) ||
-                                   path.Contains("/payments/refund");
+                                   path.Contains("/payments/refund") ||
+                                   path.Contains("/gamification/award-points") ||
+                                   path.Contains("/gamification/check-achievements");
 
             if (isServiceEndpoint)
             {

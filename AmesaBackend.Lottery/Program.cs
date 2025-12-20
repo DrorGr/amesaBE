@@ -223,6 +223,8 @@ builder.Services.AddScoped<ILotteryService, LotteryService>();
 builder.Services.AddScoped<IPromotionService, PromotionService>();
 builder.Services.AddScoped<IPromotionAuditService, PromotionAuditService>();
 builder.Services.AddScoped<IErrorSanitizer, ErrorSanitizer>();
+// Register GamificationService
+builder.Services.AddScoped<IGamificationService, GamificationService>();
 // IFileService and IHouseCacheService are available but not currently used
 // Uncomment if file upload or house cache invalidation functionality is needed
 // builder.Services.AddScoped<IFileService, FileService>();
@@ -293,6 +295,7 @@ builder.Services.AddHostedService<TicketQueueProcessorService>();
 builder.Services.AddHostedService<ReservationCleanupService>();
 builder.Services.AddHostedService<InventorySyncService>();
 builder.Services.AddHostedService<LotteryCountdownService>();
+builder.Services.AddHostedService<FavoritesCleanupService>();
 
 // Add SignalR for real-time updates
 builder.Services.AddSignalR();

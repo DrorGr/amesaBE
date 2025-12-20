@@ -11,11 +11,15 @@ namespace AmesaBackend.Lottery.Services
         Task ConductDrawAsync(Guid drawId, ConductDrawRequest request);
         
         // Favorites methods
-        Task<List<HouseDto>> GetUserFavoriteHousesAsync(Guid userId);
-        Task<bool> AddHouseToFavoritesAsync(Guid userId, Guid houseId);
-        Task<bool> RemoveHouseFromFavoritesAsync(Guid userId, Guid houseId);
+        Task<List<HouseDto>> GetUserFavoriteHousesAsync(Guid userId, int page = 1, int limit = 20, string? sortBy = null, string? sortOrder = null, CancellationToken cancellationToken = default);
+        Task<int> GetUserFavoriteHousesCountAsync(Guid userId, CancellationToken cancellationToken = default);
+        Task<DTOs.FavoriteOperationResult> AddHouseToFavoritesAsync(Guid userId, Guid houseId, CancellationToken cancellationToken = default);
+        Task<DTOs.FavoriteOperationResult> RemoveHouseFromFavoritesAsync(Guid userId, Guid houseId, CancellationToken cancellationToken = default);
+        Task<BulkFavoritesResponse> BulkAddFavoritesAsync(Guid userId, List<Guid> houseIds, CancellationToken cancellationToken = default);
+        Task<BulkFavoritesResponse> BulkRemoveFavoritesAsync(Guid userId, List<Guid> houseIds, CancellationToken cancellationToken = default);
         Task<List<HouseDto>> GetRecommendedHousesAsync(Guid userId, int limit = 10);
         Task<List<Guid>> GetHouseFavoriteUserIdsAsync(Guid houseId);
+        Task<FavoritesAnalyticsDto> GetFavoritesAnalyticsAsync(CancellationToken cancellationToken = default);
         
         // Entry management methods
         Task<List<LotteryTicketDto>> GetUserActiveEntriesAsync(Guid userId);

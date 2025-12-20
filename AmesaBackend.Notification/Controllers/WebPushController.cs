@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using AmesaBackend.Notification.Data;
 using AmesaBackend.Notification.DTOs;
 using AmesaBackend.Notification.Models;
@@ -14,13 +15,16 @@ namespace AmesaBackend.Notification.Controllers
     {
         private readonly NotificationDbContext _context;
         private readonly ILogger<WebPushController> _logger;
+        private readonly IConfiguration _configuration;
 
         public WebPushController(
             NotificationDbContext context,
-            ILogger<WebPushController> logger)
+            ILogger<WebPushController> logger,
+            IConfiguration configuration)
         {
             _context = context;
             _logger = logger;
+            _configuration = configuration;
         }
 
         [HttpPost("subscribe")]
@@ -196,6 +200,44 @@ namespace AmesaBackend.Notification.Controllers
                 {
                     Success = false,
                     Message = "Failed to fetch subscriptions"
+                });
+            }
+        }
+
+        [HttpGet("vapid-key")]
+        public ActionResult<ApiResponse<string>> GetVapidPublicKey()
+        {
+            try
+            {
+                // Get VAPID public key from configuration
+                var vapidPublicKey = Environment.GetEnvironmentVariable("WEB_PUSH_VAPID_PUBLIC_KEY")
+                    ?? _configuration["WebPush:VapidPublicKey"]
+                    ?? _configuration["Notifications:WebPush:VapidPublicKey"];
+
+                if (string.IsNullOrEmpty(vapidPublicKey))
+                {
+                    _logger.LogWarning("VAPID public key not configured");
+                    return StatusCode(500, new ApiResponse<string>
+                    {
+                        Success = false,
+                        Message = "VAPID public key not configured"
+                    });
+                }
+
+                return Ok(new ApiResponse<string>
+                {
+                    Success = true,
+                    Data = vapidPublicKey,
+                    Message = "VAPID public key retrieved successfully"
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving VAPID public key");
+                return StatusCode(500, new ApiResponse<string>
+                {
+                    Success = false,
+                    Message = "Failed to retrieve VAPID public key"
                 });
             }
         }
