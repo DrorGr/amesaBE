@@ -1466,6 +1466,35 @@ namespace AmesaBackend.Auth.Controllers
         }
 
         /// <summary>
+        /// Gets available security questions for setup.
+        /// </summary>
+        [HttpGet("recovery/security-questions")]
+        public ActionResult<ApiResponse<List<string>>> GetSecurityQuestions()
+        {
+            // Return standard security questions
+            var questions = new List<string>
+            {
+                "What was the name of your first pet?",
+                "What city were you born in?",
+                "What was your mother's maiden name?",
+                "What was the name of your elementary school?",
+                "What was your childhood nickname?",
+                "What was the make of your first car?",
+                "What was your favorite food as a child?",
+                "What was the name of your best friend growing up?",
+                "What street did you grow up on?",
+                "What was your favorite teacher's name?"
+            };
+
+            return Ok(new ApiResponse<List<string>>
+            {
+                Success = true,
+                Data = questions,
+                Message = "Available security questions retrieved successfully"
+            });
+        }
+
+        /// <summary>
         /// Sets up security questions for the current user.
         /// </summary>
         [HttpPost("recovery/security-questions")]

@@ -119,13 +119,55 @@ namespace AmesaBackend.Auth.Controllers
         {
             try
             {
+                // Validate request
+                if (request == null)
+                {
+                    return BadRequest(new ApiResponse<IdentityVerificationResult>
+                    {
+                        Success = false,
+                        Error = new ErrorResponse
+                        {
+                            Code = "VALIDATION_ERROR",
+                            Message = "Request body is required"
+                        }
+                    });
+                }
+
+                // Validate required fields
+                if (string.IsNullOrWhiteSpace(request.IdFrontImage))
+                {
+                    return BadRequest(new ApiResponse<IdentityVerificationResult>
+                    {
+                        Success = false,
+                        Error = new ErrorResponse
+                        {
+                            Code = "VALIDATION_ERROR",
+                            Message = "IdFrontImage is required"
+                        }
+                    });
+                }
+
+                if (string.IsNullOrWhiteSpace(request.SelfieImage))
+                {
+                    return BadRequest(new ApiResponse<IdentityVerificationResult>
+                    {
+                        Success = false,
+                        Error = new ErrorResponse
+                        {
+                            Code = "VALIDATION_ERROR",
+                            Message = "SelfieImage is required"
+                        }
+                    });
+                }
+
                 var userIdClaim = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (userIdClaim == null || !Guid.TryParse(userIdClaim, out var userId))
                 {
                     return new UnauthorizedObjectResult(new ApiResponse<IdentityVerificationResult>
                     {
                         Success = false,
-                        Message = "User not authenticated"
+                        Message = "User not authenticated",
+                        Error = new ErrorResponse { Code = "UNAUTHORIZED", Message = "User not authenticated" }
                     });
                 }
 

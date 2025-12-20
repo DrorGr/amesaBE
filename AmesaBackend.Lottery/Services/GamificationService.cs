@@ -298,12 +298,58 @@ namespace AmesaBackend.Lottery.Services
 
         public async Task<UserGamificationDto> GetUserGamificationAsync(Guid userId)
         {
-            var gamification = await _context.UserGamification
-                .FirstOrDefaultAsync(g => g.UserId == userId);
-
-            if (gamification == null)
+            try
             {
-                // Return default values if no gamification record exists
+                var gamification = await _context.UserGamification
+                    .FirstOrDefaultAsync(g => g.UserId == userId);
+
+                if (gamification == null)
+                {
+                    // Return default values if no gamification record exists
+                    return new UserGamificationDto
+                    {
+                        UserId = userId.ToString(),
+                        TotalPoints = 0,
+                        CurrentLevel = 1,
+                        CurrentTier = "Bronze",
+                        CurrentStreak = 0,
+                        LongestStreak = 0,
+                        LastEntryDate = null,
+                        RecentAchievements = new List<AchievementDto>()
+                    };
+                }
+
+                // Get recent achievements
+                var achievements = await _context.UserAchievements
+                    .Where(a => a.UserId == userId)
+                    .OrderByDescending(a => a.UnlockedAt)
+                    .Take(10)
+                    .Select(a => new AchievementDto
+                    {
+                        Id = a.Id.ToString(),
+                        Name = a.AchievementName,
+                        Description = $"Unlocked {a.AchievementName} achievement",
+                        Icon = a.AchievementIcon,
+                        UnlockedAt = a.UnlockedAt,
+                        Category = a.AchievementType
+                    })
+                    .ToListAsync();
+
+                return new UserGamificationDto
+                {
+                    UserId = userId.ToString(),
+                    TotalPoints = gamification.TotalPoints,
+                    CurrentLevel = gamification.CurrentLevel,
+                    CurrentTier = gamification.CurrentTier,
+                    CurrentStreak = gamification.CurrentStreak,
+                    LongestStreak = gamification.LongestStreak,
+                    RecentAchievements = achievements
+                };
+            }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+            {
+                _logger.LogError(dbEx, "Database error retrieving gamification data for user {UserId}", userId);
+                // Return default values on database error to allow service to continue
                 return new UserGamificationDto
                 {
                     UserId = userId.ToString(),
@@ -316,52 +362,44 @@ namespace AmesaBackend.Lottery.Services
                     RecentAchievements = new List<AchievementDto>()
                 };
             }
-
-            // Get recent achievements
-            var achievements = await _context.UserAchievements
-                .Where(a => a.UserId == userId)
-                .OrderByDescending(a => a.UnlockedAt)
-                .Take(10)
-                .Select(a => new AchievementDto
-                {
-                    Id = a.Id.ToString(),
-                    Name = a.AchievementName,
-                    Description = $"Unlocked {a.AchievementName} achievement",
-                    Icon = a.AchievementIcon,
-                    UnlockedAt = a.UnlockedAt,
-                    Category = a.AchievementType
-                })
-                .ToListAsync();
-
-            return new UserGamificationDto
+            catch (Exception ex)
             {
-                UserId = userId.ToString(),
-                TotalPoints = gamification.TotalPoints,
-                CurrentLevel = gamification.CurrentLevel,
-                CurrentTier = gamification.CurrentTier,
-                CurrentStreak = gamification.CurrentStreak,
-                LongestStreak = gamification.LongestStreak,
-                RecentAchievements = achievements
-            };
+                _logger.LogError(ex, "Error retrieving gamification data for user {UserId}", userId);
+                throw;
+            }
         }
 
         public async Task<List<AchievementDto>> GetUserAchievementsAsync(Guid userId)
         {
-            var achievements = await _context.UserAchievements
-                .Where(a => a.UserId == userId)
-                .OrderByDescending(a => a.UnlockedAt)
-                .Select(a => new AchievementDto
-                {
-                    Id = a.Id.ToString(),
-                    Name = a.AchievementName,
-                    Description = $"Unlocked {a.AchievementName} achievement",
-                    Icon = a.AchievementIcon,
-                    UnlockedAt = a.UnlockedAt,
-                    Category = a.AchievementType
-                })
-                .ToListAsync();
+            try
+            {
+                var achievements = await _context.UserAchievements
+                    .Where(a => a.UserId == userId)
+                    .OrderByDescending(a => a.UnlockedAt)
+                    .Select(a => new AchievementDto
+                    {
+                        Id = a.Id.ToString(),
+                        Name = a.AchievementName,
+                        Description = $"Unlocked {a.AchievementName} achievement",
+                        Icon = a.AchievementIcon,
+                        UnlockedAt = a.UnlockedAt,
+                        Category = a.AchievementType
+                    })
+                    .ToListAsync();
 
-            return achievements;
+                return achievements;
+            }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+            {
+                _logger.LogError(dbEx, "Database error retrieving achievements for user {UserId}", userId);
+                // Return empty list on database error
+                return new List<AchievementDto>();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving achievements for user {UserId}", userId);
+                throw;
+            }
         }
     }
 }

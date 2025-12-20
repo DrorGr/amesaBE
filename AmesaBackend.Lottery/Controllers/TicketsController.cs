@@ -119,16 +119,29 @@ namespace AmesaBackend.Lottery.Controllers
                     Data = activeEntries
                 });
             }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+            {
+                _logger.LogError(dbEx, "Database error retrieving active entries for user {UserId}", userId);
+                return StatusCode(503, new AmesaBackend.Lottery.DTOs.ApiResponse<List<LotteryTicketDto>>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "SERVICE_UNAVAILABLE",
+                        Message = "Service is temporarily unavailable. Please try again later."
+                    }
+                });
+            }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error retrieving active entries");
+                _logger.LogError(ex, "Error retrieving active entries for user {UserId}: {Message}", userId, ex.Message);
                 return StatusCode(500, new AmesaBackend.Lottery.DTOs.ApiResponse<List<LotteryTicketDto>>
                 {
                     Success = false,
                     Error = new ErrorResponse
                     {
                         Code = "INTERNAL_ERROR",
-                        Message = ex.Message
+                        Message = "An error occurred while retrieving active entries"
                     }
                 });
             }
@@ -272,16 +285,29 @@ namespace AmesaBackend.Lottery.Controllers
                     Data = stats
                 });
             }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+            {
+                _logger.LogError(dbEx, "Database error retrieving analytics for user {UserId}", userId);
+                return StatusCode(503, new AmesaBackend.Lottery.DTOs.ApiResponse<UserLotteryStatsDto>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "SERVICE_UNAVAILABLE",
+                        Message = "Service is temporarily unavailable. Please try again later."
+                    }
+                });
+            }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error retrieving analytics");
+                _logger.LogError(ex, "Error retrieving analytics for user {UserId}: {Message}", userId, ex.Message);
                 return StatusCode(500, new AmesaBackend.Lottery.DTOs.ApiResponse<UserLotteryStatsDto>
                 {
                     Success = false,
                     Error = new ErrorResponse
                     {
                         Code = "INTERNAL_ERROR",
-                        Message = ex.Message
+                        Message = "An error occurred while retrieving analytics"
                     }
                 });
             }

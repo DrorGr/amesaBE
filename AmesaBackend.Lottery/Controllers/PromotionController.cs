@@ -457,9 +457,19 @@ namespace AmesaBackend.Lottery.Controllers
                     Message = "Available promotions retrieved successfully"
                 });
             }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+            {
+                _logger.LogError(dbEx, "Database error retrieving available promotions for user {UserId}", userId);
+                return StatusCode(503, new ApiResponse<List<PromotionDto>>
+                {
+                    Success = false,
+                    Message = "Service is temporarily unavailable. Please try again later.",
+                    Error = new ErrorResponse { Code = "SERVICE_UNAVAILABLE", Message = "Service is temporarily unavailable" }
+                });
+            }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error retrieving available promotions");
+                _logger.LogError(ex, "Error retrieving available promotions for user {UserId}: {Message}", userId, ex.Message);
                 return StatusCode(500, new ApiResponse<List<PromotionDto>>
                 {
                     Success = false,
