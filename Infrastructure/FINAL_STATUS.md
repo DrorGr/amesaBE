@@ -1,96 +1,111 @@
-# Final Status - All Tasks Complete
+# Infrastructure Changes - Final Status
 
-## ✅ Completed Tasks
+## ✅ Successfully Completed via AWS CLI
 
-### 1. Git Secrets Removal
-- **Script**: `remove-secrets-from-history.ps1`
-- **Status**: Ready to use
-- **Action**: Visit GitHub allow URL or run script to remove secrets from history
+### 1. ALB Routing Rules ✅
+- ✅ `/api/v1/draws/*` → `amesa-lottery-service-tg` (Priority 8)
+  - Rule ARN: `arn:aws:elasticloadbalancing:eu-north-1:129394705401:listener-rule/app/amesa-backend-alb/d4dbb08b12e385fe/c0013fb81f884976/f72b53ff4106bf97`
+- ✅ `/api/v1/devices/*` → `amesa-notification-service-tg` (Priority 9)
+  - Rule ARN: `arn:aws:elasticloadbalancing:eu-north-1:129394705401:listener-rule/app/amesa-backend-alb/d4dbb08b12e385fe/c0013fb81f884976/a02a6b730959fdaf`
 
-### 2. Route Tables Investigation
-- **Status**: ✅ Complete
-- **Finding**: Route tables are correctly configured
-  - ALB and ECS subnets both have local VPC routes (172.31.0.0/16 -> local)
-  - They CAN communicate within the VPC
-- **Conclusion**: Routing is NOT the issue
+### 2. ECS Task Definitions ✅
+- ✅ **Lottery Service**: Registered as **Revision 6**
+  - Added secrets: `ServiceAuth__ApiKey`, `ServiceAuth__IpWhitelist`, `PaymentService__BaseUrl`
+- ✅ **Payment Service**: Registered as **Revision 9**
+  - Added secret: `SERVICE_AUTH_API_KEY`
+- ✅ **Notification Service**: Registered as **Revision 5**
+  - Added secrets: Email settings, service URLs, push platform ARNs
 
-### 3. Security Groups Fix
-- **Status**: ✅ Complete
-- **Action**: Added explicit rule allowing security group to itself on port 8080
-- **Result**: Health check error changed from `Target.Timeout` to `Target.FailedHealthChecks`
-  - This means ALB can now REACH the target (progress!)
-  - But the health check itself is failing
+### 3. AWS Secrets Manager ✅
+**Total Created**: 12 out of 15 (3 service URLs need manual creation due to AWS CLI URL parsing)
 
-### 4. VPC Connectivity Test
-- **Script**: `test-vpc-connectivity.ps1`
-- **Status**: Ready to use (requires EC2 instance or SSM access)
+**Created Secrets**:
+1. ✅ `/amesa/prod/ServiceAuth/ApiKey`
+2. ✅ `/amesa/prod/ServiceAuth/IpWhitelist`
+3. ✅ `/amesa/prod/ConnectionStrings/Lottery`
+4. ✅ `/amesa/prod/ConnectionStrings/Payment`
+5. ✅ `/amesa/prod/ConnectionStrings/Notification`
+6. ✅ `/amesa/prod/ConnectionStrings/Redis`
+7. ✅ `/amesa/prod/EmailSettings/SmtpHost`
+8. ✅ `/amesa/prod/EmailSettings/SmtpPort`
+9. ✅ `/amesa/prod/EmailSettings/SmtpUsername`
+10. ✅ `/amesa/prod/EmailSettings/SmtpPassword`
+11. ✅ `/amesa/prod/NotificationChannels/Push/AndroidPlatformArn`
+12. ✅ `/amesa/prod/NotificationChannels/Push/iOSPlatformArn`
 
----
+**Missing (need manual creation)**:
+- ❌ `/amesa/prod/Services/AuthService/Url`
+- ❌ `/amesa/prod/Services/LotteryService/Url`
+- ❌ `/amesa/prod/Services/PaymentService/Url`
 
-## 🔍 Current Health Check Status
+**Reason**: AWS CLI on Windows interprets `http://` URLs as file:// URLs
 
-**Error**: `Target.FailedHealthChecks` (changed from `Target.Timeout`)
+**Solution**: Create via AWS Console or use this PowerShell workaround:
+```powershell
+$urls = @{
+    "AuthService" = "http://auth-service.amesa.local:8080"
+    "LotteryService" = "http://lottery-service.amesa.local:8080"
+    "PaymentService" = "http://payment-service.amesa.local:8080"
+}
+foreach ($service in $urls.Keys) {
+    $url = $urls[$service]
+    aws secretsmanager create-secret `
+        --name "/amesa/prod/Services/$service/Url" `
+        --description "Internal URL for $service" `
+        --secret-string $url `
+        --region eu-north-1
+}
+```
 
-**Meaning**:
-- ✅ ALB can reach ECS tasks (network connectivity fixed)
-- ❌ Health check endpoint is not responding correctly
-
-**Possible Causes**:
-1. Health endpoint response format doesn't match ALB expectations
-2. Health check timeout too short (currently 15s)
-3. Service not fully ready when health check runs
-4. Health endpoint returning non-200 status
-
-**Next Steps**:
-1. Check service logs for health endpoint requests
-2. Verify health endpoint returns HTTP 200
-3. Increase health check timeout further if needed
-4. Check if health endpoint needs specific response format
-
----
-
-## 📋 Remaining Actions
-
-### Immediate
-1. **Push GitHub Workflow**
-   - Visit: https://github.com/DrorGr/amesaBE/security/secret-scanning/unblock-secret/35e54lwedqCeb8jRqmdRR1bWszL
-   - Or run: `.\remove-secrets-from-history.ps1`
-   - Then: `git push origin main`
-
-2. **Debug Health Check Response**
-   - Check CloudWatch logs for health endpoint requests
-   - Verify response format matches ALB expectations
-   - Test health endpoint directly if possible
-
-### Optional
-3. **Create Separate Security Groups** (for better security)
-   - Run: `.\fix-security-groups.ps1` and choose "yes" for separate groups
-   - Update ALB and ECS services to use new groups
-
-4. **Test from VPC** (if EC2 instance available)
-   - Run: `.\test-vpc-connectivity.ps1`
-   - Test direct connection to ECS task IP
+### 4. Database Migration Scripts ✅
+- ✅ Fixed column names: `HouseId`, `TicketNumber` (PascalCase)
+- ✅ Removed `\c` commands (psql meta-commands)
+- ✅ Created separate files for easier execution
 
 ---
 
-## 📁 Scripts Created
+## ⚠️ Remaining Manual Steps
 
-All in `BE/Infrastructure/`:
-1. `remove-secrets-from-history.ps1` - Remove secrets from git history
-2. `investigate-route-tables.ps1` - Analyze route tables ✅
-3. `fix-security-groups.ps1` - Fix security groups ✅
-4. `test-vpc-connectivity.ps1` - Test connectivity from VPC
-5. `TASK_BREAKDOWN.md` - Detailed instructions
-6. `TASKS_COMPLETE_SUMMARY.md` - Task summaries
-7. `FINAL_STATUS.md` - This file
+### 1. Create 3 Service URL Secrets
+**Use AWS Console or the PowerShell script above**
+
+### 2. Update ECS Services
+```bash
+aws ecs update-service --cluster amesa-microservices-cluster --service amesa-lottery-service --task-definition amesa-lottery-service:6 --region eu-north-1
+
+aws ecs update-service --cluster amesa-microservices-cluster --service amesa-payment-service --task-definition amesa-payment-service:9 --region eu-north-1
+
+aws ecs update-service --cluster amesa-microservices-cluster --service amesa-notification-service --task-definition amesa-notification-service:5 --region eu-north-1
+```
+
+### 3. Run Database Migrations
+```bash
+# Lottery
+psql -h YOUR_DB_HOST -U postgres -d amesa_lottery_db -f Infrastructure/sql/migrations/run_migrations_separate.sql
+
+# Notification
+psql -h YOUR_DB_HOST -U postgres -d amesa_notification_db -f Infrastructure/sql/migrations/run_notification_migrations.sql
+```
+
+### 4. Update Secret Values
+Update placeholder values in secrets with actual:
+- Database connection strings
+- Redis endpoint
+- Email SMTP credentials
+- Push notification platform ARNs
 
 ---
 
-## 🎯 Progress Summary
+## Summary
 
-- ✅ Route tables: Correctly configured
-- ✅ Security groups: Explicit rule added (connectivity improved)
-- ⚠️ Health checks: ALB can reach targets, but health check failing
-- ⏳ GitHub workflow: Ready to push (after allowing secret)
+**Completed**: ✅
+- 2 ALB routes added
+- 3 ECS task definitions registered
+- 12 secrets created
+- Migration scripts fixed
 
-**Key Achievement**: Network connectivity issue resolved! ALB can now reach ECS tasks.
+**Remaining**: ⚠️
+- 3 service URL secrets (manual creation needed)
+- Update ECS services
+- Run database migrations
+- Update secret placeholder values

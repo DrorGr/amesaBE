@@ -81,14 +81,21 @@ Infrastructure/setup-sns-platforms.ps1
 Infrastructure/temp-*.json
 Infrastructure/firebase-adminsdk-key.json
 Infrastructure/sql/migrations/
+Infrastructure/**/*.ps1
+Infrastructure/**/*.sh
+Infrastructure/**/*.sql
+Infrastructure/**/*.yaml
+Infrastructure/**/*.yml
 
 # Generated/duplicate database scripts
 MetaData/Scripts/Database/*copy*.sql
+MetaData/Scripts/Database/*.sql
 
 # Generated audit/export artifacts
 MetaData/Documentation/Development/LOTTERY_DEEP_AUDIT_FIXES.md
 MetaData/Documentation/Development/LOTTERY_FIXES_AUDIT_REPORT.md
 MetaData/Documentation/Development/LOTTERY_RECOMMENDATIONS_IMPLEMENTATION.md
+MetaData/Documentation/Development/*.md
 investor-pitch-pdf*.html
 
 # User-specific files

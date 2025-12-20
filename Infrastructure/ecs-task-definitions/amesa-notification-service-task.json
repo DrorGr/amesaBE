@@ -27,6 +27,52 @@
           "value": "http://+:8080"
         }
       ],
+      "secrets": [
+        {
+          "name": "JwtSettings__SecretKey",
+          "valueFrom": "/amesa/prod/JwtSettings/SecretKey"
+        },
+        {
+          "name": "ConnectionStrings__DefaultConnection",
+          "valueFrom": "/amesa/prod/ConnectionStrings/Notification"
+        },
+        {
+          "name": "ConnectionStrings__Redis",
+          "valueFrom": "/amesa/prod/ConnectionStrings/Redis"
+        },
+        {
+          "name": "EmailSettings__SmtpHost",
+          "valueFrom": "/amesa/prod/EmailSettings/SmtpHost"
+        },
+        {
+          "name": "EmailSettings__SmtpPort",
+          "valueFrom": "/amesa/prod/EmailSettings/SmtpPort"
+        },
+        {
+          "name": "EmailSettings__SmtpUsername",
+          "valueFrom": "/amesa/prod/EmailSettings/SmtpUsername"
+        },
+        {
+          "name": "EmailSettings__SmtpPassword",
+          "valueFrom": "/amesa/prod/EmailSettings/SmtpPassword"
+        },
+        {
+          "name": "Services__AuthService__Url",
+          "valueFrom": "/amesa/prod/Services/AuthService/Url"
+        },
+        {
+          "name": "Services__LotteryService__Url",
+          "valueFrom": "/amesa/prod/Services/LotteryService/Url"
+        },
+        {
+          "name": "NotificationChannels__Push__PlatformApplications__Android",
+          "valueFrom": "/amesa/prod/NotificationChannels/Push/AndroidPlatformArn"
+        },
+        {
+          "name": "NotificationChannels__Push__PlatformApplications__iOS",
+          "valueFrom": "/amesa/prod/NotificationChannels/Push/iOSPlatformArn"
+        }
+      ],
       "logConfiguration": {
         "logDriver": "awslogs",
         "options": {

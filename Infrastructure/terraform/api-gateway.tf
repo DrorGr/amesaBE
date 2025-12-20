@@ -59,6 +59,68 @@ resource "aws_apigatewayv2_route" "lottery_route" {
   target    = "integrations/${aws_apigatewayv2_integration.lottery_service.id}"
 }
 
+resource "aws_apigatewayv2_route" "lottery_draws_route" {
+  api_id    = aws_apigatewayv2_api.amesa_api.id
+  route_key = "ANY /api/v1/draws/{proxy+}"
+  target    = "integrations/${aws_apigatewayv2_integration.lottery_service.id}"
+}
+
+resource "aws_apigatewayv2_route" "lottery_tickets_route" {
+  api_id    = aws_apigatewayv2_api.amesa_api.id
+  route_key = "ANY /api/v1/tickets/{proxy+}"
+  target    = "integrations/${aws_apigatewayv2_integration.lottery_service.id}"
+}
+
+resource "aws_apigatewayv2_route" "lottery_promotions_route" {
+  api_id    = aws_apigatewayv2_api.amesa_api.id
+  route_key = "ANY /api/v1/promotions/{proxy+}"
+  target    = "integrations/${aws_apigatewayv2_integration.lottery_service.id}"
+}
+
+# Integration for Payment Service
+resource "aws_apigatewayv2_integration" "payment_service" {
+  api_id           = aws_apigatewayv2_api.amesa_api.id
+  integration_type = "HTTP_PROXY"
+  integration_uri  = var.payment_service_alb_listener_arn
+  integration_method = "ANY"
+  connection_type   = "VPC_LINK"
+  connection_id     = aws_apigatewayv2_vpc_link.amesa_vpc_link.id
+}
+
+resource "aws_apigatewayv2_route" "payment_route" {
+  api_id    = aws_apigatewayv2_api.amesa_api.id
+  route_key = "ANY /api/v1/payments/{proxy+}"
+  target    = "integrations/${aws_apigatewayv2_integration.payment_service.id}"
+}
+
+# Integration for Notification Service
+resource "aws_apigatewayv2_integration" "notification_service" {
+  api_id           = aws_apigatewayv2_api.amesa_api.id
+  integration_type = "HTTP_PROXY"
+  integration_uri  = var.notification_service_alb_listener_arn
+  integration_method = "ANY"
+  connection_type   = "VPC_LINK"
+  connection_id     = aws_apigatewayv2_vpc_link.amesa_vpc_link.id
+}
+
+resource "aws_apigatewayv2_route" "notification_route" {
+  api_id    = aws_apigatewayv2_api.amesa_api.id
+  route_key = "ANY /api/v1/notifications/{proxy+}"
+  target    = "integrations/${aws_apigatewayv2_integration.notification_service.id}"
+}
+
+resource "aws_apigatewayv2_route" "notification_devices_route" {
+  api_id    = aws_apigatewayv2_api.amesa_api.id
+  route_key = "ANY /api/v1/devices/{proxy+}"
+  target    = "integrations/${aws_apigatewayv2_integration.notification_service.id}"
+}
+
+resource "aws_apigatewayv2_route" "notification_events_webhook_route" {
+  api_id    = aws_apigatewayv2_api.amesa_api.id
+  route_key = "POST /api/v1/events/webhook"
+  target    = "integrations/${aws_apigatewayv2_integration.notification_service.id}"
+}
+
 # VPC Link for private ALB access
 resource "aws_apigatewayv2_vpc_link" "amesa_vpc_link" {
   name               = "amesa-vpc-link"
@@ -91,31 +153,5 @@ resource "aws_apigatewayv2_stage" "amesa_api_stage" {
 resource "aws_cloudwatch_log_group" "api_gateway_logs" {
   name              = "/aws/apigateway/amesa-microservices-api"
   retention_in_days = 7
-}
-
-# Variables (to be defined in variables.tf)
-variable "environment" {
-  description = "Environment name (dev, stage, prod)"
-  type        = string
-}
-
-variable "auth_service_alb_listener_arn" {
-  description = "ARN of Auth Service ALB listener"
-  type        = string
-}
-
-variable "lottery_service_alb_listener_arn" {
-  description = "ARN of Lottery Service ALB listener"
-  type        = string
-}
-
-variable "vpc_security_group_id" {
-  description = "Security group ID for VPC link"
-  type        = string
-}
-
-variable "private_subnet_ids" {
-  description = "Private subnet IDs for VPC link"
-  type        = list(string)
 }
 

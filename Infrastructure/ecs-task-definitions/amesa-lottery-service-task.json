@@ -39,6 +39,22 @@
         {
           "name": "ConnectionStrings__Redis",
           "valueFrom": "/amesa/prod/ConnectionStrings/Redis"
+        },
+        {
+          "name": "SERVICE_AUTH_API_KEY",
+          "valueFrom": "/amesa/prod/ServiceAuth/ApiKey"
+        },
+        {
+          "name": "ServiceAuth__ApiKey",
+          "valueFrom": "/amesa/prod/ServiceAuth/ApiKey"
+        },
+        {
+          "name": "ServiceAuth__IpWhitelist",
+          "valueFrom": "/amesa/prod/ServiceAuth/IpWhitelist"
+        },
+        {
+          "name": "PaymentService__BaseUrl",
+          "valueFrom": "/amesa/prod/Services/PaymentService/Url"
         }
       ],
       "logConfiguration": {

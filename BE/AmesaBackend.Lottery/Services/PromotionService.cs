@@ -1,27 +1,31 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using System.Data;
-using AmesaBackend.Data;
+using AmesaBackend.Lottery.Data;
 using AmesaBackend.Models;
 using AmesaBackend.Lottery.DTOs;
 using AmesaBackend.Shared.Events;
+using AmesaBackend.Shared.Caching;
 using Microsoft.Extensions.Logging;
 
 namespace AmesaBackend.Lottery.Services
 {
     public class PromotionService : IPromotionService
     {
-        private readonly AmesaDbContext _context;
+        private readonly LotteryDbContext _context;
         private readonly IEventPublisher _eventPublisher;
+        private readonly ICache? _cache;
         private readonly ILogger<PromotionService> _logger;
 
         public PromotionService(
-            AmesaDbContext context,
+            LotteryDbContext context,
             IEventPublisher eventPublisher,
-            ILogger<PromotionService> logger)
+            ILogger<PromotionService> logger,
+            ICache? cache = null)
         {
             _context = context;
             _eventPublisher = eventPublisher;
+            _cache = cache;
             _logger = logger;
         }
 
@@ -708,5 +712,7 @@ namespace AmesaBackend.Lottery.Services
         }
     }
 }
+
+
 
 

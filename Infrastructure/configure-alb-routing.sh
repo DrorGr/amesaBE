@@ -29,12 +29,18 @@ fi
 echo "Using listener: $LISTENER_ARN"
 
 # Service routing paths
+# Note: More specific paths should have higher priority (lower priority number)
 declare -A SERVICE_PATHS=(
     ["amesa-auth-service-tg"]="/api/v1/auth/*"
-    ["amesa-payment-service-tg"]="/api/v1/payment/*"
-    ["amesa-lottery-service-tg"]="/api/v1/lottery/*"
+    ["amesa-payment-service-tg"]="/api/v1/payments/*"
+    ["amesa-lottery-service-tg"]="/api/v1/houses/*"
+    ["amesa-lottery-service-tg"]="/api/v1/draws/*"
+    ["amesa-lottery-service-tg"]="/api/v1/tickets/*"
+    ["amesa-lottery-service-tg"]="/api/v1/promotions/*"
     ["amesa-content-service-tg"]="/api/v1/content/*"
-    ["amesa-notification-service-tg"]="/api/v1/notification/*"
+    ["amesa-notification-service-tg"]="/api/v1/notifications/*"
+    ["amesa-notification-service-tg"]="/api/v1/devices/*"
+    ["amesa-notification-service-tg"]="/api/v1/events/webhook"
     ["amesa-lottery-results-service-tg"]="/api/v1/lottery-results/*"
     ["amesa-analytics-service-tg"]="/api/v1/analytics/*"
     ["amesa-admin-service-tg"]="/admin/*"

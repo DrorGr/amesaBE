@@ -1,63 +1,58 @@
-# AmesaBE Project - Backend - Cursor Rules
+# AmesaBase Monorepo - Root Cursor Rules
+
+## 🚀 Quick Reference (TL;DR)
+
+**Essential Info**: .NET 8.0 Backend (8 microservices) + Angular Frontend | AWS ECS Fargate | Aurora PostgreSQL
+
+| Item | Value |
+|------|-------|
+| **Context Version** | 2.7.0 |
+| **Last Updated** | 2025-01-25 (⚠️ Verify deployment status before relying on claims) |
+| **Backend Framework** | .NET 8.0, ASP.NET Core |
+| **Database** | Aurora PostgreSQL Serverless v2 |
+| **Infrastructure** | AWS (ECS Fargate, ECR, ALB, Aurora) |
+| **Microservices** | 8 services (Auth, Lottery, Payment, Notification, Content, LotteryResults, Analytics, Admin) |
+| **Frontend** | Angular 20.2.1 (FE/) |
+| **Region** | eu-north-1 |
+| **Status** | ✅ Production operational |
+
+**⚠️ CRITICAL**: Never pipe build commands directly - always use file-based output capture (see Agent Instructions)
+
+**Quick Start**: Read this file → BE/.cursorrules (delta) → `MetaData/Documentation/README.md` → Run `dotnet build` in `BE/` → Verify deployment status
+
+---
+
+## Quick Status (2025-12-17)
+- **Context Version**: 2.7.0 (supersedes prior 2.6.0/2.5.x references)
+- **Staleness Warning**: Content last fully updated 2025-01-25; changes between 2025-01-25 and 2025-12-17 not captured. Verify deployment state, health checks, and "production-ready" claims before relying.
+- **Known Gap**: No log of work after multi-channel notifications/payment/favorites fixes. Add recent releases, incidents, and infra changes when known.
+- **Outdated Sections**: Rate limit table, background service lists, dependency versions, "Latest Session" - verify before relying.
 
 ## Project Overview
 AmesaBE is the backend API for the Amesa lottery management system. Built with .NET 8.0 and ASP.NET Core, it provides RESTful APIs, real-time communication via SignalR, and integrates with Aurora PostgreSQL for data persistence.
 
-## Workspace Structure
 **⚠️ This repository is part of the AmesaBase-Monorepo workspace**
 - **Monorepo Root**: `C:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\`
 - **Frontend (FE/)**: Angular frontend → https://github.com/DrorGr/amesaFE
-- **This Repository (BE/)**: .NET 8.0 backend → https://github.com/DrorGr/amesaBE
+- **Backend (BE/)**: .NET 8.0 backend → https://github.com/DrorGr/amesaBE
 - **MetaData/**: Cross-cutting docs, scripts, and configs
 
 ## Repository Structure
 
 ### Microservice Projects (8 Services + Supporting Projects)
-1. **AmesaBackend.Auth** - Authentication & user management service
-   - ECS Service: `amesa-auth-service`
-   - Database Schema: `amesa_auth`
-   - Key Features: JWT authentication, OAuth (Google, Meta), ID verification, user preferences
 
-2. **AmesaBackend.Lottery** - Lottery & favorites management service
-   - ECS Service: `amesa-lottery-service`
-   - Database Schema: `amesa_lottery`
-   - Key Features: Houses, tickets, draws, watchlist, participant caps
+| Service | ECS Service | Schema | Key Features |
+|---------|-------------|--------|--------------|
+| **AmesaBackend.Auth** | `amesa-auth-service` | `amesa_auth` | JWT auth, OAuth (Google, Meta), ID verification, user preferences |
+| **AmesaBackend.Lottery** | `amesa-lottery-service` | `amesa_lottery` | Houses, tickets, draws, watchlist, participant caps |
+| **AmesaBackend.Payment** | `amesa-payment-service` | `amesa_payment` | Stripe integration, products, transactions, payment methods |
+| **AmesaBackend.Notification** | `amesa-notification-service` | `amesa_notification` | Email, SMS, WebPush, Telegram, notification preferences |
+| **AmesaBackend.Content** | `amesa-content-service` | `amesa_content` | Translations, content management, languages |
+| **AmesaBackend.LotteryResults** | `amesa-lottery-results-service` | `amesa_lottery_results` | Draw results, QR codes, prize delivery |
+| **AmesaBackend.Analytics** | `amesa-analytics-service` | `amesa_analytics` | User sessions, activity logs, analytics tracking |
+| **AmesaBackend.Admin** | `amesa-admin-service` | `amesa_admin` | Admin dashboard, houses/users management, real-time updates, ✅ Production-ready |
 
-3. **AmesaBackend.Payment** - Payment processing service
-   - ECS Service: `amesa-payment-service`
-   - Database Schema: `amesa_payment`
-   - Key Features: Stripe integration, products, transactions, payment methods
-
-4. **AmesaBackend.Notification** - Multi-channel notification service
-   - ECS Service: `amesa-notification-service`
-   - Database Schema: `amesa_notification`
-   - Key Features: Email, SMS, WebPush, Telegram, notification preferences
-
-5. **AmesaBackend.Content** - Content management service
-   - ECS Service: `amesa-content-service`
-   - Database Schema: `amesa_content`
-   - Key Features: Translations, content management, languages
-
-6. **AmesaBackend.LotteryResults** - Lottery results service
-   - ECS Service: `amesa-lottery-results-service`
-   - Database Schema: `amesa_lottery_results`
-   - Key Features: Draw results, QR codes, prize delivery
-
-7. **AmesaBackend.Analytics** - Analytics service
-   - ECS Service: `amesa-analytics-service`
-   - Database Schema: `amesa_analytics`
-   - Key Features: User sessions, activity logs, analytics tracking
-
-8. **AmesaBackend.Admin** - Admin panel (Blazor Server)
-   - ECS Service: `amesa-admin-service`
-   - Database Schema: `amesa_admin` (admin_users, admin_sessions, audit_logs)
-   - Key Features: Admin dashboard, houses management, users management, real-time updates
-   - Security: Rate limiting (5 attempts, 30-min lockout), page authorization, secure sessions (HTTPS-only), BCrypt password hashing
-   - Authentication: Database-backed with BCrypt, legacy config fallback (requires explicit env vars)
-   - Session: Redis-backed with in-memory fallback, 2-hour timeout
-   - SignalR: AdminHub for real-time notifications (house/user/draw updates)
-   - AWS Integration: S3 image uploads, CloudWatch logging
-   - Status: ✅ Production-ready, all critical security issues fixed
+**Admin Panel Details**: Blazor Server, Rate limiting (5 attempts, 30-min lockout), Redis-backed sessions (2-hour timeout), S3 image uploads, CloudWatch logging
 
 ### Supporting Projects
 - **AmesaBackend.Shared** - Shared library for all microservices
@@ -97,125 +92,100 @@ AmesaBE is the backend API for the Amesa lottery management system. Built with .
 - **Infrastructure**: Terraform, deployment scripts in `BE/Infrastructure/`
 
 ## Technology Stack
-- **Backend**: .NET 8.0, ASP.NET Core, Entity Framework Core
-- **Admin Panel**: Blazor Server (integrated monolith) ✅ NEW
-- **Database**: Aurora PostgreSQL Serverless v2, SQLite (local development)
-- **Real-time**: SignalR for live lottery updates
-- **Authentication**: JWT Bearer tokens (API), Email/Password (Admin Panel)
-- **Payment**: Stripe integration
-- **Caching**: Redis (StackExchange.Redis v2.7.33) - Required for Auth, Lottery, Content, Payment services
-- **Infrastructure**: AWS (ECS Fargate, ECR, ALB, Aurora)
-- **CI/CD**: GitHub Actions
-- **Version Control**: Git with GitHub repository
-- **Package Management**: NuGet
+
+| Category | Technology |
+|----------|-----------|
+| **Backend Framework** | .NET 8.0, ASP.NET Core, Entity Framework Core |
+| **Admin Panel** | Blazor Server (integrated monolith) ✅ |
+| **Database** | Aurora PostgreSQL Serverless v2 (prod), SQLite (local dev) |
+| **Real-time** | SignalR for live lottery updates |
+| **Authentication** | JWT Bearer tokens (API), Email/Password (Admin Panel) |
+| **Payment** | Stripe integration |
+| **Caching** | Redis (StackExchange.Redis v2.7.33) - Required for Auth, Lottery, Content, Payment |
+| **Infrastructure** | AWS (ECS Fargate, ECR, ALB, Aurora) |
+| **CI/CD** | GitHub Actions |
+| **Package Management** | NuGet |
 
 ## Database Schemas
 All microservices use PostgreSQL schemas for data isolation:
-- **amesa_auth** - Authentication service schema
-  - Tables: users, user_sessions, user_preferences, user_identity_documents, system_configurations, etc.
-- **amesa_lottery** - Lottery service schema
-  - Tables: houses, house_images, lottery_tickets, lottery_draws, user_watchlist, ticket_reservations
-  - Views: lottery_participants (optimized participant counting)
-- **amesa_payment** - Payment service schema
-  - Tables: transactions, user_payment_methods, products, product_links, transaction_items, payment_audit_logs
-- **amesa_notification** - Notification service schema
-  - Tables: user_notifications, notification_templates, notification_deliveries, user_channel_preferences, push_subscriptions, telegram_user_links, notification_queue, notification_types, etc.
-- **amesa_content** - Content service schema
-  - Tables: translations, languages, content, content_categories, content_media
-- **amesa_lottery_results** - Lottery results service schema
-  - Tables: lottery_results, lottery_result_history, prize_deliveries
-- **amesa_analytics** - Analytics service schema
-  - Tables: user_sessions, user_activity_logs
-- **public** - Some shared tables (e.g., translations may use public schema)
+
+| Schema | Service | Key Tables/Views |
+|--------|---------|-----------------|
+| **amesa_auth** | Auth | users, user_sessions, user_preferences, user_identity_documents, system_configurations |
+| **amesa_lottery** | Lottery | houses, house_images, lottery_tickets, lottery_draws, user_watchlist, ticket_reservations, **view**: lottery_participants |
+| **amesa_payment** | Payment | transactions, user_payment_methods, products, product_links, transaction_items, payment_audit_logs |
+| **amesa_notification** | Notification | user_notifications, notification_templates, notification_deliveries, user_channel_preferences, push_subscriptions, telegram_user_links, notification_queue, notification_types |
+| **amesa_content** | Content | translations, languages, content, content_categories, content_media |
+| **amesa_lottery_results** | LotteryResults | lottery_results, lottery_result_history, prize_deliveries |
+| **amesa_analytics** | Analytics | user_sessions, user_activity_logs |
+| **amesa_admin** | Admin | admin_users, admin_sessions, audit_logs |
+| **public** | Shared | Some shared tables (e.g., translations may use public schema) |
 
 ## External Service Integrations
-- **AWS Services**:
-  - **AWS Rekognition** (AWSSDK.Rekognition v3.7.400) - ID verification, face detection, OCR
-  - **AWS SES** - Email delivery for notifications
-  - **AWS SNS** - SMS notifications and mobile push
-  - **AWS Secrets Manager** (AWSSDK.SecretsManager v3.7.400) - Secure credential storage
-  - **AWS S3** (AWSSDK.S3 v3.7.400) - File storage
-  - **AWS EventBridge** (AWSSDK.EventBridge v3.7.400) - Event-driven architecture
-  - **AWS X-Ray** - Distributed tracing
-- **Payment Processing**:
-  - **Stripe** - Payment processing (via StripeService)
-- **Authentication**:
-  - **Google OAuth** (Microsoft.AspNetCore.Authentication.Google v8.0.0) - Google sign-in
-  - **Meta/Facebook OAuth** (Microsoft.AspNetCore.Authentication.Facebook v8.0.0) - Facebook sign-in
-  - **Google reCAPTCHA Enterprise** (Google.Cloud.RecaptchaEnterprise.V1 v2.2.0) - Bot protection
-- **Real-time Communication**:
-  - **SignalR** - WebSocket/LongPolling for real-time updates (LotteryHub, NotificationHub)
-- **Notifications**:
-  - **Telegram Bot API** - Telegram notification channel
-  - **WebPush API** - Browser push notifications
-- **Utilities**:
-  - **QR Code Generation** (QRCoder v1.6.0) - QR codes for lottery results
-  - **OTP Generation** (Otp.NET v1.3.0) - Two-factor authentication
-  - **Polly** (v8.4.2) - Resilience and retry policies
-  - **AutoMapper** (v12.0.1) - Object-to-object mapping
-  - **BCrypt** (BCrypt.Net-Next v4.0.3) - Password hashing
-  - **Serilog** (v8.0.0) - Structured logging
+
+| Category | Service/Package | Version | Purpose |
+|----------|----------------|---------|---------|
+| **AWS Services** | AWS Rekognition | v3.7.400 | ID verification, face detection, OCR |
+| | AWS SES | - | Email delivery for notifications |
+| | AWS SNS | - | SMS notifications and mobile push |
+| | AWS Secrets Manager | v3.7.400 | Secure credential storage |
+| | AWS S3 | v3.7.400 | File storage |
+| | AWS EventBridge | v3.7.400 | Event-driven architecture |
+| | AWS X-Ray | - | Distributed tracing |
+| **Payment** | Stripe | - | Payment processing (via StripeService) |
+| **Authentication** | Google OAuth | v8.0.0 | Google sign-in |
+| | Meta/Facebook OAuth | v8.0.0 | Facebook sign-in |
+| | Google reCAPTCHA Enterprise | v2.2.0 | Bot protection |
+| **Real-time** | SignalR | - | WebSocket/LongPolling (LotteryHub, NotificationHub) |
+| **Notifications** | Telegram Bot API | - | Telegram notification channel |
+| | WebPush API | - | Browser push notifications |
+| **Utilities** | QRCoder | v1.6.0 | QR code generation |
+| | Otp.NET | v1.3.0 | Two-factor authentication |
+| | Polly | v8.4.2 | Resilience and retry policies |
+| | AutoMapper | v12.0.1 | Object-to-object mapping |
+| | BCrypt.Net-Next | v4.0.3 | Password hashing |
+| | Serilog | v8.0.0 | Structured logging |
 
 ## Key Dependencies
-### Core Framework
-- **Microsoft.AspNetCore.OpenApi** v8.0.0 - OpenAPI/Swagger support
-- **Microsoft.EntityFrameworkCore** v8.0.0 - ORM
-- **Microsoft.EntityFrameworkCore.Design** v8.0.0 - EF Core tooling
-- **Npgsql.EntityFrameworkCore.PostgreSQL** v8.0.0 - PostgreSQL provider
-- **Microsoft.AspNetCore.Authentication.JwtBearer** v8.0.0 - JWT authentication
 
-### Shared Library (AmesaBackend.Shared)
-- **StackExchange.Redis** v2.7.33 - Redis client
-- **Microsoft.Extensions.Caching.StackExchangeRedis** v8.0.0 - Redis caching
-- **System.IdentityModel.Tokens.Jwt** v7.0.3 - JWT token handling
-- **Microsoft.IdentityModel.Tokens** v7.0.3 - Token validation
-- **Newtonsoft.Json** v13.0.3 - JSON serialization
-- **Serilog** suite - Structured logging
+| Category | Package | Version | Purpose |
+|----------|---------|---------|---------|
+| **Core Framework** | Microsoft.AspNetCore.OpenApi | v8.0.0 | OpenAPI/Swagger support |
+| | Microsoft.EntityFrameworkCore | v8.0.0 | ORM |
+| | Microsoft.EntityFrameworkCore.Design | v8.0.0 | EF Core tooling |
+| | Npgsql.EntityFrameworkCore.PostgreSQL | v8.0.0 | PostgreSQL provider |
+| | Microsoft.AspNetCore.Authentication.JwtBearer | v8.0.0 | JWT authentication |
+| **Shared Library** | StackExchange.Redis | v2.7.33 | Redis client |
+| | Microsoft.Extensions.Caching.StackExchangeRedis | v8.0.0 | Redis caching |
+| | System.IdentityModel.Tokens.Jwt | v7.0.3 | JWT token handling |
+| | Microsoft.IdentityModel.Tokens | v7.0.3 | Token validation |
+| | Newtonsoft.Json | v13.0.3 | JSON serialization |
+| | Serilog | suite | Structured logging |
 
 ## Current Status (2025-01-25)
-- **Repository**: https://github.com/DrorGr/amesaBE
-- **Main branch**: Stable, deployed with Multi-Channel Notification System ✅
-- **Admin Panel**: Blazor Server admin panel deployed to production ✅
-- **Admin Panel Security**: ✅ **ALL CRITICAL ISSUES FIXED** - Comprehensive security audit completed, all critical vulnerabilities resolved, production-ready
-- **Authentication Security Audit**: ✅ **COMPLETE** - Final deep audit completed, all critical and high-priority issues resolved, production-ready
-- **Meta OAuth Integration**: ✅ **CONFIGURED AND READY** - Meta/Facebook OAuth fully integrated with AWS Secrets Manager
-- **Multi-Channel Notification System**: ✅ **IMPLEMENTED AND DEPLOYED** - Production-ready, ALB routing configured
-- **Database**: Fully seeded with comprehensive test data ✅
-- **Translations**: 4 languages supported (EN, ES, FR, PL) - 507 keys each ✅ (148 new notification translations added)
-- **User Preferences**: Complete CRUD API implemented ✅
-- **Lottery Favorites**: ✅ **FIXED** - UserPreferencesService registration issue resolved, favorites functionality restored
-- **Redis Requirements**: Auth, Lottery, Content, and Payment services now require Redis in production ✅
-- **Deployment**: ECS Fargate with Docker containers
-- **Latest**: Multi-channel notification system deployed, ALB routing configured, service healthy
-- **Database Seeder**: Excluded from repository (in .gitignore) ✅
-- **Notification Service**: amesa-notification-service - ACTIVE, 1/1 tasks, HEALTHY ✅
-- **ALB Routing**: Priority 93 (/api/v1/notifications), Priority 95 (/api/v1/notifications/*), Priority 96 (/health/notifications) ✅
-- **Notification Endpoints**: ✅ **ADDED** - Mark as read and delete endpoints implemented
-  - `PUT /api/v1/notifications/{id}/read` - Mark notification as read
-  - `PUT /api/v1/notifications/read-all` - Mark all notifications as read
-  - `DELETE /api/v1/notifications/{id}` - Delete notification
-- **Backend Tests**: 97 passed, 0 failed, 5 skipped ✅ (test failures don't block deployment)
-- **CI/CD Workflow**: Updated to allow test failures without blocking deployment ✅
-- **Payment Service**: ✅ **STABILIZATION FIXES APPLIED** - All startup errors resolved (Stripe secrets JSON, IRateLimitService registration, Redis connection string) - Tested locally, pushed to main
-- **ECS Deployment**: ✅ **FIXED** - Missing SSM parameter `/amesa/prod/ServiceAuth/ApiKey` created, lottery service now running
+
+| Area | Status | Details |
+|------|--------|---------|
+| **Repository** | ✅ Stable | https://github.com/DrorGr/amesaBE, Main branch deployed |
+| **Completion** | ✅ **100% COMPLETE** | All development work, gap fixes, integration tasks done (see `BE/100_PERCENT_COMPLETE_AUDIT.md`) |
+| **Admin Panel** | ✅ Production | Blazor Server deployed, all critical security issues fixed |
+| **Auth Security** | ✅ Complete | Final deep audit complete, all critical/high-priority issues resolved |
+| **OAuth** | ✅ Ready | Meta/Facebook OAuth integrated with AWS Secrets Manager |
+| **Notifications** | ✅ Deployed | Multi-channel system production-ready, ALB routing configured |
+| **Database** | ✅ Seeded | Comprehensive test data, 4 languages (EN, ES, FR, PL) - 507 keys each |
+| **Services** | ✅ Operational | All 8 microservices running, Redis required for Auth/Lottery/Content/Payment |
+| **Tests** | ✅ Passing | 97 passed, 0 failed, 5 skipped (failures don't block deployment) |
+| **Deployment** | ✅ Fixed | ECS deployment issues resolved, SSM parameters configured |
 
 ## Environment Configuration
 
-**Note**: See root `.cursorrules` for complete environment URLs table and infrastructure details.
-
-### Local Development
-- **Backend**: http://localhost:5000
-- **Database**: SQLite (AmesaDB.db) or local PostgreSQL
-- **Admin Panel**: http://localhost:5000/admin
-- **Configuration**: `appsettings.Development.json`
-
-### Production Environment
-- **ECS Cluster**: Amesa (prod service: amesa-backend-service)
-- **Database**: amesadbmain (Aurora PostgreSQL Serverless v2)
-- **ALB**: amesa-backend-alb-509078867.eu-north-1.elb.amazonaws.com
-- **Admin Panel**: http://amesa-backend-alb-509078867.eu-north-1.elb.amazonaws.com/admin ✅
-- **ECR Image Tag**: prod-{sha}, latest, prod-latest
-- **Deployment**: Auto on push to main branch
+| Environment | Backend | Database | Admin Panel | Config File |
+|------------|---------|----------|-------------|-------------|
+| **Local Dev** | http://localhost:5000 | SQLite (AmesaDB.db) or local PostgreSQL | http://localhost:5000/admin | `appsettings.Development.json` |
+| **Production** | amesa-backend-alb-509078867.eu-north-1.elb.amazonaws.com | amesadbmain (Aurora PostgreSQL Serverless v2) | http://amesa-backend-alb-509078867.eu-north-1.elb.amazonaws.com/admin ✅ | ECS task definition |
+| **ECS Cluster** | Amesa | - | - | - |
+| **ECR Tags** | prod-{sha}, latest, prod-latest | - | - | - |
+| **Deployment** | Auto on push to main | - | - | - |
 
 ## AWS Infrastructure
 
@@ -260,116 +230,21 @@ All microservices use PostgreSQL schemas for data isolation:
   - `POST /api/v1/oauth/exchange` - Exchange temporary OAuth code for JWT tokens (shared by all providers)
 
 ### Admin Panel ✅
-- **URL**: `/admin` - Blazor Server admin interface
-- **ECS Service**: `amesa-admin-service`
-- **Database Schema**: `amesa_admin` (admin_users, admin_sessions, audit_logs)
-- **Technology**: Blazor Server (.NET 8.0)
-- **Port**: 8080 (HTTP)
-- **Authentication**: Email/password login with session management (Redis-backed, falls back to in-memory)
-- **Session Storage**: Redis (distributed cache) with in-memory fallback
-- **Session Timeout**: 2 hours (120 minutes)
-- **Features**:
-  - ✅ Dashboard with statistics (users, houses, tickets, revenue, draws)
-  - ✅ Houses management (CRUD operations)
-  - ✅ Users management (view/edit)
-  - ✅ Tickets management (placeholder)
-  - ✅ Draws management (placeholder)
-  - ✅ Payments management (placeholder)
-  - ✅ Translations management (placeholder)
-  - ✅ Database selector component (environment switching)
-  - ✅ Image upload component (S3 integration with presigned URLs)
-  - ✅ Real-time updates via SignalR (AdminHub)
-- **Pages**:
-  - `/login` - Login page (public)
-  - `/logout` - Logout page
-  - `/` or `/dashboard` - Dashboard (protected)
-  - `/houses` - Houses list (protected)
-  - `/houses/create` - Create house (protected)
-  - `/houses/{id}/edit` - Edit house (protected)
-  - `/users` - Users list (protected)
-  - `/users/{id}/edit` - Edit user (protected)
-  - `/tickets` - Tickets list (protected, placeholder)
-  - `/draws` - Draws list (protected, placeholder)
-  - `/payments` - Payments list (protected, placeholder)
-  - `/translations` - Translations list (protected, placeholder)
-- **Services** (All registered as Scoped):
-  - `IAdminAuthService` → `AdminAuthService` - Authentication with rate limiting
-  - `IAdminDatabaseService` → `AdminDatabaseService` - Database environment management
-  - `IDashboardService` → `DashboardService` - Dashboard statistics
-  - `IHousesService` → `HousesService` - House CRUD operations
-  - `IUsersService` → `UsersService` - User management
-  - `ITranslationsService` → `TranslationsService` - Translation management
-  - `ITicketsService` → `TicketsService` - Ticket management (placeholder)
-  - `IDrawsService` → `DrawsService` - Draw management (placeholder)
-  - `IPaymentsService` → `PaymentsService` - Payment management (placeholder)
-  - `IS3ImageService` → `S3ImageService` - S3 image upload with presigned URLs
-  - `ICloudWatchLoggingService` → `CloudWatchLoggingService` - CloudWatch logging
-  - `IRealTimeNotificationService` → `RealTimeNotificationService` - SignalR notifications
-- **SignalR Hub**:
-  - **Hub**: `AdminHub` at `/admin/hub` (relative to base href)
-  - **Groups**: `houses`, `users`, `draws` (whitelist validation)
-  - **Events**: `HouseCreated`, `HouseUpdated`, `HouseDeleted`, `UserUpdated`, `DrawConducted`
-  - **Client Script**: `wwwroot/js/admin-signalr.js` (with retry logic and initialization guards)
-- **Security Features**:
-  - ✅ Rate limiting with account lockout (5 attempts, 30-minute lockout)
-  - ✅ Page-level authorization via `AuthorizedPageBase` (all protected pages inherit)
-  - ✅ Secure session cookies (HTTPS-only in production via `CookieSecurePolicy.Always`)
-  - ✅ Input validation (email format, password minimum 8 characters)
-  - ✅ SignalR group validation (whitelist of allowed groups)
-  - ✅ Generic error messages (no information disclosure)
-  - ✅ No hardcoded credentials (legacy auth requires explicit config via env vars)
-  - ✅ BCrypt password hashing for database users
-  - ✅ Defensive authentication checks (prevent 500 errors when session unavailable)
-  - ✅ Global exception handling middleware
-- **Database Authentication**:
-  - **Table**: `amesa_admin.admin_users` (id, email, username, password_hash, is_active, created_at, last_login_at)
-  - **Password Hashing**: BCrypt (work factor 12)
-  - **Legacy Fallback**: Config-based auth (requires `ADMIN_EMAIL` and `ADMIN_PASSWORD` env vars)
-  - **Session Tracking**: `amesa_admin.admin_sessions` table (optional, not actively used)
-  - **Audit Logging**: `amesa_admin.audit_logs` table (available for future use)
-- **AWS Integration**:
-  - **S3**: Image uploads with presigned URLs (bucket: `amesa-house-images-prod`)
-  - **CloudWatch**: Logging service for centralized logs
-  - **IAM**: Permissions for S3, CloudWatch, and database access
-- **Middleware**:
-  - `GlobalExceptionHandlerMiddleware` - Centralized error handling
-  - `UseAmesaSecurityHeaders` - Security headers
-  - `UseAmesaMiddleware` - Shared middleware
-  - `UseAmesaLogging` - Request logging
-  - Session middleware (before authentication)
-- **Health Checks**: `/health` endpoint (simple health check)
-- **Path Base**: `/admin` (configured via `app.UsePathBase("/admin")`)
-- **Authentication Flow**:
-  1. Rate limiting check (account lockout after 5 failed attempts, 30-minute lockout)
-  2. Input validation (email format, password minimum 8 characters)
-  3. Database check - Query `amesa_admin.admin_users` for active user with matching email
-  4. Password verification - BCrypt hash verification
-  5. Legacy fallback - If database unavailable and user not found, check config/env variables (ONLY if explicitly configured)
-  6. Session storage - Store authenticated email in HTTP session (Redis in production)
-  7. Last login update - Update `last_login_at` timestamp on successful authentication
-  8. Failed attempt tracking - Clear on success, increment on failure
-- **Environment Variables** (Required):
-  - `DB_CONNECTION_STRING` - PostgreSQL connection string (required for database auth)
-  - `ConnectionStrings__Redis` - Redis connection string (optional, falls back to in-memory)
-  - `ADMIN_EMAIL` - Legacy admin email (optional, only if using legacy auth)
-  - `ADMIN_PASSWORD` - Legacy admin password (optional, only if using legacy auth)
-  - `AWS_REGION` - AWS region (default: eu-north-1)
-  - `AWS_ACCESS_KEY_ID` - AWS access key (for S3, CloudWatch)
-  - `AWS_SECRET_ACCESS_KEY` - AWS secret key
-  - `S3_BUCKET_NAME` - S3 bucket for images (default: amesa-house-images-prod)
-  - `CLOUDWATCH_LOG_GROUP` - CloudWatch log group (default: /ecs/amesa-admin-service)
-- **Components**:
-  - `DatabaseSelector.razor` - Database environment selector
-  - `ImageUpload.razor` - S3 image upload with presigned URLs
-- **Models**:
-  - `AdminUser` - Admin user entity (id, email, username, password_hash, is_active, created_at, last_login_at)
-  - `AdminSession` - Admin session entity (id, admin_user_id, session_token, created_at, expires_at, ip_address, user_agent)
-  - `AuditLog` - Audit log entity (id, action, entity_type, entity_id, admin_user_id, action_details, created_at)
-  - `DashboardStats` - Dashboard statistics DTO
-- **DTOs**: HouseDTOs, UserDTOs, TicketDTOs, DrawDTOs, PaymentDTOs, TranslationDTOs, ImageDTOs
-- **Documentation**: 
-  - `MetaData/Documentation/Development/ADMIN_SERVICE_HANDOFF.md` - Complete handoff document
-  - `MetaData/Documentation/Development/ADMIN_SERVICE_CODE_REVIEW_AUDIT.md` - Security audit report
+
+| Aspect | Details |
+|--------|---------|
+| **URL** | `/admin` - Blazor Server admin interface |
+| **ECS Service** | `amesa-admin-service` |
+| **Technology** | Blazor Server (.NET 8.0), Port 8080 (HTTP) |
+| **Database Schema** | `amesa_admin` (admin_users, admin_sessions, audit_logs) |
+| **Authentication** | Email/password, Redis-backed sessions (2-hour timeout, in-memory fallback) |
+| **Security** | ✅ Rate limiting (5 attempts, 30-min lockout), BCrypt hashing, HTTPS-only cookies, page-level auth |
+| **Features** | Dashboard, Houses CRUD, Users management, Database selector, S3 image upload, Real-time SignalR |
+| **Pages** | `/login`, `/logout`, `/dashboard`, `/houses/*`, `/users/*`, `/tickets`, `/draws`, `/payments`, `/translations` |
+| **SignalR Hub** | `AdminHub` at `/admin/hub`, Groups: `houses`, `users`, `draws`, Events: `HouseCreated/Updated/Deleted`, `UserUpdated`, `DrawConducted` |
+| **Key Services** | AdminAuthService, AdminDatabaseService, DashboardService, HousesService, UsersService, TranslationsService, S3ImageService, CloudWatchLoggingService, RealTimeNotificationService (all Scoped) |
+| **AWS Integration** | S3 (bucket: `amesa-house-images-prod`), CloudWatch logging |
+| **Documentation** | `MetaData/Documentation/Development/ADMIN_SERVICE_HANDOFF.md`, `ADMIN_SERVICE_CODE_REVIEW_AUDIT.md` |
 
 ### Real-time Hubs (SignalR)
 
@@ -925,6 +800,336 @@ git checkout main
 - Authentication/authorization changes
 - New features or major refactoring
 
+## Pieces MCP Integration
+
+### Overview
+Pieces MCP provides access to Long-Term Memory (LTM-2.7) engine, allowing agents to query workflow context, code snippets, notes, and activity history. This significantly improves agent effectiveness by providing access to your workflow history and saved context.
+
+**Key Benefits:**
+- **Context Continuity**: Agents understand recent work and decisions across sessions
+- **Pattern Reuse**: Discover existing implementations and proven solutions
+- **Decision Tracking**: Understand project evolution and documented challenges
+- **Resource Discovery**: Access saved code snippets, bookmarks, and notes
+- **Workflow Efficiency**: Faster problem-solving with historical context
+
+### Prerequisites
+- **PiecesOS**: Must be installed and running (check system tray/processes)
+- **Long-Term Memory Engine (LTM-2.7)**: Must be enabled in PiecesOS
+- **MCP Configuration**: Pieces MCP server must be configured in Cursor Settings
+- **Tool Availability**: `ask_pieces_ltm` tool is automatically available in **ALL modes** (Auto, Agent, Manual) when MCP server is configured
+
+**Setup Documentation**: See `MetaData/Documentation/Development/PIECES_MCP_INTEGRATION.md` for complete setup instructions.
+
+**Note**: Pieces MCP works seamlessly in **Auto Mode** - no special mode selection required. The tool is automatically available when the MCP server is configured and running.
+
+### Usage Guidelines
+
+#### When to Use Pieces MCP
+
+**1. Context Retrieval** - Understand previous work and decisions:
+- "What was I working on yesterday?"
+- "Show me recent authentication code changes"
+- "What files did I modify last week?"
+- "What was I doing with this file yesterday?"
+
+**2. Code Pattern Discovery** - Find existing implementations:
+- "Show examples of React Context usage in this project"
+- "What was my last implementation of API error handling?"
+- "Have I previously optimized rendering performance?"
+- "Show me how I implemented authentication middleware"
+
+**3. Decision Tracking** - Understand project evolution:
+- "Track the evolution of the dashboard feature"
+- "Review documented challenges with the payment system"
+- "Show the decisions made around UI updates"
+- "What architectural decisions were made for the microservices?"
+
+**4. Resource Discovery** - Find saved resources:
+- "Find recent bookmarks about Kubernetes"
+- "What resources did I save recently related to Python decorators?"
+- "Show notes taken about GraphQL in March"
+- "What documentation did I bookmark about AWS ECS?"
+
+**5. Code Review Context** - Understand feedback and changes:
+- "Show code review comments related to database indexing"
+- "Did we finalize naming conventions for the latest API endpoints?"
+- "What feedback did I leave on recent pull requests?"
+- "What issues were identified in the security audit?"
+
+#### Effective Prompting Tips
+- **Specify Timeframes**: "yesterday", "last week", "April 2nd through April 6th"
+- **Mention Applications**: "Stack Overflow pages I visited on Chrome", "meeting notes from Notion"
+- **Include Technical Keywords**: "JavaScript code related to API authentication", ".NET 8.0 migration patterns"
+- **Reference Open Files**: "What was I doing with this file yesterday?"
+- **Combine Parameters**: Mix timeframes, applications, and topics for precise queries
+
+### Agent Workflow Integration
+
+#### Automatic Usage in All Modes
+**CRITICAL**: Pieces MCP works in **ALL modes** (Auto, Agent, Manual). The `ask_pieces_ltm` tool is automatically available when MCP server is configured.
+
+**Best Practice**: Use Auto Mode for seamless integration - agent will automatically use Pieces MCP when appropriate.
+
+#### On Agent Creation - MANDATORY
+**CRITICAL**: When a new agent session starts, you MUST:
+
+1. **ALWAYS Check Pieces MCP First** (MANDATORY):
+   - **Attempt to use `ask_pieces_ltm` tool immediately** - it's a primary context source
+   - If tool is available, use it for all context queries below
+   - If tool is not available, log warning and continue with standard workflow
+   - **NEVER skip Pieces MCP check** - always attempt usage first
+
+2. **Query Recent Context** (MANDATORY if tool available):
+   - **ALWAYS query**: "What was I working on in this project in the last 24 hours?"
+   - **ALWAYS query**: "What recent changes were made to the authentication system?"
+   - **ALWAYS query**: "Show me recent work on the payment service"
+   - **ALWAYS query**: "What issues or bugs were recently fixed?"
+   - Use these queries to understand project state before starting any work
+
+3. **Understand Current State** (MANDATORY):
+   - "What is the current deployment status?"
+   - "What features are in progress?"
+   - "What technical debt or known issues exist?"
+   - "What recent security fixes were applied?"
+
+#### Automatic Usage Triggers
+
+**PRIMARY USE CASES - Use Pieces MCP (`ask_pieces_ltm` tool) when:**
+
+1. ✅ **When Stuck** - Query for similar problems and solutions:
+   - Encountering an error or issue
+   - Facing a problem without clear solution
+   - Need to understand why something isn't working
+   - Looking for troubleshooting approaches
+
+2. ✅ **Need Patterns** - Query for existing implementations:
+   - Looking for code patterns or architectural patterns
+   - Need examples of similar implementations
+   - Want to follow established conventions
+   - Seeking proven solutions
+
+3. ✅ **Task Could Benefit from Past Work** - Query for related context:
+   - Starting a new task or feature (query for related previous work)
+   - Need to understand project history and evolution
+   - Understanding architectural decisions
+   - Finding related code or documentation
+   - Need context about why decisions were made
+
+4. ✅ **Work Completed Earlier in the Day** - Query for recent work:
+   - User asking about work completed earlier today
+   - Need to understand what was done recently
+   - Looking for context about today's activities
+
+5. ✅ **References to People, Applications, or Research** - Query for specific context:
+   - User references specific people by name
+   - User mentions specific applications
+   - User asks about research activities
+   - Need context about conversations or interactions
+
+#### User Rules for `ask_pieces_ltm` Tool
+
+**CRITICAL**: Follow these rules when using the `ask_pieces_ltm` tool:
+
+1. **When to Use**:
+   - ✅ User is asking about work completed earlier in the day
+   - ✅ User references names of specific people
+   - ✅ User mentions specific applications
+   - ✅ User asks about research activities
+
+2. **Query Requirements** (MANDATORY):
+   - **MUST specify time ranges** in queries (e.g., "today", "earlier today", "this morning", "last 24 hours")
+   - **MUST include other suggested queries** when appropriate (e.g., related topics, follow-up questions)
+
+3. **Source Assumptions**:
+   - **If keyword 'researching' is used**: Assume primary application source is **Google Chrome**
+   - **If a person is referenced**: Assume source is **Google Chrome** or **Google Chat**
+
+4. **Tool Usage**:
+   - When using `ask_pieces_ltm`, you are free to make multiple calls to the tool
+   - Consider making follow-up queries based on initial results
+   - Use time ranges and source hints to improve query accuracy
+
+#### Using `create_pieces_memory` Tool
+
+**Purpose**: Create persistent memories in Pieces LTM for important decisions, patterns, and context that future agent sessions should know.
+
+**When to Use `create_pieces_memory`**:
+- ✅ **After Completing Significant Work** - Document important implementations, decisions, or solutions
+- ✅ **After Solving Complex Problems** - Save troubleshooting approaches and solutions
+- ✅ **After Making Architectural Decisions** - Document why decisions were made
+- ✅ **After Discovering Patterns** - Save proven patterns and best practices
+- ✅ **After Code Reviews or Feedback** - Document important feedback and changes
+- ✅ **After Major Refactoring** - Document structural changes and rationale
+
+**What to Include in Memories**:
+- **Summary**: Concise title describing the memory (1-2 sentences)
+- **Detailed Narrative**: Complete story with background, thought process, what worked/didn't work, decisions made
+- **Files**: List all relevant files involved (absolute paths)
+- **External Links**: GitHub URLs, documentation links, articles consulted
+- **Project Path**: Absolute path to project root
+- **Context**: Why this memory is important for future sessions
+
+**Best Practices**:
+- Create memories for work that future agents will benefit from understanding
+- Include enough context that someone reading it later understands the full picture
+- Link to relevant files and external resources
+- Use clear, descriptive summaries
+- Document both successes and lessons learned
+
+**Example Use Cases**:
+- After implementing a new feature: Document the approach, challenges, and final solution
+- After fixing a critical bug: Document the root cause, fix, and prevention strategies
+- After architectural changes: Document the rationale and impact
+- After performance optimizations: Document the approach and results
+
+**Additional Triggers:**
+- ✅ **Starting a new task or feature** - Query for related previous work
+- ✅ **Encountering an error or issue** - Query for similar problems and solutions
+- ✅ **Need to understand project history** - Query for evolution and decisions
+- ✅ **Looking for existing patterns or solutions** - Query for implementations
+- ✅ **Understanding architectural decisions** - Query for documented choices
+- ✅ **Finding related code or documentation** - Query for saved resources
+
+**Decision Flow (ALWAYS follow):**
+1. Is `ask_pieces_ltm` tool available? → **YES**: Use it immediately → **NO**: Continue without (log warning)
+2. **Am I stuck?** → **YES**: Query LTM for solutions → **NO**: Continue to next check
+3. **Do I need patterns?** → **YES**: Query LTM for implementations → **NO**: Continue to next check
+4. **Could this task benefit from understanding past work?** → **YES**: Query LTM for related context → **NO**: Continue
+5. Starting new task? → **YES**: Query LTM for related work → **NO**: Continue
+
+#### During Task Execution
+
+**Before Starting Work** (MANDATORY):
+1. **ALWAYS Query LTM First** for related previous work:
+   - "Have I worked on similar [feature/task] before?"
+   - "What patterns or solutions did I use for [similar requirement]?"
+   - "Show me previous implementations of [component type]"
+   - "How did I handle [similar requirement] in other services?"
+
+2. **ALWAYS Check for Existing Solutions**:
+   - "How did I solve [similar problem] before?"
+   - "What approaches have been tried for [issue type]?"
+   - "Are there existing patterns I should follow for [feature]?"
+   - "What was my approach to [similar task]?"
+
+**When Stuck** (MANDATORY):
+**CRITICAL**: When stuck, ALWAYS query Pieces MCP FIRST before trying other approaches.
+
+1. **ALWAYS Query LTM First** for solutions:
+   - "How did I solve [similar problem] before?"
+   - "Show me examples of [pattern/technique] I've used"
+   - "What resources did I save about [topic]?"
+   - "How did I handle [similar deployment/configuration issue]?"
+   - "What approaches have been tried for [issue type]?"
+
+2. **ALWAYS Find Related Context**:
+   - "What documentation exists about [topic]?"
+   - "Show me code snippets related to [feature]"
+   - "What decisions were made about [architectural choice]?"
+   - "How did I configure [service/tool] before?"
+
+**When Needing Patterns** (MANDATORY):
+**CRITICAL**: When you need patterns or examples, ALWAYS query Pieces MCP FIRST.
+
+1. **Query for Implementation Patterns**:
+   - "Show me examples of [pattern/technique] I've used in this project"
+   - "What patterns did I use for [similar requirement]?"
+   - "How did I implement [similar feature] before?"
+   - "What architectural patterns have I used for [component type]?"
+
+2. **Query for Code Examples**:
+   - "Show me code snippets related to [feature/pattern]"
+   - "What was my implementation approach for [similar task]?"
+   - "How did I structure [similar component/service]?"
+
+**When Task Could Benefit from Past Work** (MANDATORY):
+**CRITICAL**: Before starting any task, evaluate if understanding past work would help. If yes, ALWAYS query Pieces MCP.
+
+1. **Query for Related Previous Work**:
+   - "Have I worked on similar [feature/task] before?"
+   - "What was my approach to [similar task]?"
+   - "What decisions were made about [related feature]?"
+   - "How did I handle [similar requirement] in other services?"
+
+2. **Query for Context and History**:
+   - "What is the history of [feature/component]?"
+   - "Why was [decision/approach] chosen?"
+   - "What challenges were encountered with [related feature]?"
+   - "What lessons were learned from [previous implementation]?"
+
+**After Completing Work** (MANDATORY):
+**CRITICAL**: After completing significant work, use `create_pieces_memory` to document important context.
+
+1. **Evaluate if Memory is Needed**:
+   - Was this a significant implementation or decision?
+   - Will future agents benefit from understanding this work?
+   - Does this solve a problem that might recur?
+   - Is this a pattern or approach worth preserving?
+
+2. **Create Memory if Appropriate**:
+   - Use `create_pieces_memory` tool to document:
+     - What was implemented/fixed/decided
+     - Why decisions were made
+     - What worked and what didn't
+     - Relevant files and resources
+     - Lessons learned
+   - This helps future agent sessions understand context without needing to query
+
+3. **Memory Content Guidelines**:
+   - **Summary**: Clear, concise title (1-2 sentences)
+   - **Detailed Narrative**: Complete story with full context
+   - **Files**: All relevant files (absolute paths)
+   - **External Links**: Documentation, GitHub URLs, articles
+   - **Project Path**: Absolute path to project root
+
+#### Optimized Query Templates
+
+**Session Start Queries** (Use these immediately):
+- "What was I working on in this project in the last 24 hours?"
+- "What recent changes were made to [specific service/component]?"
+- "What issues or bugs were recently fixed?"
+- "What is the current deployment status?"
+
+**Task Start Queries** (Use before starting any task):
+- "Have I worked on similar [feature/task] before?"
+- "What patterns or solutions did I use for [similar requirement]?"
+- "Show me previous implementations of [component type]"
+- "How did I handle [similar requirement] in other services?"
+
+**Problem Solving Queries** (Use when stuck):
+- "How did I solve [similar problem] before?"
+- "What approaches have been tried for [issue type]?"
+- "Show me examples of [pattern/technique] I've used"
+- "What resources did I save about [topic]?"
+
+### Troubleshooting
+
+**MCP Server Not Running**:
+- Verify PiecesOS is running (check system tray/processes)
+- Check MCP server status in Cursor settings (should show "running")
+- Restart MCP server if needed
+- Verify LTM engine is enabled in PiecesOS
+
+**Tool Not Available**:
+- **Verify MCP Connection**: Check green dot in MCP settings (should show "running")
+- **Check Mode**: Tool works in ALL modes (Auto, Agent, Manual) - no special mode required
+- **Restart Cursor**: Sometimes requires IDE restart after MCP configuration
+- **Verify PiecesOS**: Ensure PiecesOS is running and LTM is enabled
+- **Note**: In Auto Mode, tool should be automatically available - if not, check MCP server status
+
+**No Results from Queries**:
+- Verify LTM is enabled
+- Check PiecesOS is capturing your workflow
+- Wait for indexing (LTM may need time to index recent activity)
+- Check date ranges in queries reference timeframes with activity
+
+**JSON Blob Error in MCP Settings**:
+- **This is harmless**: Cursor's Settings UI doesn't recognize JSON-RPC success envelope
+- **Ignore red JSON blobs** in MCP Settings view
+- **Chat pane is source of truth** - if queries return formatted summaries, integration is working
+
+**Documentation**: See `MetaData/Documentation/Development/PIECES_MCP_INTEGRATION.md` for complete troubleshooting guide.
+
 ## Architecture Overview
 
 ### System Architecture
@@ -1461,299 +1666,26 @@ Client → CloudFront /api/* → ALB (path-based routing) → ECS Task (microser
 - **OAuth Callback Component**: Frontend component handles all OAuth callbacks
 - **Database Schema**: `users` table has `auth_provider` (enum) and `provider_id` (string) columns
 
-## Recent Changes - ADMIN PANEL SECURITY FIXES (2025-01-25)
-- ✅ **Admin Panel Security Audit & Fixes Complete** - All critical security vulnerabilities resolved
-  - **Status**: ✅ **PRODUCTION READY** - All critical and high-priority security issues fixed
-  - **Security Audit**: Comprehensive code review completed (`ADMIN_SERVICE_CODE_REVIEW_AUDIT.md`)
-  - **Critical Fixes Applied**:
-    - ✅ **Removed Hardcoded Default Password** - Legacy auth now requires explicit configuration (no defaults in source code)
-    - ✅ **Removed In-Memory Auth Dictionary** - Authentication relies solely on session storage (Redis in production) for multi-instance support
-    - ✅ **Implemented Rate Limiting** - Account lockout after 5 failed login attempts (30-minute lockout duration)
-    - ✅ **Fixed Session Security** - Cookie security policy uses `CookieSecurePolicy.Always` in production (HTTPS-only)
-    - ✅ **Added Page-Level Authorization** - All protected pages inherit from `AuthorizedPageBase` with authentication checks
-  - **Additional Security Enhancements**:
-    - ✅ Input validation on login page (email format validation, password minimum length 8 characters)
-    - ✅ Generic error messages (no information disclosure about account existence or lockout status)
-    - ✅ SignalR group validation (whitelist of allowed groups: houses, users, draws)
-    - ✅ Defensive authentication checks (prevent 500 errors when session unavailable)
-  - **Files Modified**:
-    - `AmesaBackend.Admin/Services/AdminAuthService.cs` - Rate limiting, removed dictionary, removed hardcoded password
-    - `AmesaBackend.Admin/Program.cs` - Session security fix
-    - `AmesaBackend.Admin/Pages/AuthorizedPageBase.cs` - New authorization base class
-    - `AmesaBackend.Admin/Pages/*.razor` - All protected pages now inherit from AuthorizedPageBase
-    - `AmesaBackend.Admin/Pages/Login.razor` - Input validation and improved error messages
-    - `AmesaBackend.Admin/Shared/MainLayout.razor` - Defensive authentication checks
-    - `AmesaBackend.Admin/Hubs/AdminHub.cs` - Group validation
-  - **Commit**: `63d3b92` - Pushed to main branch
-  - **Impact**: Admin panel now secure and production-ready with comprehensive security measures
+## Recent Changes Summary
 
-## Recent Changes - AUTHENTICATION SECURITY AUDIT COMPLETE
-- ✅ **Final Deep Audit Complete** - Comprehensive security and code quality review of registration and login flows
-  - **Status**: ✅ **PRODUCTION READY** - All critical and high-priority issues resolved
-  - **Audit Results**:
-    - **Critical Issues**: 0 ✅ (All fixed)
-    - **High Priority Issues**: 0 ✅ (All fixed)
-    - **Medium Priority Issues**: 0 ✅ (All fixed)
-    - **Low Priority Issues**: 5 (Optional enhancements, not security vulnerabilities)
-  - **Verified Fixes**:
-    - ✅ Password verification null reference bug (Issue #1) - Fixed
-    - ✅ Email domain validation null reference (Issue #2) - Fixed
-    - ✅ Phone duplicate check race condition (Issue #3) - Fixed with row-level locking
-    - ✅ Configuration parsing without validation (Issue #4) - Fixed with `GetValue<T>()`
-    - ✅ Error message information leakage (Issue #5) - Fixed with generic messages
-    - ✅ OAuth soft-deleted user check (Issue #7) - Fixed
-    - ✅ RememberMe calculation inconsistency (Issue #10) - Fixed
-    - ✅ DateOfBirth validation edge case (Issue #14) - Fixed
-  - **Security Posture**: ✅ **EXCELLENT**
-    - Race condition protection with row-level locking
-    - Timing attack protection with artificial delays
-    - Enumeration prevention with generic error messages
-    - Comprehensive account status validation
-    - Device tracking and change detection
-    - Soft delete handling with grace period
-    - Transaction safety with proper rollback
-    - SQL injection prevention with parameterized queries
-  - **Code Quality**: ✅ **HIGH**
-    - Well-structured, maintainable code
-    - Comprehensive error handling
-    - Extensive security logging
-    - Proper transaction management
-    - Safe configuration parsing
-  - **Remaining Enhancements** (Low Priority, Optional):
-    - IP address parsing validation (X-Forwarded-For header)
-    - OAuth username generation validation
-    - Event publishing error handling (try-catch)
-    - Password history atomicity (non-critical)
-    - Transaction timeout documentation
-  - **Documentation Created**:
-    - `MetaData/Documentation/Authentication/FINAL_AUDIT_REPORT.md` - Complete audit report
-    - All previous audit findings documented and verified
-  - **Build Status**: ✅ **SUCCESS** (0 errors)
-  - **Status**: ✅ **PRODUCTION READY** - Code is secure, well-tested, and ready for deployment
-  - **Recommendation**: Deploy to production, continue monitoring, schedule periodic audits
+| Change | Status | Date | Key Points |
+|--------|--------|------|------------|
+| **Pieces MCP Integration** | ✅ Integrated | 2025-01-25 | LTM engine for agent context, workflow history access |
+| **Admin Panel Security** | ✅ Production Ready | 2025-01-25 | All critical issues fixed, rate limiting, BCrypt, secure sessions |
+| **Auth Security Audit** | ✅ Complete | 2025-01-25 | All critical/high issues resolved, excellent security posture |
+| **ECS Deployment Fix** | ✅ Fixed | 2025-01-25 | SSM parameter `/amesa/prod/ServiceAuth/ApiKey` created |
+| **Meta OAuth** | ✅ Ready | 2025-01-25 | Fully integrated with AWS Secrets Manager, ready for production |
+| **Payment Service** | ✅ Stabilized | 2025-01-25 | Stripe JSON format, IRateLimitService registration, Redis config fixed |
+| **CI/CD Workflow** | ✅ Updated | 2025-01-25 | Test failures no longer block deployment |
+| **Test Fixes** | ✅ Fixed | 2025-01-25 | 97 passed, 0 failed, 5 skipped |
+| **Multi-Channel Notifications** | ✅ Deployed | 2025-01-25 | Complete implementation, ALB routing configured, production-ready |
+| **Favorites & Redis** | ✅ Fixed | 2025-01-25 | UserPreferencesService registration, Redis requirement enforced |
+| **reCAPTCHA Enterprise** | ✅ Complete | 2025-01-25 | Enterprise API, metrics tracking, monitoring endpoint |
+| **Translation System** | ✅ Complete | 2025-01-25 | 507 keys × 4 languages, all scripts organized |
+| **Database Seeding** | ✅ Complete | 2025-01-25 | Production database seeded, schema alignment fixed |
+| **100% Complete Audit** | ✅ Approved | 2025-01-25 | All functionality complete, production-ready |
 
-## Recent Changes - ECS DEPLOYMENT FIX: MISSING SSM PARAMETER
-- ✅ **ECS Deployment Fix: ServiceAuth API Key Parameter Created** - Fixed lottery service deployment failure
-  - **Root Cause**: Missing SSM Parameter Store parameter `/amesa/prod/ServiceAuth/ApiKey` causing ECS task initialization failures
-  - **Error**: `ResourceInitializationError: unable to pull secrets or registry auth: invalid ssm parameters: /amesa/prod/ServiceAuth/ApiKey`
-  - **Impact**: `amesa-lottery-service` unable to start (60+ failed task attempts), service stuck in deployment loop
-  - **Solution Applied**:
-    1. Generated cryptographically secure 64-character API key using PowerShell `RandomNumberGenerator`
-    2. Created SSM Parameter Store parameter:
-       - **Name**: `/amesa/prod/ServiceAuth/ApiKey`
-       - **Type**: `SecureString` (encrypted at rest using AWS KMS default key)
-       - **Region**: `eu-north-1`
-       - **Description**: "Service-to-service authentication API key for microservices communication"
-    3. Verified parameter creation and ECS service status
-  - **Service Status After Fix**:
-    - `amesa-lottery-service`: ✅ ACTIVE, 1/1 tasks running
-    - Service can now start successfully without initialization errors
-  - **Usage**: This parameter is used by `ServiceToServiceAuthMiddleware` (`BE/AmesaBackend.Shared/Middleware/ServiceToServiceAuthMiddleware.cs`) for service-to-service authentication:
-    - Payment service → Lottery service (ticket creation from payment)
-    - Other internal microservice-to-microservice calls
-    - Middleware reads from configuration: `ServiceAuth:ApiKey` or environment variable `SERVICE_AUTH_API_KEY`
-  - **ECS Task Definitions Using This Parameter**:
-    - `amesa-lottery-service` (revision 5) - Maps to environment variable `SERVICE_AUTH_API_KEY`
-    - `amesa-payment-service` (revision 3) - Maps to environment variable `SERVICE_AUTH_API_KEY`
-  - **Security**: Parameter stored as `SecureString` (encrypted at rest), only accessible to services with proper IAM permissions via ECS task execution role
-  - **Commands Used**: 
-    ```bash
-    aws ssm put-parameter --name "/amesa/prod/ServiceAuth/ApiKey" --value "<generated-key>" --type "SecureString" --region eu-north-1 --overwrite
-    ```
-  - **Status**: ✅ Resolved - Service deployed and running successfully
-  - **Files Referenced**: 
-    - `BE/AmesaBackend.Shared/Middleware/ServiceToServiceAuthMiddleware.cs` - Uses the API key
-    - `BE/lottery-task-def.json` - References the parameter
-    - `BE/payment-task-def.json` - References the parameter
-
-## Recent Changes - META OAUTH INTEGRATION
-- ✅ **Meta OAuth Integration Complete** - Full Meta/Facebook OAuth authentication configured
-  - **AWS Secrets Manager Setup**:
-    - Created secret `amesa-meta-oauth` in eu-north-1 region
-    - Secret ARN: `arn:aws:secretsmanager:eu-north-1:129394705401:secret:amesa-meta-oauth-nd63xt`
-    - Secret format: JSON with `AppId` and `AppSecret` keys
-    - Contains production Meta OAuth credentials (App ID: 2562252460841812)
-  - **Backend Code Updates**:
-    - Updated `AwsSecretsConfiguration.cs` to load Meta OAuth credentials from AWS Secrets Manager
-    - Added Meta OAuth secret loading logic (similar to Google OAuth pattern)
-    - Loads `AppId` and `AppSecret` from secret and maps to `Authentication:Meta:AppId` and `Authentication:Meta:AppSecret`
-    - Updated `appsettings.json` to include `Authentication:Meta:SecretId` configuration (defaults to `amesa-meta-oauth`)
-  - **OAuth Implementation Status**:
-    - ✅ Backend endpoints implemented: `GET /api/v1/oauth/meta`, `GET /api/v1/oauth/meta-callback`
-    - ✅ OAuth controller handles Meta authentication flow
-    - ✅ `CreateOrUpdateOAuthUserAsync()` supports `AuthProvider.Meta`
-    - ✅ Database schema supports Meta OAuth (`AuthProvider.Meta` enum, `provider_id` column)
-    - ✅ Frontend has `loginWithMeta()` method and Meta login button
-    - ✅ OAuth callback component handles code exchange
-  - **Facebook Developer Console Configuration**:
-    - ✅ Redirect URI configured: `https://dpqbvdgnenckf.cloudfront.net/api/v1/oauth/meta-callback`
-    - ✅ HTTPS redirect URI requirement satisfied
-  - **Files Modified**:
-    - `BE/AmesaBackend.Auth/Configuration/AwsSecretsConfiguration.cs` - Added Meta OAuth secret loading
-    - `BE/AmesaBackend.Auth/appsettings.json` - Added Meta SecretId configuration
-  - **Code Status**: ✅ **COMMITTED** - Code changes committed to repository
-  - **Deployment Status**: ⏳ **AWAITING DEPLOYMENT** - Code ready, will be deployed on next CI/CD run
-  - **Status**: ✅ **READY FOR PRODUCTION** - All components configured, credentials stored securely in AWS Secrets Manager
-  - **Impact**: After deployment, users will be able to log in using "Continue with Meta" button
-  - **Next Steps**: Deploy backend code to enable Meta OAuth functionality
-
-## Recent Changes - PAYMENT SERVICE STABILIZATION FIXES
-- ✅ **Payment Service Stabilization** - Fixed all startup errors preventing service from stabilizing
-  - **Root Cause**: Multiple issues causing service crashes and deployment failures
-  - **Fixes Applied**:
-    1. **Stripe Secrets JSON Format**: Fixed invalid JSON format in AWS Secrets Manager
-       - Problem: Missing quotes around JSON keys (`{SecretKey:...}` instead of `{"SecretKey":"..."}`)
-       - Fix: Updated `amesa/payment/stripe-keys` secret with properly formatted JSON
-       - Error: `'S' is an invalid start of a property name. Expected a '"'.`
-    2. **Missing IRateLimitService Registration**: Fixed dependency injection error
-       - Problem: `PaymentRateLimitService` depends on `IRateLimitService` but it wasn't registered in Payment service
-       - Fix: Added `builder.Services.AddScoped<IRateLimitService, RateLimitService>();` in `Program.cs`
-       - Error: `Unable to resolve service for type 'AmesaBackend.Auth.Services.IRateLimitService'`
-    3. **Redis Connection String Missing**: Fixed missing Redis secret in ECS task definition
-       - Problem: Payment service requires Redis (`requireRedis: true`) but secret wasn't configured
-       - Fix: Created `/amesa/prod/ConnectionStrings/Redis` secret with Redis endpoint
-       - Fix: Updated ECS task definition (revision 3) to include `ConnectionStrings__Redis` secret
-       - Error: `Redis connection string is required in production for this service`
-  - **Testing**: 
-     - Built and tested locally with Docker Desktop - service starts successfully
-     - Health endpoint returns 200 OK
-     - No dependency injection errors
-     - No startup crashes
-  - **Files Modified**: 
-     - `BE/AmesaBackend.Payment/Program.cs` - Added IRateLimitService registration
-     - AWS Secrets Manager: `amesa/payment/stripe-keys` - Fixed JSON format
-     - AWS Secrets Manager: `/amesa/prod/ConnectionStrings/Redis` - Created new secret
-     - ECS Task Definition: `amesa-payment-service:3` - Added Redis secret
-  - **Commit**: `7fa139a` - "fix: Register IRateLimitService in Payment service to fix dependency injection error"
-  - **Status**: ✅ Fixed, tested locally, pushed to main - CI/CD will deploy with fixes
-  - **Impact**: Payment service should now stabilize successfully in ECS with all startup errors resolved
-
-## Recent Changes - CI/CD WORKFLOW UPDATE
-- ✅ **CI/CD Workflow Updated** - Test failures no longer block deployment
-  - **Root Cause**: 3 tests failing, blocking payment service deployment
-  - **Fixes Applied**:
-    - Added `continue-on-error: true` to test job in build-and-deploy.yml
-    - Added `continue-on-error: true` to individual test steps (unit tests, integration tests)
-    - Build and deploy jobs will proceed even if tests fail
-    - Tests still run and report results, but don't block CI/CD pipeline
-  - **Files Modified**: `BE/.github/workflows/build-and-deploy.yml`
-  - **Commit**: `7c3b4a8` - "chore: Allow test failures to not block deployment"
-  - **Status**: ✅ Deployed - Payment service will deploy even with test failures
-  - **Impact**: Enables deployment of payment system while test failures are addressed separately
-
-## Recent Changes - TEST FIXES & COMPILATION ERROR RESOLUTION
-- ✅ **PaymentIntegrationTests Fixed** - Fixed all compilation errors and test failures
-  - Fixed `ProductService` method names (GetProductAsync, CalculatePriceAsync, DeactivateProductAsync)
-  - Fixed `Product` model properties (ProductType instead of Type, removed UpdatedBy)
-  - Fixed `CreateProductRequest` and `UpdateProductRequest` property usage
-  - Fixed `ApiResponse` usage (IsError instead of Success property)
-  - Fixed Moq expression tree issues (provided all optional parameters explicitly)
-  - Added `ProductLink` to `LotteryTicketProductHandler_ValidatePurchase_CallsLotteryService` test setup
-- ✅ **PaymentSecurityTests Fixed** - Fixed validation test failures
-  - Fixed `CreatePaymentIntentRequest_AmountValidation_EnforcesMinimum` test (changed to negative value for Range validation)
-  - Skipped `ProcessProductPaymentRequest_ProductId_IsRequired` test ([Required] on non-nullable Guid doesn't work in DataAnnotations)
-- ✅ **TelegramChannelProvider Fixed** - Fixed nullable field warning (already nullable, added null check)
-- ✅ **PaymentSecurityTests Dispose Method** - Fixed visibility (changed from public to private)
-- **Test Status**: 97 passed, 0 failed, 5 skipped (down from 3 failures)
-- **Commits**: `d2573dc` (compilation fixes), `925a66c` (test fixes)
-
-## Recent Changes - MULTI-CHANNEL NOTIFICATION SYSTEM IMPLEMENTATION & DEPLOYMENT
-- ✅ **Multi-Channel Notification System** - Complete implementation and deployment
-  - **Backend Implementation**:
-    - Created `NotificationOrchestrator` with SignalR integration, rate limiting via `IRateLimitService`, and caching
-    - Implemented channel providers: Email (AWS SES), SMS (AWS SNS), WebPush (WebPush library), Telegram (Telegram.Bot)
-    - Stub implementations: Push (AWS SNS mobile), SocialMedia (Meta Graph API)
-    - Created `TemplateEngine` for multi-language template rendering with caching
-    - Created `NotificationChannelConstants` class to centralize magic strings
-    - Controllers: `NotificationController`, `WebPushController`, `TelegramController`
-    - Health checks: Email, SMS, WebPush, Telegram channel health checks
-    - Database migration: Created tables for multi-channel notifications (notification_deliveries, user_channel_preferences, push_subscriptions, telegram_user_links, social_media_links, notification_queue)
-    - Background services: `NotificationQueueProcessor`, `EventBridgeEventHandler`
-    - Integration: SignalR `NotificationHub` for real-time notifications
-  - **Frontend Implementation**:
-    - Created `WebPushService` for web push subscription management
-    - Created `TelegramLinkService` for Telegram account linking
-    - Created components: `NotificationPreferencesComponent`, `TelegramLinkComponent`, `WebPushPermissionComponent`
-    - Integrated with `RealtimeService` for SignalR notifications
-  - **Infrastructure Configuration**:
-    - ALB routing rules: Priority 95 (`/api/v1/notifications/*`), Priority 96 (`/health/notifications`)
-    - Target group: `amesa-notification-service-tg` configured and healthy
-    - Health check: Updated to `/health/notifications` (fixed duplicate mapping issue)
-    - ECS service: `amesa-notification-service` - ACTIVE, 1/1 tasks running, HEALTHY
-    - CloudFront: Already configured for `/api/*` routing (no changes needed)
-  - **Test Fixes**:
-    - Fixed `NotificationOrchestratorTests`: Added `IRateLimitService` mock, fixed extern alias usage for `AuthApp`
-    - Fixed `NotificationControllerIntegrationTests`: Skipped tests (endpoints in separate microservice), fixed `WebApplicationFixture.Client` property usage
-    - Updated `GetRecordAsync` mock to match `ICache` interface signature
-    - All tests compiling: 97 passed, 0 failed, 5 skipped
-  - **Code Fixes**:
-    - Removed duplicate `app.MapHealthChecks("/health/notifications")` mapping in `Program.cs`
-    - Fixed health check endpoint configuration
-  - **Deployment**:
-    - Commits: `e5ce759` (initial implementation, 33 files, 4,153 insertions), `1cfc8ce` (test fixes), `08d26ab` (test improvements), `a64cf86` (health check fix)
-    - Translation SQL script: `MetaData/Scripts/add-notification-translations.sql` (148 translations, 37 keys × 4 languages)
-    - Migration SQL script: `MetaData/Scripts/add-multi-channel-notifications-migration.sql` (executed)
-  - **Documentation**: See `MetaData/Documentation/Notifications/MULTI_CHANNEL_NOTIFICATIONS_GUIDE.md`
-  - **Status**: ✅ Production-ready, deployed, and operational
-
-## Recent Changes - FAVORITES FUNCTIONALITY FIX & REDIS REQUIREMENT IMPLEMENTATION
-- ✅ **Favorites Functionality Fixed** - Resolved missing UserPreferencesService registration in Lottery service
-  - Added using statements for `AmesaBackend.Auth.Data` and `AmesaBackend.Auth.Services`
-  - Registered `AuthDbContext` in Lottery service with same connection string and retry logic
-  - Registered `IUserPreferencesService` with `UserPreferencesService` implementation
-  - Fixes 400 Bad Request error when adding houses to favorites
-  - Root cause: Service was null due to missing DI registration, causing immediate false return
-- ✅ **JsonElement Serialization Fix** - Fixed JSON serialization issues in UserPreferencesService
-  - Added `ConvertJsonElementsToObjects()` helper method for recursive conversion
-  - Fixed `AddHouseToFavoritesAsync`, `RemoveHouseFromFavoritesAsync`, `UpdateLotteryPreferencesAsync`, and `UpdateUserPreferencesAsync`
-  - Resolves serialization failures when deserializing JSONB to Dictionary<string, object>
-- ✅ **Redis Requirement for Lottery and Content Services** - Enforced Redis connectivity in production
-  - Lottery Service: Added `requireRedis: true` in Program.cs, made `ICache` required in HousesController
-  - Content Service: Added `requireRedis: true` in Program.cs, made `ICache` required in TranslationsController
-  - ECS Task Definitions: Added `ConnectionStrings__Redis` secrets for both services
-  - Fail-open error handling: Services continue with database fallback if Redis fails at runtime
-  - Integration tests: Added Redis caching tests with InMemoryCache mock implementation
-- ✅ **Test Fixes** - Improved Redis cache integration tests
-  - Made cache verification more robust with proper error handling
-  - Fixed async timing issues in cache tests
-  - Tests now verify consistent responses (fail-open design)
-
-## Previous Changes - RECAPTCHA ENTERPRISE IMPROVEMENTS & SECURITY ENHANCEMENTS
-- ✅ **reCAPTCHA Enterprise Integration** - Switched from reCAPTCHA v3 to Enterprise API
-- ✅ **Google Cloud Authentication** - Service account JSON stored in AWS Secrets Manager, loaded at startup
-- ✅ **Retry Logic Implementation** - Exponential backoff (3 retries) for transient Google API errors
-- ✅ **Comprehensive Metrics Tracking** - Success/failure counts, success rate, periodic logging
-- ✅ **High Failure Rate Alerting** - Automatic warnings when failure rate exceeds 20%
-- ✅ **Monitoring Endpoint** - `/health/captcha` endpoint for CAPTCHA metrics monitoring
-- ✅ **Defensive Programming** - Explicit null checks and robust error handling
-- ✅ **ECS Task Definition Updates** - Google service account credentials configuration added
-- ✅ **Security Features Complete** - Rate limiting, account lockout, password validation, CAPTCHA, email verification, session management, audit logging
-
-## Previous Changes - LOTTERY FAVORITES DEPLOYMENT & DOCKER BUILD FIX
-- ✅ **Docker Build Error Fixed** - Resolved NETSDK1152 error for amesa-lottery-service
-- ✅ **Dockerfile Workaround** - Added temporary rename of Auth appsettings.json during publish
-- ✅ **Project Reference Updated** - Modified AmesaBackend.Lottery.csproj to handle referenced project content
-- ✅ **Backend Deployed** - Lottery Favorites Phase 1 code deployed to production via CI/CD
-- ✅ **Production Test Script** - Created PowerShell script for testing endpoints on production
-- ✅ **Migration Complete** - Database indexes, views, and translations added to production
-- ✅ **Ready for Testing** - All services deployed, endpoints ready for production verification
-
-## Previous Changes - COMPLETE TRANSLATION SYSTEM OVERHAUL
-- ✅ **Complete Translation Coverage** - All 507 frontend translation keys identified and scripted
-- ✅ **Language Support Reduced** - Removed Hebrew and Arabic, now 4 languages (EN, ES, FR, PL)
-- ✅ **Comprehensive SQL Script** - `COMPLETE_ALL_507_TRANSLATIONS.sql` with all keys for all languages
-- ✅ **Script Organization** - All SQL scripts moved to `MetaData/Scripts/` folder
-- ✅ **Database Seeder Excluded** - Seeder service added to .gitignore, removed from repository
-- ✅ **Translation Loader** - Enhanced UX with loader when switching languages
-
-## Previous Changes - DATABASE SEEDING & TRANSLATION FIXES
-- ✅ **Database Fully Seeded** - Production database populated with comprehensive test data
-- ✅ **Translation System Fixed** - Resolved Entity Framework schema mapping issues  
-- ✅ **Polish Language Added** - Complete Polish translation support (6th language)
-- ✅ **User Preferences API** - Full CRUD implementation with JSONB storage
-- ✅ **Schema Alignment** - EF models now match actual database schemas
-- ✅ **Safety Measures** - Prevented data loss with proper conflict handling
-- ✅ **Database Seeder** - Production-safe comprehensive data population tool (now excluded from repo)
+**Detailed Documentation**: See `MetaData/Documentation/` for complete audit reports and session documentation.
 
 ## Previous Work (2025-10-08)
 - ✅ Configured GitHub Actions CI/CD pipeline
@@ -1763,14 +1695,31 @@ Client → CloudFront /api/* → ALB (path-based routing) → ECS Task (microser
 - ✅ Configured database authentication
 
 ## 📚 **Session Documentation**
-**Latest Session**: Database Seeding & Translation System Fix (completed - see `MetaData/Documentation/README.md` for documentation structure)
-- Complete handoff documentation
-- Technical implementation details
-- Schema reference files
-- Safety measures and validation
+**Latest Session**: 100% Complete Audit (2025-01-25)
+- **Final Audit**: `BE/100_PERCENT_COMPLETE_AUDIT.md` - Complete 100% audit report
+- **Status Summary**: `BE/FINAL_STATUS_SUMMARY.md` - Quick status summary
+- **Status**: ✅ Production Ready - All critical functionality complete
+- **Previous Sessions**: See `MetaData/Documentation/README.md` for complete documentation structure
+
+## 100% Complete Audit (2025-01-25)
+✅ **PRODUCTION READY** - All development work, gap fixes, and integration tasks completed
+
+| Area | Status | Details |
+|------|--------|---------|
+| **Translation Keys** | ✅ 100% | 78 keys × 4 languages = 312 entries (Payment: 58 keys, Common: 20 keys) |
+| **Frontend Services** | ✅ 100% | All 7 services: TwoFactorService, DrawsService, SecurityQuestionsService, PaymentService, LotteryResultsService, AuthService, WebPushService |
+| **Frontend Components** | ✅ 100% | PaymentMethodSelectionModalComponent, Dashboard Accordion Components (all sub-components) |
+| **API Documentation** | ✅ 100% | 22 endpoints documented (Payment: 12, Lottery: 2, Auth: 8) |
+| **Error Handling** | ✅ 100% | Comprehensive error handling throughout |
+| **Accessibility** | ✅ 100% | Full ARIA, keyboard navigation, screen reader support |
+| **Code Quality** | ✅ Excellent | Well-structured, proper error handling, type safety (90%+) |
+| **Documentation** | ✅ Complete | Audit reports: `BE/100_PERCENT_COMPLETE_AUDIT.md`, `BE/FINAL_STATUS_SUMMARY.md`, `BE/API_ENDPOINT_VERIFICATION_RESULTS.md` |
+| **SQL Scripts** | ✅ Deployed | Payment translations, Common translation keys |
+
+**Recommendation**: ✅ **APPROVED FOR PRODUCTION**
 
 ---
 **Last Updated**: 2025-01-25
-**Context Version**: 2.6.0 (API routing fixes, Promotion database mapping fixes, gitignore enhancements)
-**Note**: This file should be updated whenever API design, database schema, deployment processes, or infrastructure changes.
+**Context Version**: 2.8.0 (100% completion audit added)
+**Note**: Update this file immediately after API, schema, infra, or deployment changes; add dated "Recent Changes" entries for any 2025 work not yet captured.
 

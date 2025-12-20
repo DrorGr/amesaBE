@@ -51,6 +51,10 @@
         {
           "name": "Stripe__WebhookSecret",
           "valueFrom": "arn:aws:secretsmanager:eu-north-1:129394705401:secret:amesa/payment/stripe-keys-hZZEUq:WebhookSecret::"
+        },
+        {
+          "name": "SERVICE_AUTH_API_KEY",
+          "valueFrom": "/amesa/prod/ServiceAuth/ApiKey"
         }
       ],
       "logConfiguration": {

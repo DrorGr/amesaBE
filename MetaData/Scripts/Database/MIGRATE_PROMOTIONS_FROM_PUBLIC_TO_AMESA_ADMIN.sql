@@ -108,3 +108,8 @@ ORDER BY tablename, indexname;
 -- 4. Always backup your database before running migration scripts
 -- ============================================================
 
+
+
+
+
+
