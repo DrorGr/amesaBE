@@ -128,9 +128,21 @@ namespace AmesaBackend.Shared.Middleware.ErrorHandling
                         };
                         break;
                     case DbException e:
-                        statusCode = (int)HttpStatusCode.InternalServerError;
-                        errorCode = "DATABASE_ERROR";
-                        errorMessage = "A database error occurred.";
+                        // Check if it's a database connectivity issue (DbUpdateException from EF Core)
+                        // DbUpdateException inherits from DbException, so we check by exception type name
+                        var exceptionTypeName = e.GetType().FullName;
+                        if (exceptionTypeName != null && exceptionTypeName.Contains("DbUpdateException"))
+                        {
+                            statusCode = (int)HttpStatusCode.ServiceUnavailable;
+                            errorCode = "SERVICE_UNAVAILABLE";
+                            errorMessage = "Service is temporarily unavailable. Please try again later.";
+                        }
+                        else
+                        {
+                            statusCode = (int)HttpStatusCode.InternalServerError;
+                            errorCode = "DATABASE_ERROR";
+                            errorMessage = "A database error occurred.";
+                        }
                         errorResponse = new StandardErrorResponse
                         {
                             Code = errorCode,
