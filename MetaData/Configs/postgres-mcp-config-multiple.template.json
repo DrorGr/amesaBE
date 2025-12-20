@@ -1,0 +1,84 @@
+{
+  "mcpServers": {
+    "postgres-auth": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres"
+      ],
+      "env": {
+        "POSTGRES_CONNECTION_STRING": "postgresql://USERNAME:PASSWORD@HOST:PORT/DATABASE?sslmode=require&options=-csearch_path%3Damesa_auth"
+      }
+    },
+    "postgres-lottery": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres"
+      ],
+      "env": {
+        "POSTGRES_CONNECTION_STRING": "postgresql://USERNAME:PASSWORD@HOST:PORT/DATABASE?sslmode=require&options=-csearch_path%3Damesa_lottery"
+      }
+    },
+    "postgres-payment": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres"
+      ],
+      "env": {
+        "POSTGRES_CONNECTION_STRING": "postgresql://USERNAME:PASSWORD@HOST:PORT/DATABASE?sslmode=require&options=-csearch_path%3Damesa_payment"
+      }
+    },
+    "postgres-notification": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres"
+      ],
+      "env": {
+        "POSTGRES_CONNECTION_STRING": "postgresql://USERNAME:PASSWORD@HOST:PORT/DATABASE?sslmode=require&options=-csearch_path%3Damesa_notification"
+      }
+    },
+    "postgres-content": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres"
+      ],
+      "env": {
+        "POSTGRES_CONNECTION_STRING": "postgresql://USERNAME:PASSWORD@HOST:PORT/DATABASE?sslmode=require&options=-csearch_path%3Damesa_content"
+      }
+    },
+    "postgres-lottery-results": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres"
+      ],
+      "env": {
+        "POSTGRES_CONNECTION_STRING": "postgresql://USERNAME:PASSWORD@HOST:PORT/DATABASE?sslmode=require&options=-csearch_path%3Damesa_lottery_results"
+      }
+    },
+    "postgres-analytics": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres"
+      ],
+      "env": {
+        "POSTGRES_CONNECTION_STRING": "postgresql://USERNAME:PASSWORD@HOST:PORT/DATABASE?sslmode=require&options=-csearch_path%3Damesa_analytics"
+      }
+    },
+    "postgres-admin": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres"
+      ],
+      "env": {
+        "POSTGRES_CONNECTION_STRING": "postgresql://USERNAME:PASSWORD@HOST:PORT/DATABASE?sslmode=require&options=-csearch_path%3Damesa_admin"
+      }
+    }
+  }
+}

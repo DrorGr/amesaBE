@@ -52,9 +52,10 @@ namespace AmesaBackend.Lottery.Controllers
             [FromQuery] string? sortBy = null,
             [FromQuery] string? sortOrder = null)
         {
+            Guid? userId = null;
             try
             {
-                var userId = GetCurrentUserId();
+                userId = GetCurrentUserId();
                 if (userId == null)
                 {
                     return Unauthorized(new AmesaBackend.Lottery.DTOs.ApiResponse<PagedResponse<HouseDto>>
@@ -187,9 +188,22 @@ namespace AmesaBackend.Lottery.Controllers
                     Message = "Favorite houses retrieved successfully"
                 });
             }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+            {
+                _logger.LogError(dbEx, "Database error retrieving favorite houses for user {UserId}", userId);
+                return StatusCode(503, new AmesaBackend.Lottery.DTOs.ApiResponse<PagedResponse<HouseDto>>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "SERVICE_UNAVAILABLE",
+                        Message = "Service is temporarily unavailable. Please try again later."
+                    }
+                });
+            }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error retrieving favorite houses");
+                _logger.LogError(ex, "Error retrieving favorite houses for user {UserId}: {Message}", userId, ex.Message);
                 return StatusCode(500, new AmesaBackend.Lottery.DTOs.ApiResponse<PagedResponse<HouseDto>>
                 {
                     Success = false,
@@ -604,9 +618,10 @@ namespace AmesaBackend.Lottery.Controllers
         [Authorize]
         public async Task<ActionResult<AmesaBackend.Lottery.DTOs.ApiResponse<object>>> GetFavoriteHousesCount()
         {
+            Guid? userId = null;
             try
             {
-                var userId = GetCurrentUserId();
+                userId = GetCurrentUserId();
                 if (userId == null)
                 {
                     return Unauthorized(new AmesaBackend.Lottery.DTOs.ApiResponse<object>
@@ -625,9 +640,22 @@ namespace AmesaBackend.Lottery.Controllers
                     Message = "Favorite houses count retrieved successfully"
                 });
             }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+            {
+                _logger.LogError(dbEx, "Database error retrieving favorite houses count for user {UserId}", userId);
+                return StatusCode(503, new AmesaBackend.Lottery.DTOs.ApiResponse<object>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "SERVICE_UNAVAILABLE",
+                        Message = "Service is temporarily unavailable. Please try again later."
+                    }
+                });
+            }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error retrieving favorite houses count");
+                _logger.LogError(ex, "Error retrieving favorite houses count for user {UserId}: {Message}", userId, ex.Message);
                 return StatusCode(500, new AmesaBackend.Lottery.DTOs.ApiResponse<object>
                 {
                     Success = false,

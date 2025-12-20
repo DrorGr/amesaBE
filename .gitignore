@@ -454,6 +454,11 @@ appsettings.*.json
 stripe-secret*.json
 *secret*.json
 
+# PostgreSQL MCP configuration files with credentials
+MetaData/Configs/postgres-mcp-config.json
+MetaData/Configs/postgres-mcp-config-multiple.json
+MetaData/Configs/postgres-mcp-config-params.json
+
 # Database Seeder Service (not for production deployment)
 AmesaBackend.DatabaseSeeder/
 **/DatabaseSeeder.cs

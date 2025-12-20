@@ -812,11 +812,11 @@ Pieces MCP provides access to Long-Term Memory (LTM-2.7) engine, allowing agents
 - **Resource Discovery**: Access saved code snippets, bookmarks, and notes
 - **Workflow Efficiency**: Faster problem-solving with historical context
 
-### Prerequisites
-- **PiecesOS**: Must be installed and running (check system tray/processes)
-- **Long-Term Memory Engine (LTM-2.7)**: Must be enabled in PiecesOS
-- **MCP Configuration**: Pieces MCP server must be configured in Cursor Settings
-- **Tool Availability**: `ask_pieces_ltm` tool is automatically available in **ALL modes** (Auto, Agent, Manual) when MCP server is configured
+### Prerequisites (Optional)
+- **PiecesOS**: Optional - Can be installed and running (check system tray/processes) if you want to use Pieces MCP
+- **Long-Term Memory Engine (LTM-2.7)**: Optional - Can be enabled in PiecesOS if you want LTM features
+- **MCP Configuration**: Optional - Pieces MCP server can be configured in Cursor Settings if desired
+- **Tool Availability**: `ask_pieces_ltm` tool is automatically available in **ALL modes** (Auto, Agent, Manual) when MCP server is configured, but it's **optional to use**
 
 **Setup Documentation**: See `MetaData/Documentation/Development/PIECES_MCP_INTEGRATION.md` for complete setup instructions.
 
@@ -866,31 +866,31 @@ Pieces MCP provides access to Long-Term Memory (LTM-2.7) engine, allowing agents
 ### Agent Workflow Integration
 
 #### Automatic Usage in All Modes
-**CRITICAL**: Pieces MCP works in **ALL modes** (Auto, Agent, Manual). The `ask_pieces_ltm` tool is automatically available when MCP server is configured.
+**Note**: Pieces MCP works in **ALL modes** (Auto, Agent, Manual). The `ask_pieces_ltm` tool is automatically available when MCP server is configured, but using it is **optional**.
 
-**Best Practice**: Use Auto Mode for seamless integration - agent will automatically use Pieces MCP when appropriate.
+**Best Practice**: Pieces MCP can be helpful for context retrieval, but agents should use standard workflow if Pieces MCP is not available or not desired.
 
-#### On Agent Creation - MANDATORY
-**CRITICAL**: When a new agent session starts, you MUST:
+#### On Agent Creation - Optional Enhancement
+**Note**: When a new agent session starts, you **can optionally** use Pieces MCP for additional context:
 
-1. **ALWAYS Check Pieces MCP First** (MANDATORY):
-   - **Attempt to use `ask_pieces_ltm` tool immediately** - it's a primary context source
-   - If tool is available, use it for all context queries below
-   - If tool is not available, log warning and continue with standard workflow
-   - **NEVER skip Pieces MCP check** - always attempt usage first
+1. **Optional: Check Pieces MCP Availability**:
+   - **Can attempt to use `ask_pieces_ltm` tool** if you want additional context from workflow history
+   - If tool is available and you think it would be helpful, you can use it
+   - If tool is not available or you prefer not to use it, continue with standard workflow
+   - **Pieces MCP is optional** - standard workflow works fine without it
 
-2. **Query Recent Context** (MANDATORY if tool available):
-   - **ALWAYS query**: "What was I working on in this project in the last 24 hours?"
-   - **ALWAYS query**: "What recent changes were made to the authentication system?"
-   - **ALWAYS query**: "Show me recent work on the payment service"
-   - **ALWAYS query**: "What issues or bugs were recently fixed?"
-   - Use these queries to understand project state before starting any work
+2. **Optional: Query Recent Context** (if tool available and desired):
+   - **Can query**: "What was I working on in this project in the last 24 hours?" (if helpful)
+   - **Can query**: "What recent changes were made to the authentication system?" (if helpful)
+   - **Can query**: "Show me recent work on the payment service" (if helpful)
+   - **Can query**: "What issues or bugs were recently fixed?" (if helpful)
+   - Use these queries only if you think they would provide useful context
 
-3. **Understand Current State** (MANDATORY):
-   - "What is the current deployment status?"
-   - "What features are in progress?"
-   - "What technical debt or known issues exist?"
-   - "What recent security fixes were applied?"
+3. **Optional: Understand Current State** (if helpful):
+   - "What is the current deployment status?" (if Pieces MCP might have this info)
+   - "What features are in progress?" (if Pieces MCP might have this info)
+   - "What technical debt or known issues exist?" (if Pieces MCP might have this info)
+   - "What recent security fixes were applied?" (if Pieces MCP might have this info)
 
 #### Automatic Usage Triggers
 
@@ -926,19 +926,19 @@ Pieces MCP provides access to Long-Term Memory (LTM-2.7) engine, allowing agents
    - User asks about research activities
    - Need context about conversations or interactions
 
-#### User Rules for `ask_pieces_ltm` Tool
+#### User Rules for `ask_pieces_ltm` Tool (Optional)
 
-**CRITICAL**: Follow these rules when using the `ask_pieces_ltm` tool:
+**Note**: These are guidelines for when you choose to use the `ask_pieces_ltm` tool (it's optional):
 
-1. **When to Use**:
-   - ✅ User is asking about work completed earlier in the day
-   - ✅ User references names of specific people
-   - ✅ User mentions specific applications
-   - ✅ User asks about research activities
+1. **When to Consider Using**:
+   - ✅ User is asking about work completed earlier in the day (Pieces MCP might have this context)
+   - ✅ User references names of specific people (Pieces MCP might have conversation history)
+   - ✅ User mentions specific applications (Pieces MCP might have activity from those apps)
+   - ✅ User asks about research activities (Pieces MCP might have saved research)
 
-2. **Query Requirements** (MANDATORY):
-   - **MUST specify time ranges** in queries (e.g., "today", "earlier today", "this morning", "last 24 hours")
-   - **MUST include other suggested queries** when appropriate (e.g., related topics, follow-up questions)
+2. **Query Best Practices** (if using the tool):
+   - **Should specify time ranges** in queries for better results (e.g., "today", "earlier today", "this morning", "last 24 hours")
+   - **Can include other suggested queries** when appropriate (e.g., related topics, follow-up questions)
 
 3. **Source Assumptions**:
    - **If keyword 'researching' is used**: Assume primary application source is **Google Chrome**
@@ -990,46 +990,46 @@ Pieces MCP provides access to Long-Term Memory (LTM-2.7) engine, allowing agents
 - ✅ **Understanding architectural decisions** - Query for documented choices
 - ✅ **Finding related code or documentation** - Query for saved resources
 
-**Decision Flow (ALWAYS follow):**
-1. Is `ask_pieces_ltm` tool available? → **YES**: Use it immediately → **NO**: Continue without (log warning)
-2. **Am I stuck?** → **YES**: Query LTM for solutions → **NO**: Continue to next check
-3. **Do I need patterns?** → **YES**: Query LTM for implementations → **NO**: Continue to next check
-4. **Could this task benefit from understanding past work?** → **YES**: Query LTM for related context → **NO**: Continue
-5. Starting new task? → **YES**: Query LTM for related work → **NO**: Continue
+**Optional Decision Flow** (consider Pieces MCP if you think it would help):
+1. Is `ask_pieces_ltm` tool available? → **YES**: Consider using it if helpful → **NO**: Continue with standard workflow
+2. **Am I stuck?** → **YES**: Can query LTM for solutions (optional) → **NO**: Continue to next check
+3. **Do I need patterns?** → **YES**: Can query LTM for implementations (optional) → **NO**: Continue to next check
+4. **Could this task benefit from understanding past work?** → **YES**: Can query LTM for related context (optional) → **NO**: Continue
+5. Starting new task? → **YES**: Can query LTM for related work (optional) → **NO**: Continue
 
 #### During Task Execution
 
-**Before Starting Work** (MANDATORY):
-1. **ALWAYS Query LTM First** for related previous work:
-   - "Have I worked on similar [feature/task] before?"
-   - "What patterns or solutions did I use for [similar requirement]?"
-   - "Show me previous implementations of [component type]"
-   - "How did I handle [similar requirement] in other services?"
+**Before Starting Work** (Optional Enhancement):
+1. **Optional: Query LTM for related previous work** (if Pieces MCP is available and you think it would help):
+   - "Have I worked on similar [feature/task] before?" (if helpful)
+   - "What patterns or solutions did I use for [similar requirement]?" (if helpful)
+   - "Show me previous implementations of [component type]" (if helpful)
+   - "How did I handle [similar requirement] in other services?" (if helpful)
 
-2. **ALWAYS Check for Existing Solutions**:
-   - "How did I solve [similar problem] before?"
-   - "What approaches have been tried for [issue type]?"
-   - "Are there existing patterns I should follow for [feature]?"
-   - "What was my approach to [similar task]?"
+2. **Optional: Check for Existing Solutions** (if Pieces MCP is available):
+   - "How did I solve [similar problem] before?" (if helpful)
+   - "What approaches have been tried for [issue type]?" (if helpful)
+   - "Are there existing patterns I should follow for [feature]?" (if helpful)
+   - "What was my approach to [similar task]?" (if helpful)
 
-**When Stuck** (MANDATORY):
-**CRITICAL**: When stuck, ALWAYS query Pieces MCP FIRST before trying other approaches.
+**When Stuck** (Optional Enhancement):
+**Note**: When stuck, you **can optionally** query Pieces MCP for solutions, but standard troubleshooting approaches work fine too.
 
-1. **ALWAYS Query LTM First** for solutions:
-   - "How did I solve [similar problem] before?"
-   - "Show me examples of [pattern/technique] I've used"
-   - "What resources did I save about [topic]?"
-   - "How did I handle [similar deployment/configuration issue]?"
-   - "What approaches have been tried for [issue type]?"
+1. **Optional: Query LTM for solutions** (if Pieces MCP is available and you think it would help):
+   - "How did I solve [similar problem] before?" (if helpful)
+   - "Show me examples of [pattern/technique] I've used" (if helpful)
+   - "What resources did I save about [topic]?" (if helpful)
+   - "How did I handle [similar deployment/configuration issue]?" (if helpful)
+   - "What approaches have been tried for [issue type]?" (if helpful)
 
-2. **ALWAYS Find Related Context**:
-   - "What documentation exists about [topic]?"
-   - "Show me code snippets related to [feature]"
-   - "What decisions were made about [architectural choice]?"
-   - "How did I configure [service/tool] before?"
+2. **Optional: Find Related Context** (if Pieces MCP is available):
+   - "What documentation exists about [topic]?" (if helpful)
+   - "Show me code snippets related to [feature]" (if helpful)
+   - "What decisions were made about [architectural choice]?" (if helpful)
+   - "How did I configure [service/tool] before?" (if helpful)
 
-**When Needing Patterns** (MANDATORY):
-**CRITICAL**: When you need patterns or examples, ALWAYS query Pieces MCP FIRST.
+**When Needing Patterns** (Optional Enhancement):
+**Note**: When you need patterns or examples, you **can optionally** query Pieces MCP, but codebase search and standard approaches work fine too.
 
 1. **Query for Implementation Patterns**:
    - "Show me examples of [pattern/technique] I've used in this project"
@@ -1042,23 +1042,23 @@ Pieces MCP provides access to Long-Term Memory (LTM-2.7) engine, allowing agents
    - "What was my implementation approach for [similar task]?"
    - "How did I structure [similar component/service]?"
 
-**When Task Could Benefit from Past Work** (MANDATORY):
-**CRITICAL**: Before starting any task, evaluate if understanding past work would help. If yes, ALWAYS query Pieces MCP.
+**When Task Could Benefit from Past Work** (Optional Enhancement):
+**Note**: Before starting any task, you **can optionally** query Pieces MCP if you think understanding past work would help, but it's not required.
 
-1. **Query for Related Previous Work**:
-   - "Have I worked on similar [feature/task] before?"
-   - "What was my approach to [similar task]?"
-   - "What decisions were made about [related feature]?"
-   - "How did I handle [similar requirement] in other services?"
+1. **Optional: Query for Related Previous Work** (if Pieces MCP is available and helpful):
+   - "Have I worked on similar [feature/task] before?" (if helpful)
+   - "What was my approach to [similar task]?" (if helpful)
+   - "What decisions were made about [related feature]?" (if helpful)
+   - "How did I handle [similar requirement] in other services?" (if helpful)
 
-2. **Query for Context and History**:
-   - "What is the history of [feature/component]?"
-   - "Why was [decision/approach] chosen?"
-   - "What challenges were encountered with [related feature]?"
-   - "What lessons were learned from [previous implementation]?"
+2. **Optional: Query for Context and History** (if Pieces MCP is available):
+   - "What is the history of [feature/component]?" (if helpful)
+   - "Why was [decision/approach] chosen?" (if helpful)
+   - "What challenges were encountered with [related feature]?" (if helpful)
+   - "What lessons were learned from [previous implementation]?" (if helpful)
 
-**After Completing Work** (MANDATORY):
-**CRITICAL**: After completing significant work, use `create_pieces_memory` to document important context.
+**After Completing Work** (Optional Enhancement):
+**Note**: After completing significant work, you **can optionally** use `create_pieces_memory` to document important context for future reference, but it's not required.
 
 1. **Evaluate if Memory is Needed**:
    - Was this a significant implementation or decision?
