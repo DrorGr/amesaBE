@@ -31,4 +31,10 @@
     <ProjectReference Include="..\AmesaBackend.Notification\AmesaBackend.Notification.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Exclude appsettings.json files from referenced projects to prevent publish conflicts -->
+    <Content Remove="..\**\appsettings*.json" />
+    <None Remove="..\**\appsettings*.json" />
+  </ItemGroup>
+
 </Project>
