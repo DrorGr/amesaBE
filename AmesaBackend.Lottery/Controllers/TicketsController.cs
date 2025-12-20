@@ -99,10 +99,11 @@ namespace AmesaBackend.Lottery.Controllers
         [HttpGet("active")]
         public async Task<ActionResult<AmesaBackend.Lottery.DTOs.ApiResponse<List<LotteryTicketDto>>>> GetActiveEntries()
         {
+            Guid? userId = null;
             try
             {
                 var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (userIdClaim == null || !Guid.TryParse(userIdClaim, out var userId))
+                if (userIdClaim == null || !Guid.TryParse(userIdClaim, out var parsedUserId))
                 {
                     return Unauthorized(new AmesaBackend.Lottery.DTOs.ApiResponse<List<LotteryTicketDto>>
                     {
@@ -110,8 +111,9 @@ namespace AmesaBackend.Lottery.Controllers
                         Message = "User not authenticated"
                     });
                 }
+                userId = parsedUserId;
 
-                var activeEntries = await _lotteryService.GetUserActiveEntriesAsync(userId);
+                var activeEntries = await _lotteryService.GetUserActiveEntriesAsync(userId.Value);
 
                 return Ok(new AmesaBackend.Lottery.DTOs.ApiResponse<List<LotteryTicketDto>>
                 {
@@ -265,10 +267,11 @@ namespace AmesaBackend.Lottery.Controllers
         [HttpGet("analytics")]
         public async Task<ActionResult<AmesaBackend.Lottery.DTOs.ApiResponse<UserLotteryStatsDto>>> GetAnalytics()
         {
+            Guid? userId = null;
             try
             {
                 var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (userIdClaim == null || !Guid.TryParse(userIdClaim, out var userId))
+                if (userIdClaim == null || !Guid.TryParse(userIdClaim, out var parsedUserId))
                 {
                     return Unauthorized(new AmesaBackend.Lottery.DTOs.ApiResponse<UserLotteryStatsDto>
                     {
@@ -276,8 +279,9 @@ namespace AmesaBackend.Lottery.Controllers
                         Message = "User not authenticated"
                     });
                 }
+                userId = parsedUserId;
 
-                var stats = await _lotteryService.GetUserLotteryStatsAsync(userId);
+                var stats = await _lotteryService.GetUserLotteryStatsAsync(userId.Value);
 
                 return Ok(new AmesaBackend.Lottery.DTOs.ApiResponse<UserLotteryStatsDto>
                 {

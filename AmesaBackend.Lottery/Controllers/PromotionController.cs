@@ -435,11 +435,12 @@ namespace AmesaBackend.Lottery.Controllers
         public async Task<ActionResult<ApiResponse<List<PromotionDto>>>> GetAvailablePromotions(
             [FromQuery] Guid? houseId)
         {
+            Guid? userId = null;
             try
             {
                 // Get user ID from claims
                 var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (userIdClaim == null || !Guid.TryParse(userIdClaim, out var userId))
+                if (userIdClaim == null || !Guid.TryParse(userIdClaim, out var parsedUserId))
                 {
                     return Unauthorized(new ApiResponse<List<PromotionDto>>
                     {
@@ -448,8 +449,9 @@ namespace AmesaBackend.Lottery.Controllers
                         Error = new ErrorResponse { Code = "UNAUTHORIZED" }
                     });
                 }
+                userId = parsedUserId;
 
-                var promotions = await _promotionService.GetAvailablePromotionsAsync(userId, houseId);
+                var promotions = await _promotionService.GetAvailablePromotionsAsync(userId.Value, houseId);
                 return Ok(new ApiResponse<List<PromotionDto>>
                 {
                     Success = true,

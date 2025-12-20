@@ -32,10 +32,11 @@ namespace AmesaBackend.Lottery.Controllers
         [HttpGet]
         public async Task<ActionResult<StandardApiResponse<UserGamificationDto>>> GetUserGamification()
         {
+            Guid? userId = null;
             try
             {
                 var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+                if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var parsedUserId))
                 {
                     return Unauthorized(new StandardApiResponse<UserGamificationDto>
                     {
@@ -47,8 +48,9 @@ namespace AmesaBackend.Lottery.Controllers
                         }
                     });
                 }
+                userId = parsedUserId;
 
-                var gamification = await _gamificationService.GetUserGamificationAsync(userId);
+                var gamification = await _gamificationService.GetUserGamificationAsync(userId.Value);
                 
                 return Ok(new StandardApiResponse<UserGamificationDto>
                 {
