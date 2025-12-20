@@ -31,10 +31,15 @@
     <ProjectReference Include="..\AmesaBackend.Auth\AmesaBackend.Auth.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <!-- Exclude appsettings.json files from referenced projects to prevent publish conflicts -->
-    <Content Remove="..\**\appsettings*.json" />
-    <None Remove="..\**\appsettings*.json" />
-  </ItemGroup>
+  <Target Name="ExcludeReferencedAppSettings" BeforeTargets="ComputeFilesToPublish">
+    <ItemGroup>
+      <_AppSettingsFiles Include="@(ResolvedFileToPublish)" 
+        Condition="'%(ResolvedFileToPublish.RelativePath)' == 'appsettings.json' OR 
+                   '%(ResolvedFileToPublish.RelativePath)' == 'appsettings.Development.json' OR 
+                   '%(ResolvedFileToPublish.RelativePath)' == 'appsettings.Production.json'" />
+      <ResolvedFileToPublish Remove="@(_AppSettingsFiles)" 
+        Condition="!$([System.String]::Copy('%(Identity)').Contains('AmesaBackend.Notification'))" />
+    </ItemGroup>
+  </Target>
 
 </Project>
