@@ -58,8 +58,9 @@ namespace AmesaBackend.Lottery.Services
                         var strategy = context.Database.CreateExecutionStrategy();
                         await strategy.ExecuteAsync(async () =>
                         {
+                            // Use ReadCommitted instead of Serializable to reduce lock contention and deadlock potential
                             await using var transaction = await context.Database.BeginTransactionAsync(
-                                System.Data.IsolationLevel.Serializable, stoppingToken);
+                                System.Data.IsolationLevel.ReadCommitted, stoppingToken);
                             try
                             {
                                 // Re-query within transaction to get latest state (prevent race conditions)
