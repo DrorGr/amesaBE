@@ -6,6 +6,7 @@ using AmesaBackend.Auth.Services;
 using AmesaBackend.Shared.Caching;
 using System.Security.Claims;
 using System.Text.RegularExpressions;
+using Npgsql;
 
 namespace AmesaBackend.Lottery.Controllers
 {
@@ -191,6 +192,19 @@ namespace AmesaBackend.Lottery.Controllers
             catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
             {
                 _logger.LogError(dbEx, "Database error retrieving favorite houses for user {UserId}", userId);
+                return StatusCode(503, new AmesaBackend.Lottery.DTOs.ApiResponse<PagedResponse<HouseDto>>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "SERVICE_UNAVAILABLE",
+                        Message = "Service is temporarily unavailable. Please try again later."
+                    }
+                });
+            }
+            catch (PostgresException pgEx)
+            {
+                _logger.LogError(pgEx, "PostgreSQL error retrieving favorite houses for user {UserId}: {SqlState} - {Message}", userId, pgEx.SqlState, pgEx.MessageText);
                 return StatusCode(503, new AmesaBackend.Lottery.DTOs.ApiResponse<PagedResponse<HouseDto>>
                 {
                     Success = false,
@@ -708,6 +722,19 @@ namespace AmesaBackend.Lottery.Controllers
             catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
             {
                 _logger.LogError(dbEx, "Database error retrieving favorite houses count for user {UserId}", userId);
+                return StatusCode(503, new AmesaBackend.Lottery.DTOs.ApiResponse<object>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "SERVICE_UNAVAILABLE",
+                        Message = "Service is temporarily unavailable. Please try again later."
+                    }
+                });
+            }
+            catch (PostgresException pgEx)
+            {
+                _logger.LogError(pgEx, "PostgreSQL error retrieving favorite houses count for user {UserId}: {SqlState} - {Message}", userId, pgEx.SqlState, pgEx.MessageText);
                 return StatusCode(503, new AmesaBackend.Lottery.DTOs.ApiResponse<object>
                 {
                     Success = false,

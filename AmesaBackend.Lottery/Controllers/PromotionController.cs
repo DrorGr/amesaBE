@@ -5,6 +5,7 @@ using AmesaBackend.Lottery.Services;
 using AmesaBackend.Auth.Services;
 using System.Security.Claims;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 
 namespace AmesaBackend.Lottery.Controllers
 {
@@ -462,6 +463,16 @@ namespace AmesaBackend.Lottery.Controllers
             catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
             {
                 _logger.LogError(dbEx, "Database error retrieving available promotions for user {UserId}", userId);
+                return StatusCode(503, new ApiResponse<List<PromotionDto>>
+                {
+                    Success = false,
+                    Message = "Service is temporarily unavailable. Please try again later.",
+                    Error = new ErrorResponse { Code = "SERVICE_UNAVAILABLE", Message = "Service is temporarily unavailable" }
+                });
+            }
+            catch (PostgresException pgEx)
+            {
+                _logger.LogError(pgEx, "PostgreSQL error retrieving available promotions for user {UserId}: {SqlState} - {Message}", userId, pgEx.SqlState, pgEx.MessageText);
                 return StatusCode(503, new ApiResponse<List<PromotionDto>>
                 {
                     Success = false,
