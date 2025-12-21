@@ -469,6 +469,16 @@ namespace AmesaBackend.Lottery.Controllers
                     Error = new ErrorResponse { Code = "SERVICE_UNAVAILABLE", Message = "Service is temporarily unavailable" }
                 });
             }
+            catch (System.Data.Common.DbException dbEx)
+            {
+                _logger.LogError(dbEx, "Database connectivity error retrieving available promotions for user {UserId}", userId);
+                return StatusCode(503, new ApiResponse<List<PromotionDto>>
+                {
+                    Success = false,
+                    Message = "Service is temporarily unavailable. Please try again later.",
+                    Error = new ErrorResponse { Code = "SERVICE_UNAVAILABLE", Message = "Service is temporarily unavailable" }
+                });
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error retrieving available promotions for user {UserId}: {Message}", userId, ex.Message);

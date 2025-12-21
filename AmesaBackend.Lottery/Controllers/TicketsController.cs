@@ -134,6 +134,19 @@ namespace AmesaBackend.Lottery.Controllers
                     }
                 });
             }
+            catch (System.Data.Common.DbException dbEx)
+            {
+                _logger.LogError(dbEx, "Database connectivity error retrieving active entries for user {UserId}", userId);
+                return StatusCode(503, new AmesaBackend.Lottery.DTOs.ApiResponse<List<LotteryTicketDto>>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "SERVICE_UNAVAILABLE",
+                        Message = "Service is temporarily unavailable. Please try again later."
+                    }
+                });
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error retrieving active entries for user {UserId}: {Message}", userId, ex.Message);
@@ -260,6 +273,19 @@ namespace AmesaBackend.Lottery.Controllers
                     }
                 });
             }
+            catch (System.Data.Common.DbException dbEx)
+            {
+                _logger.LogError(dbEx, "Database connectivity error retrieving entry history for user {UserId}", userId);
+                return StatusCode(503, new AmesaBackend.Lottery.DTOs.ApiResponse<PagedEntryHistoryResponse>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "SERVICE_UNAVAILABLE",
+                        Message = "Service is temporarily unavailable. Please try again later."
+                    }
+                });
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error retrieving entry history for user {UserId}: {Message}", userId, ex.Message);
@@ -307,6 +333,19 @@ namespace AmesaBackend.Lottery.Controllers
             catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
             {
                 _logger.LogError(dbEx, "Database error retrieving analytics for user {UserId}", userId);
+                return StatusCode(503, new AmesaBackend.Lottery.DTOs.ApiResponse<UserLotteryStatsDto>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "SERVICE_UNAVAILABLE",
+                        Message = "Service is temporarily unavailable. Please try again later."
+                    }
+                });
+            }
+            catch (System.Data.Common.DbException dbEx)
+            {
+                _logger.LogError(dbEx, "Database connectivity error retrieving analytics for user {UserId}", userId);
                 return StatusCode(503, new AmesaBackend.Lottery.DTOs.ApiResponse<UserLotteryStatsDto>
                 {
                     Success = false,

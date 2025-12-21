@@ -201,6 +201,19 @@ namespace AmesaBackend.Lottery.Controllers
                     }
                 });
             }
+            catch (System.Data.Common.DbException dbEx)
+            {
+                _logger.LogError(dbEx, "Database connectivity error retrieving favorite houses for user {UserId}", userId);
+                return StatusCode(503, new AmesaBackend.Lottery.DTOs.ApiResponse<PagedResponse<HouseDto>>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "SERVICE_UNAVAILABLE",
+                        Message = "Service is temporarily unavailable. Please try again later."
+                    }
+                });
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error retrieving favorite houses for user {UserId}: {Message}", userId, ex.Message);
@@ -395,6 +408,32 @@ namespace AmesaBackend.Lottery.Controllers
                 {
                     Success = true,
                     Data = response
+                });
+            }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+            {
+                _logger.LogError(dbEx, "Database error adding house {HouseId} to favorites", id);
+                return StatusCode(503, new AmesaBackend.Lottery.DTOs.ApiResponse<FavoriteHouseResponse>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "SERVICE_UNAVAILABLE",
+                        Message = "Service is temporarily unavailable. Please try again later."
+                    }
+                });
+            }
+            catch (System.Data.Common.DbException dbEx)
+            {
+                _logger.LogError(dbEx, "Database connectivity error adding house {HouseId} to favorites", id);
+                return StatusCode(503, new AmesaBackend.Lottery.DTOs.ApiResponse<FavoriteHouseResponse>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "SERVICE_UNAVAILABLE",
+                        Message = "Service is temporarily unavailable. Please try again later."
+                    }
                 });
             }
             catch (Exception ex)
@@ -596,6 +635,32 @@ namespace AmesaBackend.Lottery.Controllers
                     Data = response
                 });
             }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+            {
+                _logger.LogError(dbEx, "Database error removing house {HouseId} from favorites", id);
+                return StatusCode(503, new AmesaBackend.Lottery.DTOs.ApiResponse<FavoriteHouseResponse>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "SERVICE_UNAVAILABLE",
+                        Message = "Service is temporarily unavailable. Please try again later."
+                    }
+                });
+            }
+            catch (System.Data.Common.DbException dbEx)
+            {
+                _logger.LogError(dbEx, "Database connectivity error removing house {HouseId} from favorites", id);
+                return StatusCode(503, new AmesaBackend.Lottery.DTOs.ApiResponse<FavoriteHouseResponse>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "SERVICE_UNAVAILABLE",
+                        Message = "Service is temporarily unavailable. Please try again later."
+                    }
+                });
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error removing house {HouseId} from favorites", id);
@@ -643,6 +708,19 @@ namespace AmesaBackend.Lottery.Controllers
             catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
             {
                 _logger.LogError(dbEx, "Database error retrieving favorite houses count for user {UserId}", userId);
+                return StatusCode(503, new AmesaBackend.Lottery.DTOs.ApiResponse<object>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "SERVICE_UNAVAILABLE",
+                        Message = "Service is temporarily unavailable. Please try again later."
+                    }
+                });
+            }
+            catch (System.Data.Common.DbException dbEx)
+            {
+                _logger.LogError(dbEx, "Database connectivity error retrieving favorite houses count for user {UserId}", userId);
                 return StatusCode(503, new AmesaBackend.Lottery.DTOs.ApiResponse<object>
                 {
                     Success = false,

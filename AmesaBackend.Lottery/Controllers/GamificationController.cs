@@ -71,6 +71,19 @@ namespace AmesaBackend.Lottery.Controllers
                     }
                 });
             }
+            catch (System.Data.Common.DbException dbEx)
+            {
+                _logger.LogError(dbEx, "Database connectivity error getting user gamification data for user {UserId}", userId);
+                return StatusCode(503, new StandardApiResponse<UserGamificationDto>
+                {
+                    Success = false,
+                    Error = new StandardErrorResponse
+                    {
+                        Code = "SERVICE_UNAVAILABLE",
+                        Message = "Gamification service is temporarily unavailable"
+                    }
+                });
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting user gamification data for user {UserId}", userId);
