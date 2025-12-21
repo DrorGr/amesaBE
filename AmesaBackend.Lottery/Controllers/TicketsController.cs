@@ -156,10 +156,11 @@ namespace AmesaBackend.Lottery.Controllers
         [HttpGet("history")]
         public async Task<ActionResult<AmesaBackend.Lottery.DTOs.ApiResponse<PagedEntryHistoryResponse>>> GetEntryHistory([FromQuery] EntryFilters filters)
         {
+            Guid? userId = null; // Declared outside try block
             try
             {
                 var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (userIdClaim == null || !Guid.TryParse(userIdClaim, out var userId))
+                if (userIdClaim == null || !Guid.TryParse(userIdClaim, out var parsedUserId))
                 {
                     return Unauthorized(new AmesaBackend.Lottery.DTOs.ApiResponse<PagedEntryHistoryResponse>
                     {
@@ -167,6 +168,7 @@ namespace AmesaBackend.Lottery.Controllers
                         Message = "User not authenticated"
                     });
                 }
+                userId = parsedUserId;
 
                 var page = filters.Page > 0 ? filters.Page : 1;
                 var limit = filters.Limit > 0 && filters.Limit <= 100 ? filters.Limit : 20;
@@ -176,7 +178,7 @@ namespace AmesaBackend.Lottery.Controllers
                 var query = _context.LotteryTickets
                     .Include(t => t.House)
                     .AsNoTracking() // Read-only query - no need for change tracking
-                    .Where(t => t.UserId == userId);
+                    .Where(t => t.UserId == userId.Value);
                 
                 // Apply filters at database level
                 if (!string.IsNullOrEmpty(filters.Status))
@@ -245,16 +247,29 @@ namespace AmesaBackend.Lottery.Controllers
                     Data = response
                 });
             }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+            {
+                _logger.LogError(dbEx, "Database error retrieving entry history for user {UserId}", userId);
+                return StatusCode(503, new AmesaBackend.Lottery.DTOs.ApiResponse<PagedEntryHistoryResponse>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "SERVICE_UNAVAILABLE",
+                        Message = "Service is temporarily unavailable. Please try again later."
+                    }
+                });
+            }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error retrieving entry history");
+                _logger.LogError(ex, "Error retrieving entry history for user {UserId}: {Message}", userId, ex.Message);
                 return StatusCode(500, new AmesaBackend.Lottery.DTOs.ApiResponse<PagedEntryHistoryResponse>
                 {
                     Success = false,
                     Error = new ErrorResponse
                     {
                         Code = "INTERNAL_ERROR",
-                        Message = ex.Message
+                        Message = "An error occurred while retrieving entry history"
                     }
                 });
             }
