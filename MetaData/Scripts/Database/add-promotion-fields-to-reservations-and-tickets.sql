@@ -31,3 +31,5 @@ COMMENT ON COLUMN amesa_lottery.lottery_tickets.discount_amount IS 'Discount amo
 
 
 
+
+

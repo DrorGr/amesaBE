@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "postgres": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres"
+      ],
+      "env": {
+        "POSTGRES_HOST": "amesa-prod-instance-1.cruuae28ob7m.eu-north-1.rds.amazonaws.com",
+        "POSTGRES_PORT": "5432",
+        "POSTGRES_DATABASE": "amesa_prod",
+        "POSTGRES_USER": "amesa_admin",
+        "POSTGRES_PASSWORD": "u1fwn3s9",
+        "POSTGRES_SSL_MODE": "require"
+      }
+    }
+  }
+}
+
+

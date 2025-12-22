@@ -533,3 +533,25 @@ override.tf.json
 # ============================================
 Infrastructure/**/*.md
 Infrastructure/**/*.txt
+
+# ============================================
+# GENERATED FILES
+# ============================================
+# Generated HTML files (investor pitch PDFs)
+investor-pitch-*.html
+
+# ============================================
+# TEMPORARY FILES
+# ============================================
+# Temporary files (temp_*, temp-*)
+temp_*
+temp-*
+temp_hash_gen/
+
+# ============================================
+# DUPLICATE TASK DEFINITIONS
+# ============================================
+# Ignore duplicate task definition files in root (keep only in MetaData/Configs)
+*-task-def-*.json
+!MetaData/Configs/**/*.json
+task-def-current.json
