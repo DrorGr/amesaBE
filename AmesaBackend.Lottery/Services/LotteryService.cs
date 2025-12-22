@@ -864,7 +864,7 @@ namespace AmesaBackend.Lottery.Services
         {
             var tickets = await _context.LotteryTickets
                 .Include(t => t.House)
-                .Where(t => t.UserId == userId && t.Status.ToLower() == "active")
+                .Where(t => t.UserId == userId && t.Status != null && t.Status.ToLower() == "active")
                 .OrderByDescending(t => t.PurchaseDate)
                 .ToListAsync();
 
@@ -877,7 +877,7 @@ namespace AmesaBackend.Lottery.Services
                 .Where(t => t.UserId == userId)
                 .ToListAsync();
 
-            var activeTickets = tickets.Where(t => t.Status.ToLower() == "active").ToList();
+            var activeTickets = tickets.Where(t => t.Status != null && t.Status.ToLower() == "active").ToList();
             var winningTickets = tickets.Where(t => t.IsWinner).ToList();
             var totalSpending = tickets.Sum(t => t.PurchasePrice);
 
