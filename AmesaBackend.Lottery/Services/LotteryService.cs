@@ -320,32 +320,50 @@ namespace AmesaBackend.Lottery.Services
             {
                 // Check cache for favorite IDs first
                 var favoriteIdsCacheKey = $"lottery:favorites:{userId}";
-                if (_cache != null)
+                try
                 {
-                    try
+                    if (_cache != null)
                     {
-                        var cachedIds = await _cache.GetRecordAsync<List<Guid>>(favoriteIdsCacheKey);
-                        if (cachedIds != null)
+                        try
                         {
-                            favoriteHouseIds = cachedIds;
-                            _logger.LogDebug("Cache hit for favorite house IDs for user {UserId}", userId);
+                            var cachedIds = await _cache.GetRecordAsync<List<Guid>>(favoriteIdsCacheKey);
+                            if (cachedIds != null)
+                            {
+                                favoriteHouseIds = cachedIds;
+                                _logger.LogDebug("Cache hit for favorite house IDs for user {UserId}", userId);
+                            }
+                            else
+                            {
+                                favoriteHouseIds = await _userPreferencesService.GetFavoriteHouseIdsAsync(userId, cancellationToken);
+                                // Cache the IDs with 5-minute TTL
+                                if (favoriteHouseIds != null)
+                                {
+                                    await _cache.SetRecordAsync(favoriteIdsCacheKey, favoriteHouseIds, TimeSpan.FromMinutes(5));
+                                }
+                            }
                         }
-                        else
+                        catch (Exception cacheEx)
                         {
+                            _logger.LogWarning(cacheEx, "Failed to get favorite house IDs from cache for user {UserId}, falling back to service", userId);
                             favoriteHouseIds = await _userPreferencesService.GetFavoriteHouseIdsAsync(userId, cancellationToken);
-                            // Cache the IDs with 5-minute TTL
-                            await _cache.SetRecordAsync(favoriteIdsCacheKey, favoriteHouseIds, TimeSpan.FromMinutes(5));
                         }
                     }
-                    catch (Exception ex)
+                    else
                     {
-                        _logger.LogWarning(ex, "Failed to get favorite house IDs from cache for user {UserId}, falling back to database", userId);
                         favoriteHouseIds = await _userPreferencesService.GetFavoriteHouseIdsAsync(userId, cancellationToken);
                     }
+
+                    // Ensure favoriteHouseIds is not null
+                    if (favoriteHouseIds == null)
+                    {
+                        _logger.LogWarning("GetFavoriteHouseIdsAsync returned null for user {UserId}, returning empty list", userId);
+                        return new List<HouseDto>();
+                    }
                 }
-                else
+                catch (Exception ex)
                 {
-                    favoriteHouseIds = await _userPreferencesService.GetFavoriteHouseIdsAsync(userId, cancellationToken);
+                    _logger.LogError(ex, "Error getting favorite house IDs for user {UserId}, returning empty list", userId);
+                    return new List<HouseDto>();
                 }
             }
             else
@@ -388,7 +406,12 @@ namespace AmesaBackend.Lottery.Services
                 .Where(h => favoriteHouseIds.Contains(h.Id) && h.DeletedAt == null)
                 .ToListAsync(cancellationToken);
 
-            var houseDtos = allHouses.Select(MapToHouseDto).ToList();
+            // Filter out null houses and map to DTOs
+            var houseDtos = allHouses
+                .Where(h => h != null)
+                .Select(MapToHouseDto)
+                .Where(dto => dto != null)
+                .ToList();
 
             // Apply sorting
             if (sortBy == "dateadded")
@@ -974,6 +997,12 @@ namespace AmesaBackend.Lottery.Services
 
         private HouseDto MapToHouseDto(House house)
         {
+            if (house == null)
+            {
+                _logger.LogWarning("Attempted to map null house to DTO");
+                throw new ArgumentNullException(nameof(house), "House cannot be null");
+            }
+
             var ticketsSold = house.Tickets?.Count(t => t.Status == "Active") ?? 0;
             var participationPercentage = house.TotalTickets > 0 
                 ? (decimal)ticketsSold / house.TotalTickets * 100 

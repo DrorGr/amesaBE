@@ -1469,6 +1469,7 @@ namespace AmesaBackend.Auth.Controllers
         /// Gets available security questions for setup.
         /// </summary>
         [HttpGet("recovery/security-questions")]
+        [AllowAnonymous]
         public ActionResult<ApiResponse<List<string>>> GetSecurityQuestions()
         {
             // Return standard security questions

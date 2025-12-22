@@ -555,56 +555,82 @@ namespace AmesaBackend.Lottery.Services
 
         public async Task<List<PromotionDto>> GetAvailablePromotionsAsync(Guid userId, Guid? houseId)
         {
-            // Check cache first (cache key includes userId and houseId for user-specific results)
-            var cacheKey = $"promotions:available:{userId}:{houseId?.ToString() ?? "all"}";
-            if (_cache != null)
+            try
             {
-                var cached = await _cache.GetRecordAsync<List<PromotionDto>>(cacheKey);
-                if (cached != null)
+                // Check cache first (cache key includes userId and houseId for user-specific results)
+                var cacheKey = $"promotions:available:{userId}:{houseId?.ToString() ?? "all"}";
+                if (_cache != null)
                 {
-                    _logger.LogDebug("Available promotions cache hit for user {UserId}, house {HouseId}", userId, houseId);
-                    return cached;
+                    try
+                    {
+                        var cached = await _cache.GetRecordAsync<List<PromotionDto>>(cacheKey);
+                        if (cached != null)
+                        {
+                            _logger.LogDebug("Available promotions cache hit for user {UserId}, house {HouseId}", userId, houseId);
+                            return cached;
+                        }
+                    }
+                    catch (Exception cacheEx)
+                    {
+                        _logger.LogWarning(cacheEx, "Failed to get available promotions from cache for user {UserId}, falling back to database", userId);
+                    }
                 }
+
+                var now = DateTime.UtcNow;
+
+                var query = _context.Promotions
+                    .Where(p => p.IsActive &&
+                               (p.StartDate == null || p.StartDate <= now) &&
+                               (p.EndDate == null || p.EndDate >= now) &&
+                               (!p.UsageLimit.HasValue || p.UsageCount < p.UsageLimit.Value));
+
+                // Filter by house if specified
+                if (houseId.HasValue)
+                {
+                    query = query.Where(p =>
+                        p.ApplicableHouses == null ||
+                        p.ApplicableHouses.Length == 0 ||
+                        p.ApplicableHouses.Contains(houseId.Value));
+                }
+
+                // Exclude promotions user has already used
+                var usedPromotionIds = await _context.UserPromotions
+                    .Where(up => up.UserId == userId)
+                    .Select(up => up.PromotionId)
+                    .ToListAsync();
+
+                query = query.Where(p => !usedPromotionIds.Contains(p.Id));
+
+                var promotions = await query
+                    .OrderByDescending(p => p.CreatedAt)
+                    .ToListAsync();
+
+                var result = promotions
+                    .Where(p => p != null)
+                    .Select(MapToDto)
+                    .Where(dto => dto != null)
+                    .ToList();
+
+                // Cache result (TTL: 5 minutes for available promotions)
+                if (_cache != null && result != null)
+                {
+                    try
+                    {
+                        await _cache.SetRecordAsync(cacheKey, result, TimeSpan.FromMinutes(ActivePromotionsCacheMinutes));
+                    }
+                    catch (Exception cacheEx)
+                    {
+                        _logger.LogWarning(cacheEx, "Failed to cache available promotions for user {UserId}", userId);
+                    }
+                }
+
+                return result ?? new List<PromotionDto>();
             }
-
-            var now = DateTime.UtcNow;
-
-            var query = _context.Promotions
-                .Where(p => p.IsActive &&
-                           (p.StartDate == null || p.StartDate <= now) &&
-                           (p.EndDate == null || p.EndDate >= now) &&
-                           (!p.UsageLimit.HasValue || p.UsageCount < p.UsageLimit.Value));
-
-            // Filter by house if specified
-            if (houseId.HasValue)
+            catch (Exception ex)
             {
-                query = query.Where(p =>
-                    p.ApplicableHouses == null ||
-                    p.ApplicableHouses.Length == 0 ||
-                    p.ApplicableHouses.Contains(houseId.Value));
+                _logger.LogError(ex, "Error getting available promotions for user {UserId}, house {HouseId}", userId, houseId);
+                throw; // Re-throw to be handled by controller
             }
-
-            // Exclude promotions user has already used
-            var usedPromotionIds = await _context.UserPromotions
-                .Where(up => up.UserId == userId)
-                .Select(up => up.PromotionId)
-                .ToListAsync();
-
-            query = query.Where(p => !usedPromotionIds.Contains(p.Id));
-
-            var promotions = await query
-                .OrderByDescending(p => p.CreatedAt)
-                .ToListAsync();
-
-            var result = promotions.Select(MapToDto).ToList();
-
-            // Cache result (TTL: 5 minutes for available promotions)
-            if (_cache != null)
-            {
-                await _cache.SetRecordAsync(cacheKey, result, TimeSpan.FromMinutes(ActivePromotionsCacheMinutes));
-            }
-
-            return result;
         }
 
         public async Task<PromotionAnalyticsDto> GetPromotionUsageStatsAsync(Guid promotionId)
@@ -784,6 +810,12 @@ namespace AmesaBackend.Lottery.Services
         /// </summary>
         private PromotionDto MapToDto(Promotion promotion)
         {
+            if (promotion == null)
+            {
+                _logger.LogWarning("Attempted to map null promotion to DTO");
+                throw new ArgumentNullException(nameof(promotion), "Promotion cannot be null");
+            }
+
             return new PromotionDto
             {
                 Id = promotion.Id,
