@@ -45,6 +45,26 @@ namespace AmesaBackend.Lottery.Controllers
                     Message = "Promotions retrieved successfully"
                 });
             }
+            catch (PostgresException pgEx)
+            {
+                _logger.LogError(pgEx, "PostgreSQL error retrieving promotions: {SqlState} - {Message}", pgEx.SqlState, pgEx.MessageText);
+                return StatusCode(503, new ApiResponse<PagedResponse<PromotionDto>>
+                {
+                    Success = false,
+                    Message = "Service is temporarily unavailable. Please try again later.",
+                    Error = new ErrorResponse { Code = "SERVICE_UNAVAILABLE", Message = "Service is temporarily unavailable" }
+                });
+            }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+            {
+                _logger.LogError(dbEx, "Database error retrieving promotions");
+                return StatusCode(503, new ApiResponse<PagedResponse<PromotionDto>>
+                {
+                    Success = false,
+                    Message = "Service is temporarily unavailable. Please try again later.",
+                    Error = new ErrorResponse { Code = "SERVICE_UNAVAILABLE", Message = "Service is temporarily unavailable" }
+                });
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error retrieving promotions");
@@ -84,6 +104,26 @@ namespace AmesaBackend.Lottery.Controllers
                     Message = "Promotion retrieved successfully"
                 });
             }
+            catch (PostgresException pgEx)
+            {
+                _logger.LogError(pgEx, "PostgreSQL error retrieving promotion {PromotionId}: {SqlState} - {Message}", id, pgEx.SqlState, pgEx.MessageText);
+                return StatusCode(503, new ApiResponse<PromotionDto>
+                {
+                    Success = false,
+                    Message = "Service is temporarily unavailable. Please try again later.",
+                    Error = new ErrorResponse { Code = "SERVICE_UNAVAILABLE", Message = "Service is temporarily unavailable" }
+                });
+            }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+            {
+                _logger.LogError(dbEx, "Database error retrieving promotion {PromotionId}", id);
+                return StatusCode(503, new ApiResponse<PromotionDto>
+                {
+                    Success = false,
+                    Message = "Service is temporarily unavailable. Please try again later.",
+                    Error = new ErrorResponse { Code = "SERVICE_UNAVAILABLE", Message = "Service is temporarily unavailable" }
+                });
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error retrieving promotion {PromotionId}", id);
@@ -121,6 +161,26 @@ namespace AmesaBackend.Lottery.Controllers
                     Success = true,
                     Data = promotion,
                     Message = "Promotion retrieved successfully"
+                });
+            }
+            catch (PostgresException pgEx)
+            {
+                _logger.LogError(pgEx, "PostgreSQL error retrieving promotion by code {Code}: {SqlState} - {Message}", code, pgEx.SqlState, pgEx.MessageText);
+                return StatusCode(503, new ApiResponse<PromotionDto>
+                {
+                    Success = false,
+                    Message = "Service is temporarily unavailable. Please try again later.",
+                    Error = new ErrorResponse { Code = "SERVICE_UNAVAILABLE", Message = "Service is temporarily unavailable" }
+                });
+            }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+            {
+                _logger.LogError(dbEx, "Database error retrieving promotion by code {Code}", code);
+                return StatusCode(503, new ApiResponse<PromotionDto>
+                {
+                    Success = false,
+                    Message = "Service is temporarily unavailable. Please try again later.",
+                    Error = new ErrorResponse { Code = "SERVICE_UNAVAILABLE", Message = "Service is temporarily unavailable" }
                 });
             }
             catch (Exception ex)
@@ -173,6 +233,26 @@ namespace AmesaBackend.Lottery.Controllers
                     Error = new ErrorResponse { Code = "PROMOTION_CODE_INVALID" }
                 });
             }
+            catch (PostgresException pgEx)
+            {
+                _logger.LogError(pgEx, "PostgreSQL error creating promotion: {SqlState} - {Message}", pgEx.SqlState, pgEx.MessageText);
+                return StatusCode(503, new ApiResponse<PromotionDto>
+                {
+                    Success = false,
+                    Message = "Service is temporarily unavailable. Please try again later.",
+                    Error = new ErrorResponse { Code = "SERVICE_UNAVAILABLE", Message = "Service is temporarily unavailable" }
+                });
+            }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+            {
+                _logger.LogError(dbEx, "Database error creating promotion");
+                return StatusCode(503, new ApiResponse<PromotionDto>
+                {
+                    Success = false,
+                    Message = "Service is temporarily unavailable. Please try again later.",
+                    Error = new ErrorResponse { Code = "SERVICE_UNAVAILABLE", Message = "Service is temporarily unavailable" }
+                });
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error creating promotion");
@@ -214,6 +294,26 @@ namespace AmesaBackend.Lottery.Controllers
                     Error = new ErrorResponse { Code = "PROMOTION_NOT_FOUND" }
                 });
             }
+            catch (PostgresException pgEx)
+            {
+                _logger.LogError(pgEx, "PostgreSQL error updating promotion {PromotionId}: {SqlState} - {Message}", id, pgEx.SqlState, pgEx.MessageText);
+                return StatusCode(503, new ApiResponse<PromotionDto>
+                {
+                    Success = false,
+                    Message = "Service is temporarily unavailable. Please try again later.",
+                    Error = new ErrorResponse { Code = "SERVICE_UNAVAILABLE", Message = "Service is temporarily unavailable" }
+                });
+            }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+            {
+                _logger.LogError(dbEx, "Database error updating promotion {PromotionId}", id);
+                return StatusCode(503, new ApiResponse<PromotionDto>
+                {
+                    Success = false,
+                    Message = "Service is temporarily unavailable. Please try again later.",
+                    Error = new ErrorResponse { Code = "SERVICE_UNAVAILABLE", Message = "Service is temporarily unavailable" }
+                });
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error updating promotion {PromotionId}", id);
@@ -252,6 +352,26 @@ namespace AmesaBackend.Lottery.Controllers
                     Success = true,
                     Data = true,
                     Message = "Promotion deleted successfully"
+                });
+            }
+            catch (PostgresException pgEx)
+            {
+                _logger.LogError(pgEx, "PostgreSQL error deleting promotion {PromotionId}: {SqlState} - {Message}", id, pgEx.SqlState, pgEx.MessageText);
+                return StatusCode(503, new ApiResponse<bool>
+                {
+                    Success = false,
+                    Message = "Service is temporarily unavailable. Please try again later.",
+                    Error = new ErrorResponse { Code = "SERVICE_UNAVAILABLE", Message = "Service is temporarily unavailable" }
+                });
+            }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+            {
+                _logger.LogError(dbEx, "Database error deleting promotion {PromotionId}", id);
+                return StatusCode(503, new ApiResponse<bool>
+                {
+                    Success = false,
+                    Message = "Service is temporarily unavailable. Please try again later.",
+                    Error = new ErrorResponse { Code = "SERVICE_UNAVAILABLE", Message = "Service is temporarily unavailable" }
                 });
             }
             catch (Exception ex)
@@ -298,6 +418,26 @@ namespace AmesaBackend.Lottery.Controllers
                     Success = true,
                     Data = validation,
                     Message = validation.IsValid ? "Promotion is valid" : validation.Message
+                });
+            }
+            catch (PostgresException pgEx)
+            {
+                _logger.LogError(pgEx, "PostgreSQL error validating promotion code {Code}: {SqlState} - {Message}", request.Code, pgEx.SqlState, pgEx.MessageText);
+                return StatusCode(503, new ApiResponse<PromotionValidationResponse>
+                {
+                    Success = false,
+                    Message = "Service is temporarily unavailable. Please try again later.",
+                    Error = new ErrorResponse { Code = "SERVICE_UNAVAILABLE", Message = "Service is temporarily unavailable" }
+                });
+            }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+            {
+                _logger.LogError(dbEx, "Database error validating promotion code {Code}", request.Code);
+                return StatusCode(503, new ApiResponse<PromotionValidationResponse>
+                {
+                    Success = false,
+                    Message = "Service is temporarily unavailable. Please try again later.",
+                    Error = new ErrorResponse { Code = "SERVICE_UNAVAILABLE", Message = "Service is temporarily unavailable" }
                 });
             }
             catch (Exception ex)
@@ -367,6 +507,26 @@ namespace AmesaBackend.Lottery.Controllers
                     Error = new ErrorResponse { Code = "PROMOTION_VALIDATION_FAILED" }
                 });
             }
+            catch (PostgresException pgEx)
+            {
+                _logger.LogError(pgEx, "PostgreSQL error applying promotion {Code}: {SqlState} - {Message}", request.Code, pgEx.SqlState, pgEx.MessageText);
+                return StatusCode(503, new ApiResponse<PromotionUsageDto>
+                {
+                    Success = false,
+                    Message = "Service is temporarily unavailable. Please try again later.",
+                    Error = new ErrorResponse { Code = "SERVICE_UNAVAILABLE", Message = "Service is temporarily unavailable" }
+                });
+            }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+            {
+                _logger.LogError(dbEx, "Database error applying promotion {Code}", request.Code);
+                return StatusCode(503, new ApiResponse<PromotionUsageDto>
+                {
+                    Success = false,
+                    Message = "Service is temporarily unavailable. Please try again later.",
+                    Error = new ErrorResponse { Code = "SERVICE_UNAVAILABLE", Message = "Service is temporarily unavailable" }
+                });
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error applying promotion {Code}", request.Code);
@@ -413,6 +573,26 @@ namespace AmesaBackend.Lottery.Controllers
                     Success = true,
                     Data = history,
                     Message = "Promotion history retrieved successfully"
+                });
+            }
+            catch (PostgresException pgEx)
+            {
+                _logger.LogError(pgEx, "PostgreSQL error retrieving promotion history for user {UserId}: {SqlState} - {Message}", userId, pgEx.SqlState, pgEx.MessageText);
+                return StatusCode(503, new ApiResponse<List<PromotionUsageDto>>
+                {
+                    Success = false,
+                    Message = "Service is temporarily unavailable. Please try again later.",
+                    Error = new ErrorResponse { Code = "SERVICE_UNAVAILABLE", Message = "Service is temporarily unavailable" }
+                });
+            }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+            {
+                _logger.LogError(dbEx, "Database error retrieving promotion history for user {UserId}", userId);
+                return StatusCode(503, new ApiResponse<List<PromotionUsageDto>>
+                {
+                    Success = false,
+                    Message = "Service is temporarily unavailable. Please try again later.",
+                    Error = new ErrorResponse { Code = "SERVICE_UNAVAILABLE", Message = "Service is temporarily unavailable" }
                 });
             }
             catch (Exception ex)
@@ -529,6 +709,26 @@ namespace AmesaBackend.Lottery.Controllers
                     Error = new ErrorResponse { Code = "PROMOTION_NOT_FOUND" }
                 });
             }
+            catch (PostgresException pgEx)
+            {
+                _logger.LogError(pgEx, "PostgreSQL error retrieving promotion stats for {PromotionId}: {SqlState} - {Message}", id, pgEx.SqlState, pgEx.MessageText);
+                return StatusCode(503, new ApiResponse<PromotionAnalyticsDto>
+                {
+                    Success = false,
+                    Message = "Service is temporarily unavailable. Please try again later.",
+                    Error = new ErrorResponse { Code = "SERVICE_UNAVAILABLE", Message = "Service is temporarily unavailable" }
+                });
+            }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+            {
+                _logger.LogError(dbEx, "Database error retrieving promotion stats for {PromotionId}", id);
+                return StatusCode(503, new ApiResponse<PromotionAnalyticsDto>
+                {
+                    Success = false,
+                    Message = "Service is temporarily unavailable. Please try again later.",
+                    Error = new ErrorResponse { Code = "SERVICE_UNAVAILABLE", Message = "Service is temporarily unavailable" }
+                });
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error retrieving promotion stats for {PromotionId}", id);
@@ -558,6 +758,26 @@ namespace AmesaBackend.Lottery.Controllers
                     Success = true,
                     Data = analytics,
                     Message = "Promotion analytics retrieved successfully"
+                });
+            }
+            catch (PostgresException pgEx)
+            {
+                _logger.LogError(pgEx, "PostgreSQL error retrieving promotion analytics: {SqlState} - {Message}", pgEx.SqlState, pgEx.MessageText);
+                return StatusCode(503, new ApiResponse<List<PromotionAnalyticsDto>>
+                {
+                    Success = false,
+                    Message = "Service is temporarily unavailable. Please try again later.",
+                    Error = new ErrorResponse { Code = "SERVICE_UNAVAILABLE", Message = "Service is temporarily unavailable" }
+                });
+            }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+            {
+                _logger.LogError(dbEx, "Database error retrieving promotion analytics");
+                return StatusCode(503, new ApiResponse<List<PromotionAnalyticsDto>>
+                {
+                    Success = false,
+                    Message = "Service is temporarily unavailable. Please try again later.",
+                    Error = new ErrorResponse { Code = "SERVICE_UNAVAILABLE", Message = "Service is temporarily unavailable" }
                 });
             }
             catch (Exception ex)

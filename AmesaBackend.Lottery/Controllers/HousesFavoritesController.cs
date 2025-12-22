@@ -424,6 +424,19 @@ namespace AmesaBackend.Lottery.Controllers
                     Data = response
                 });
             }
+            catch (PostgresException pgEx)
+            {
+                _logger.LogError(pgEx, "PostgreSQL error adding house {HouseId} to favorites: {SqlState} - {Message}", id, pgEx.SqlState, pgEx.MessageText);
+                return StatusCode(503, new AmesaBackend.Lottery.DTOs.ApiResponse<FavoriteHouseResponse>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "SERVICE_UNAVAILABLE",
+                        Message = "Service is temporarily unavailable. Please try again later."
+                    }
+                });
+            }
             catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
             {
                 _logger.LogError(dbEx, "Database error adding house {HouseId} to favorites", id);
@@ -647,6 +660,19 @@ namespace AmesaBackend.Lottery.Controllers
                 {
                     Success = true,
                     Data = response
+                });
+            }
+            catch (PostgresException pgEx)
+            {
+                _logger.LogError(pgEx, "PostgreSQL error removing house {HouseId} from favorites: {SqlState} - {Message}", id, pgEx.SqlState, pgEx.MessageText);
+                return StatusCode(503, new AmesaBackend.Lottery.DTOs.ApiResponse<FavoriteHouseResponse>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "SERVICE_UNAVAILABLE",
+                        Message = "Service is temporarily unavailable. Please try again later."
+                    }
                 });
             }
             catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
@@ -875,6 +901,24 @@ namespace AmesaBackend.Lottery.Controllers
                     Message = $"Bulk add completed: {result.Successful} successful, {result.Failed} failed"
                 });
             }
+            catch (PostgresException pgEx)
+            {
+                _logger.LogError(pgEx, "PostgreSQL error in bulk add favorites: {SqlState} - {Message}", pgEx.SqlState, pgEx.MessageText);
+                return StatusCode(503, new AmesaBackend.Lottery.DTOs.ApiResponse<BulkFavoritesResponse>
+                {
+                    Success = false,
+                    Error = new ErrorResponse { Code = "SERVICE_UNAVAILABLE", Message = "Service is temporarily unavailable. Please try again later." }
+                });
+            }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+            {
+                _logger.LogError(dbEx, "Database error in bulk add favorites");
+                return StatusCode(503, new AmesaBackend.Lottery.DTOs.ApiResponse<BulkFavoritesResponse>
+                {
+                    Success = false,
+                    Error = new ErrorResponse { Code = "SERVICE_UNAVAILABLE", Message = "Service is temporarily unavailable. Please try again later." }
+                });
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error in bulk add favorites");
@@ -988,6 +1032,24 @@ namespace AmesaBackend.Lottery.Controllers
                     Message = $"Bulk remove completed: {result.Successful} successful, {result.Failed} failed"
                 });
             }
+            catch (PostgresException pgEx)
+            {
+                _logger.LogError(pgEx, "PostgreSQL error in bulk remove favorites: {SqlState} - {Message}", pgEx.SqlState, pgEx.MessageText);
+                return StatusCode(503, new AmesaBackend.Lottery.DTOs.ApiResponse<BulkFavoritesResponse>
+                {
+                    Success = false,
+                    Error = new ErrorResponse { Code = "SERVICE_UNAVAILABLE", Message = "Service is temporarily unavailable. Please try again later." }
+                });
+            }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+            {
+                _logger.LogError(dbEx, "Database error in bulk remove favorites");
+                return StatusCode(503, new AmesaBackend.Lottery.DTOs.ApiResponse<BulkFavoritesResponse>
+                {
+                    Success = false,
+                    Error = new ErrorResponse { Code = "SERVICE_UNAVAILABLE", Message = "Service is temporarily unavailable. Please try again later." }
+                });
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error in bulk remove favorites");
@@ -1049,6 +1111,24 @@ namespace AmesaBackend.Lottery.Controllers
                     Success = true,
                     Data = analytics,
                     Message = "Favorites analytics retrieved successfully"
+                });
+            }
+            catch (PostgresException pgEx)
+            {
+                _logger.LogError(pgEx, "PostgreSQL error retrieving favorites analytics: {SqlState} - {Message}", pgEx.SqlState, pgEx.MessageText);
+                return StatusCode(503, new AmesaBackend.Lottery.DTOs.ApiResponse<FavoritesAnalyticsDto>
+                {
+                    Success = false,
+                    Error = new ErrorResponse { Code = "SERVICE_UNAVAILABLE", Message = "Service is temporarily unavailable. Please try again later." }
+                });
+            }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+            {
+                _logger.LogError(dbEx, "Database error retrieving favorites analytics");
+                return StatusCode(503, new AmesaBackend.Lottery.DTOs.ApiResponse<FavoritesAnalyticsDto>
+                {
+                    Success = false,
+                    Error = new ErrorResponse { Code = "SERVICE_UNAVAILABLE", Message = "Service is temporarily unavailable. Please try again later." }
                 });
             }
             catch (Exception ex)
@@ -1314,6 +1394,24 @@ namespace AmesaBackend.Lottery.Controllers
                     // Re-throw to let ASP.NET Core handle it (may result in 500, but response is already started)
                     throw;
                 }
+            }
+            catch (PostgresException pgEx)
+            {
+                _logger.LogError(pgEx, "PostgreSQL error exporting favorites: {SqlState} - {Message}", pgEx.SqlState, pgEx.MessageText);
+                return StatusCode(503, new AmesaBackend.Lottery.DTOs.ApiResponse<object>
+                {
+                    Success = false,
+                    Error = new ErrorResponse { Code = "SERVICE_UNAVAILABLE", Message = "Service is temporarily unavailable. Please try again later." }
+                });
+            }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+            {
+                _logger.LogError(dbEx, "Database error exporting favorites");
+                return StatusCode(503, new AmesaBackend.Lottery.DTOs.ApiResponse<object>
+                {
+                    Success = false,
+                    Error = new ErrorResponse { Code = "SERVICE_UNAVAILABLE", Message = "Service is temporarily unavailable. Please try again later." }
+                });
             }
             catch (Exception ex)
             {

@@ -101,7 +101,7 @@ namespace AmesaBackend.Lottery.Data
                 entity.Property(e => e.TotalPrice).HasColumnType("decimal(10,2)");
                 entity.HasIndex(e => new { e.HouseId, e.Status });
                 entity.HasIndex(e => new { e.UserId, e.Status });
-                entity.HasIndex(e => e.ExpiresAt).HasFilter($"[Status] = 'pending'");
+                entity.HasIndex(e => e.ExpiresAt).HasFilter("\"Status\" = 'pending'");
                 entity.HasIndex(e => e.ReservationToken).IsUnique();
                 entity.HasOne(e => e.House).WithMany().HasForeignKey(e => e.HouseId).OnDelete(DeleteBehavior.Cascade);
             });
