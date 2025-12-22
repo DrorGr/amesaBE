@@ -220,9 +220,13 @@ builder.Services.AddAuthentication(options =>
 // Register UserPreferencesService for favorites functionality
 builder.Services.AddScoped<IUserPreferencesService, UserPreferencesService>();
 builder.Services.AddScoped<ILotteryService, LotteryService>();
-builder.Services.AddScoped<IPromotionService, PromotionService>();
+// PromotionService is excluded from compilation (see .csproj), so registration is commented out
+// Controller handles null IPromotionService gracefully with ServiceUnavailable responses
+// builder.Services.AddScoped<IPromotionService, PromotionService>();
 builder.Services.AddScoped<IPromotionAuditService, PromotionAuditService>();
 builder.Services.AddScoped<IErrorSanitizer, ErrorSanitizer>();
+// Register GamificationService
+builder.Services.AddScoped<IGamificationService, GamificationService>();
 // IFileService and IHouseCacheService are available but not currently used
 // Uncomment if file upload or house cache invalidation functionality is needed
 // builder.Services.AddScoped<IFileService, FileService>();

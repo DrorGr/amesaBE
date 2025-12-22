@@ -13,18 +13,27 @@ namespace AmesaBackend.Lottery.Controllers
     [Route("api/v1/promotions")]
     public class PromotionController : ControllerBase
     {
-        private readonly IPromotionService _promotionService;
+        private readonly IPromotionService? _promotionService;
         private readonly ILogger<PromotionController> _logger;
         private readonly IRateLimitService? _rateLimitService;
 
         public PromotionController(
-            IPromotionService promotionService,
+            IPromotionService? promotionService,
             ILogger<PromotionController> logger,
             IRateLimitService? rateLimitService = null)
         {
             _promotionService = promotionService;
             _logger = logger;
             _rateLimitService = rateLimitService;
+        }
+
+        private ActionResult<ApiResponse<T>> ServiceUnavailable<T>(string message = "Promotion service is not available")
+        {
+            return StatusCode(503, new ApiResponse<T>
+            {
+                Success = false,
+                Message = message
+            });
         }
 
         /// <summary>
@@ -35,6 +44,11 @@ namespace AmesaBackend.Lottery.Controllers
         public async Task<ActionResult<ApiResponse<PagedResponse<PromotionDto>>>> GetPromotions(
             [FromQuery] PromotionSearchParams searchParams)
         {
+            if (_promotionService == null)
+            {
+                return ServiceUnavailable<PagedResponse<PromotionDto>>();
+            }
+
             try
             {
                 var result = await _promotionService.GetPromotionsAsync(searchParams);
@@ -84,6 +98,11 @@ namespace AmesaBackend.Lottery.Controllers
         [HttpGet("{id}")]
         public async Task<ActionResult<ApiResponse<PromotionDto>>> GetPromotionById(Guid id)
         {
+            if (_promotionService == null)
+            {
+                return ServiceUnavailable<PromotionDto>();
+            }
+
             try
             {
                 var promotion = await _promotionService.GetPromotionByIdAsync(id);
@@ -143,6 +162,11 @@ namespace AmesaBackend.Lottery.Controllers
         [HttpGet("code/{code}")]
         public async Task<ActionResult<ApiResponse<PromotionDto>>> GetPromotionByCode(string code)
         {
+            if (_promotionService == null)
+            {
+                return ServiceUnavailable<PromotionDto>();
+            }
+
             try
             {
                 var promotion = await _promotionService.GetPromotionByCodeAsync(code);
@@ -203,6 +227,11 @@ namespace AmesaBackend.Lottery.Controllers
         [Authorize(Roles = "Admin")]
         public async Task<ActionResult<ApiResponse<PromotionDto>>> CreatePromotion([FromBody] CreatePromotionRequest request)
         {
+            if (_promotionService == null)
+            {
+                return ServiceUnavailable<PromotionDto>();
+            }
+
             try
             {
                 // Get user ID from claims
@@ -275,6 +304,11 @@ namespace AmesaBackend.Lottery.Controllers
             Guid id,
             [FromBody] UpdatePromotionRequest request)
         {
+            if (_promotionService == null)
+            {
+                return ServiceUnavailable<PromotionDto>();
+            }
+
             try
             {
                 var promotion = await _promotionService.UpdatePromotionAsync(id, request);
@@ -334,6 +368,11 @@ namespace AmesaBackend.Lottery.Controllers
         [Authorize(Roles = "Admin")]
         public async Task<ActionResult<ApiResponse<bool>>> DeletePromotion(Guid id)
         {
+            if (_promotionService == null)
+            {
+                return ServiceUnavailable<bool>();
+            }
+
             try
             {
                 var deleted = await _promotionService.DeletePromotionAsync(id);
@@ -395,6 +434,11 @@ namespace AmesaBackend.Lottery.Controllers
         public async Task<ActionResult<ApiResponse<PromotionValidationResponse>>> ValidatePromotion(
             [FromBody] ValidatePromotionRequest request)
         {
+            if (_promotionService == null)
+            {
+                return ServiceUnavailable<PromotionValidationResponse>();
+            }
+
             try
             {
                 // Get user ID from claims and override request userId for security
@@ -461,6 +505,11 @@ namespace AmesaBackend.Lottery.Controllers
         public async Task<ActionResult<ApiResponse<PromotionUsageDto>>> ApplyPromotion(
             [FromBody] ApplyPromotionRequest request)
         {
+            if (_promotionService == null)
+            {
+                return ServiceUnavailable<PromotionUsageDto>();
+            }
+
             try
             {
                 // Get user ID from claims and verify it matches request
@@ -547,6 +596,11 @@ namespace AmesaBackend.Lottery.Controllers
         [Authorize]
         public async Task<ActionResult<ApiResponse<List<PromotionUsageDto>>>> GetUserPromotionHistory(Guid userId)
         {
+            if (_promotionService == null)
+            {
+                return ServiceUnavailable<List<PromotionUsageDto>>();
+            }
+
             try
             {
                 // Get user ID from claims and verify it matches request
@@ -616,6 +670,11 @@ namespace AmesaBackend.Lottery.Controllers
         public async Task<ActionResult<ApiResponse<List<PromotionDto>>>> GetAvailablePromotions(
             [FromQuery] Guid? houseId)
         {
+            if (_promotionService == null)
+            {
+                return ServiceUnavailable<List<PromotionDto>>();
+            }
+
             Guid? userId = null;
             try
             {
@@ -690,6 +749,11 @@ namespace AmesaBackend.Lottery.Controllers
         [Authorize(Roles = "Admin")]
         public async Task<ActionResult<ApiResponse<PromotionAnalyticsDto>>> GetPromotionStats(Guid id)
         {
+            if (_promotionService == null)
+            {
+                return ServiceUnavailable<PromotionAnalyticsDto>();
+            }
+
             try
             {
                 var stats = await _promotionService.GetPromotionUsageStatsAsync(id);
@@ -750,6 +814,11 @@ namespace AmesaBackend.Lottery.Controllers
         public async Task<ActionResult<ApiResponse<List<PromotionAnalyticsDto>>>> GetPromotionAnalytics(
             [FromQuery] PromotionSearchParams? searchParams)
         {
+            if (_promotionService == null)
+            {
+                return ServiceUnavailable<List<PromotionAnalyticsDto>>();
+            }
+
             try
             {
                 var analytics = await _promotionService.GetPromotionAnalyticsAsync(searchParams);
