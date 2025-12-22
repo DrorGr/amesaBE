@@ -237,11 +237,11 @@ builder.Services.AddScoped<IPaymentProcessor, PaymentProcessor>();
 builder.Services.AddScoped<ITicketCreatorProcessor, TicketCreatorProcessor>();
 
 // Register IRateLimitService from Auth service (optional)
-var rateLimitServiceType = typeof(IRateLimitService);
-if (rateLimitServiceType != null)
-{
-    builder.Services.AddScoped(typeof(IRateLimitService), typeof(RateLimitService));
-}
+// Note: RateLimitService requires ICircuitBreakerService
+// Register CircuitBreakerService first (singleton) as it's a dependency
+builder.Services.AddSingleton<ICircuitBreakerService, CircuitBreakerService>();
+// Then register RateLimitService (scoped) which depends on ICircuitBreakerService
+builder.Services.AddScoped<IRateLimitService, RateLimitService>();
 
 // Register HttpClient for payment service with timeout, retry, and circuit breaker policies
 builder.Services.AddHttpClient<IPaymentProcessor, PaymentProcessor>(client =>
