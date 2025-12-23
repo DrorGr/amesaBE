@@ -358,6 +358,8 @@ jobs:
       - name: Checkout code
         if: steps.check-service.outputs.deploy == 'true'
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history not needed for Docker builds
 
       - name: Configure AWS credentials
         if: steps.check-service.outputs.deploy == 'true'
