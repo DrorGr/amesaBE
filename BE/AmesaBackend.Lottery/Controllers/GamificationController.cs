@@ -41,13 +41,21 @@ public class GamificationController : ControllerBase
     [HttpGet]
     public async Task<ActionResult> GetGamificationData()
     {
+        // #region agent log
+        try { await System.IO.File.AppendAllTextAsync(@"c:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\.cursor\debug.log", System.Text.Json.JsonSerializer.Serialize(new { sessionId = "debug-session", runId = "run1", hypothesisId = "C,D", location = "GamificationController.cs:42", message = "GetGamificationData entry", data = new { serviceNull = _gamificationService == null }, timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }) + "\n"); } catch { }
+        // #endregion
         try
         {
             var userId = GetUserId();
-            
+            // #region agent log
+            try { await System.IO.File.AppendAllTextAsync(@"c:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\.cursor\debug.log", System.Text.Json.JsonSerializer.Serialize(new { sessionId = "debug-session", runId = "run1", hypothesisId = "D", location = "GamificationController.cs:50", message = "Before GetUserGamificationDataAsync", data = new { userId = userId.ToString() }, timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }) + "\n"); } catch { }
+            // #endregion
             // Call the gamification service to get user's gamification data
             // Note: Adjust this based on the actual IGamificationService interface
             var data = await _gamificationService.GetUserGamificationDataAsync(userId);
+            // #region agent log
+            try { await System.IO.File.AppendAllTextAsync(@"c:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\.cursor\debug.log", System.Text.Json.JsonSerializer.Serialize(new { sessionId = "debug-session", runId = "run1", hypothesisId = "D", location = "GamificationController.cs:52", message = "After GetUserGamificationDataAsync", data = new { dataNull = data == null }, timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }) + "\n"); } catch { }
+            // #endregion
 
             return Ok(new
             {
@@ -63,6 +71,9 @@ public class GamificationController : ControllerBase
         }
         catch (Exception ex)
         {
+            // #region agent log
+            try { await System.IO.File.AppendAllTextAsync(@"c:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\.cursor\debug.log", System.Text.Json.JsonSerializer.Serialize(new { sessionId = "debug-session", runId = "run1", hypothesisId = "C,D", location = "GamificationController.cs:67", message = "Exception caught", data = new { exceptionType = ex.GetType().Name, message = ex.Message, stackTrace = ex.StackTrace?.Substring(0, Math.Min(500, ex.StackTrace.Length ?? 0)) }, timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }) + "\n"); } catch { }
+            // #endregion
             _logger.LogError(ex, "Error fetching gamification data");
             return StatusCode(500, new { success = false, error = new { message = "An error occurred while fetching gamification data" } });
         }

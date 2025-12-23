@@ -43,15 +43,23 @@ public class TicketsController : ControllerBase
     [HttpGet("active")]
     public async Task<ActionResult> GetActiveTickets()
     {
+        // #region agent log
+        try { await System.IO.File.AppendAllTextAsync(@"c:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\.cursor\debug.log", System.Text.Json.JsonSerializer.Serialize(new { sessionId = "debug-session", runId = "run1", hypothesisId = "B,C", location = "TicketsController.cs:44", message = "GetActiveTickets entry", data = new { contextNull = _context == null }, timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }) + "\n"); } catch { }
+        // #endregion
         try
         {
             var userId = GetUserId();
-
+            // #region agent log
+            try { await System.IO.File.AppendAllTextAsync(@"c:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\.cursor\debug.log", System.Text.Json.JsonSerializer.Serialize(new { sessionId = "debug-session", runId = "run1", hypothesisId = "B", location = "TicketsController.cs:51", message = "Before database query", data = new { userId = userId.ToString() }, timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }) + "\n"); } catch { }
+            // #endregion
             var activeTickets = await _context.LotteryTickets
                 .Where(t => t.UserId == userId && t.Status == "Active")
                 .Include(t => t.House)
                 .OrderByDescending(t => t.CreatedAt)
                 .ToListAsync();
+            // #region agent log
+            try { await System.IO.File.AppendAllTextAsync(@"c:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\.cursor\debug.log", System.Text.Json.JsonSerializer.Serialize(new { sessionId = "debug-session", runId = "run1", hypothesisId = "B", location = "TicketsController.cs:55", message = "After database query", data = new { count = activeTickets?.Count ?? -1 }, timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }) + "\n"); } catch { }
+            // #endregion
 
             return Ok(new
             {
@@ -67,6 +75,9 @@ public class TicketsController : ControllerBase
         }
         catch (Exception ex)
         {
+            // #region agent log
+            try { await System.IO.File.AppendAllTextAsync(@"c:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\.cursor\debug.log", System.Text.Json.JsonSerializer.Serialize(new { sessionId = "debug-session", runId = "run1", hypothesisId = "B,C", location = "TicketsController.cs:71", message = "Exception caught", data = new { exceptionType = ex.GetType().Name, message = ex.Message, stackTrace = ex.StackTrace?.Substring(0, Math.Min(500, ex.StackTrace.Length ?? 0)) }, timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }) + "\n"); } catch { }
+            // #endregion
             _logger.LogError(ex, "Error fetching active tickets");
             return StatusCode(500, new { success = false, error = new { message = "An error occurred while fetching active tickets" } });
         }
@@ -78,13 +89,21 @@ public class TicketsController : ControllerBase
     [HttpGet("analytics")]
     public async Task<ActionResult> GetTicketAnalytics()
     {
+        // #region agent log
+        try { await System.IO.File.AppendAllTextAsync(@"c:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\.cursor\debug.log", System.Text.Json.JsonSerializer.Serialize(new { sessionId = "debug-session", runId = "run1", hypothesisId = "B,C", location = "TicketsController.cs:79", message = "GetTicketAnalytics entry", data = new { }, timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }) + "\n"); } catch { }
+        // #endregion
         try
         {
             var userId = GetUserId();
-
+            // #region agent log
+            try { await System.IO.File.AppendAllTextAsync(@"c:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\.cursor\debug.log", System.Text.Json.JsonSerializer.Serialize(new { sessionId = "debug-session", runId = "run1", hypothesisId = "B", location = "TicketsController.cs:85", message = "Before CountAsync", data = new { userId = userId.ToString() }, timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }) + "\n"); } catch { }
+            // #endregion
             var totalTickets = await _context.LotteryTickets
                 .Where(t => t.UserId == userId)
                 .CountAsync();
+            // #region agent log
+            try { await System.IO.File.AppendAllTextAsync(@"c:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\.cursor\debug.log", System.Text.Json.JsonSerializer.Serialize(new { sessionId = "debug-session", runId = "run1", hypothesisId = "B", location = "TicketsController.cs:88", message = "After CountAsync", data = new { totalTickets }, timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }) + "\n"); } catch { }
+            // #endregion
 
             var activeTickets = await _context.LotteryTickets
                 .Where(t => t.UserId == userId && t.Status == "Active")
@@ -116,6 +135,9 @@ public class TicketsController : ControllerBase
         }
         catch (Exception ex)
         {
+            // #region agent log
+            try { await System.IO.File.AppendAllTextAsync(@"c:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\.cursor\debug.log", System.Text.Json.JsonSerializer.Serialize(new { sessionId = "debug-session", runId = "run1", hypothesisId = "B,C", location = "TicketsController.cs:120", message = "Exception caught", data = new { exceptionType = ex.GetType().Name, message = ex.Message, stackTrace = ex.StackTrace?.Substring(0, Math.Min(500, ex.StackTrace.Length ?? 0)) }, timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }) + "\n"); } catch { }
+            // #endregion
             _logger.LogError(ex, "Error fetching ticket analytics");
             return StatusCode(500, new { success = false, error = new { message = "An error occurred while fetching ticket analytics" } });
         }
