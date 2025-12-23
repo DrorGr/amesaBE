@@ -160,7 +160,7 @@ jobs:
           
           # Check for changes in each service directory
           # Auth service (includes AmesaBackend since it has OAuth controller)
-          if echo "$CHANGED_FILES" | grep -qE "^AmesaBackend\.Auth/|^AmesaBackend/|^AmesaBackend\.Shared/"; then
+          if echo "$CHANGED_FILES" | grep -qE "^BE/AmesaBackend\.Auth/|^AmesaBackend\.Auth/|^BE/AmesaBackend/|^AmesaBackend/|^BE/AmesaBackend\.Shared/|^AmesaBackend\.Shared/"; then
             echo "amesa-auth-service=true" >> $GITHUB_OUTPUT
             echo "✅ amesa-auth-service: changes detected"
           else
@@ -169,7 +169,7 @@ jobs:
           fi
           
           # Content service
-          if echo "$CHANGED_FILES" | grep -qE "^AmesaBackend\.Content/|^AmesaBackend\.Shared/"; then
+          if echo "$CHANGED_FILES" | grep -qE "^BE/AmesaBackend\.Content/|^AmesaBackend\.Content/|^BE/AmesaBackend\.Shared/|^AmesaBackend\.Shared/"; then
             echo "amesa-content-service=true" >> $GITHUB_OUTPUT
             echo "✅ amesa-content-service: changes detected"
           else
@@ -178,7 +178,7 @@ jobs:
           fi
           
           # Notification service
-          if echo "$CHANGED_FILES" | grep -qE "^AmesaBackend\.Notification/|^AmesaBackend\.Shared/"; then
+          if echo "$CHANGED_FILES" | grep -qE "^BE/AmesaBackend\.Notification/|^AmesaBackend\.Notification/|^BE/AmesaBackend\.Shared/|^AmesaBackend\.Shared/"; then
             echo "amesa-notification-service=true" >> $GITHUB_OUTPUT
             echo "✅ amesa-notification-service: changes detected"
           else
@@ -187,7 +187,7 @@ jobs:
           fi
           
           # Payment service
-          if echo "$CHANGED_FILES" | grep -qE "^AmesaBackend\.Payment/|^AmesaBackend\.Shared/"; then
+          if echo "$CHANGED_FILES" | grep -qE "^BE/AmesaBackend\.Payment/|^AmesaBackend\.Payment/|^BE/AmesaBackend\.Shared/|^AmesaBackend\.Shared/"; then
             echo "amesa-payment-service=true" >> $GITHUB_OUTPUT
             echo "✅ amesa-payment-service: changes detected"
           else
@@ -196,7 +196,7 @@ jobs:
           fi
           
           # Lottery service
-          if echo "$CHANGED_FILES" | grep -qE "^AmesaBackend\.Lottery/|^AmesaBackend\.Shared/"; then
+          if echo "$CHANGED_FILES" | grep -qE "^BE/AmesaBackend\.Lottery/|^AmesaBackend\.Lottery/|^BE/AmesaBackend\.Shared/|^AmesaBackend\.Shared/"; then
             echo "amesa-lottery-service=true" >> $GITHUB_OUTPUT
             echo "✅ amesa-lottery-service: changes detected"
           else
@@ -205,7 +205,7 @@ jobs:
           fi
           
           # Lottery Results service
-          if echo "$CHANGED_FILES" | grep -qE "^AmesaBackend\.LotteryResults/|^AmesaBackend\.Shared/"; then
+          if echo "$CHANGED_FILES" | grep -qE "^BE/AmesaBackend\.LotteryResults/|^AmesaBackend\.LotteryResults/|^BE/AmesaBackend\.Shared/|^AmesaBackend\.Shared/"; then
             echo "amesa-lottery-results-service=true" >> $GITHUB_OUTPUT
             echo "✅ amesa-lottery-results-service: changes detected"
           else
@@ -214,7 +214,7 @@ jobs:
           fi
           
           # Analytics service
-          if echo "$CHANGED_FILES" | grep -qE "^AmesaBackend\.Analytics/|^AmesaBackend\.Shared/"; then
+          if echo "$CHANGED_FILES" | grep -qE "^BE/AmesaBackend\.Analytics/|^AmesaBackend\.Analytics/|^BE/AmesaBackend\.Shared/|^AmesaBackend\.Shared/"; then
             echo "amesa-analytics-service=true" >> $GITHUB_OUTPUT
             echo "✅ amesa-analytics-service: changes detected"
           else
@@ -223,7 +223,7 @@ jobs:
           fi
           
           # Admin service
-          if echo "$CHANGED_FILES" | grep -qE "^BE/AmesaBackend\.Admin/|^AmesaBackend\.Admin/|^AmesaBackend\.Shared/"; then
+          if echo "$CHANGED_FILES" | grep -qE "^BE/AmesaBackend\.Admin/|^AmesaBackend\.Admin/|^BE/AmesaBackend\.Shared/|^AmesaBackend\.Shared/"; then
             echo "amesa-admin-service=true" >> $GITHUB_OUTPUT
             echo "✅ amesa-admin-service: changes detected"
           else
