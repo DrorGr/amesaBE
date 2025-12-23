@@ -263,7 +263,8 @@ jobs:
     name: Build and Push Docker Images
     runs-on: ubuntu-latest
     # Continue even if test job fails (test job has continue-on-error: true)
-    if: always()
+    # Also continue if test job was skipped
+    if: always() && (needs.test.result == 'success' || needs.test.result == 'failure' || needs.test.result == 'skipped')
     strategy:
       matrix:
         include:
