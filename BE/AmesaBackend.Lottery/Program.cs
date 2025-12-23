@@ -244,9 +244,9 @@ builder.Services.AddScoped<ITicketReservationService, TicketReservationService>(
 // Register IRateLimitService from Auth service (optional)
 // Note: RateLimitService requires ICircuitBreakerService
 // Register CircuitBreakerService first (singleton) as it's a dependency
-builder.Services.AddSingleton<ICircuitBreakerService, CircuitBreakerService>();
+builder.Services.AddSingleton<AmesaBackend.Auth.Services.ICircuitBreakerService, AmesaBackend.Auth.Services.CircuitBreakerService>();
 // Then register RateLimitService (scoped) which depends on ICircuitBreakerService
-builder.Services.AddScoped<IRateLimitService, RateLimitService>();
+builder.Services.AddScoped<AmesaBackend.Auth.Services.IRateLimitService, AmesaBackend.Auth.Services.RateLimitService>();
 
 // Register HttpClient for payment service with timeout, retry, and circuit breaker policies
 // PaymentProcessor is not implemented yet - commented out to prevent startup errors
