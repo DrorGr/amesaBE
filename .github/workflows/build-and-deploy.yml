@@ -117,12 +117,19 @@ jobs:
       amesa-admin-service: ${{ steps.changes.outputs.amesa-admin-service }}
     
     steps:
+      - name: Determine fetch depth
+        id: fetch-depth
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "depth=0" >> $GITHUB_OUTPUT
+          else
+            echo "depth=2" >> $GITHUB_OUTPUT
+          fi
+      
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          # For workflow_dispatch, we don't need history (force_deploy handles it)
-          # For push/PR, we need at least 2 commits to compare
-          fetch-depth: ${{ github.event_name == 'workflow_dispatch' && 0 || 2 }}
+          fetch-depth: ${{ steps.fetch-depth.outputs.depth }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Detect changed files
