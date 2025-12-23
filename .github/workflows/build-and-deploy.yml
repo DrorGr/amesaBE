@@ -117,19 +117,12 @@ jobs:
       amesa-admin-service: ${{ steps.changes.outputs.amesa-admin-service }}
     
     steps:
-      - name: Determine fetch depth
-        id: fetch-depth
-        run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "depth=0" >> $GITHUB_OUTPUT
-          else
-            echo "depth=2" >> $GITHUB_OUTPUT
-          fi
-      
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: ${{ steps.fetch-depth.outputs.depth }}
+          # Use 0 (full history) to avoid shallow clone issues
+          # For workflow_dispatch, we exit early anyway, so depth doesn't matter
+          fetch-depth: 0
 
       - name: Detect changed files
         id: changes
