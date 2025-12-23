@@ -39,6 +39,11 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Explicit permissions for repository access
+permissions:
+  contents: read
+  pull-requests: read
+
 env:
   AWS_REGION: eu-north-1
   AWS_ACCOUNT_ID: 129394705401
@@ -117,7 +122,8 @@ jobs:
         with:
           # For workflow_dispatch, we don't need history (force_deploy handles it)
           # For push/PR, we need at least 2 commits to compare
-          fetch-depth: ${{ github.event_name == 'workflow_dispatch' && 0 || 2 }}
+          fetch-depth: ${{ github.event_name == 'workflow_dispatch' && '0' || '2' }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Detect changed files
         id: changes
@@ -359,7 +365,8 @@ jobs:
         if: steps.check-service.outputs.deploy == 'true'
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Full history not needed for Docker builds
+          fetch-depth: 1  # Only current commit needed for Docker builds
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Configure AWS credentials
         if: steps.check-service.outputs.deploy == 'true'
