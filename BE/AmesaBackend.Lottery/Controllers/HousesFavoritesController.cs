@@ -5,6 +5,7 @@ using AmesaBackend.Lottery.Data;
 using AmesaBackend.Models;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
+using System.Linq;
 
 namespace AmesaBackend.Lottery.Controllers;
 

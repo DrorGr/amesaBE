@@ -1,6 +1,7 @@
 using AmesaBackend.Lottery.Data;
 using AmesaBackend.Models;
 using Microsoft.EntityFrameworkCore;
+using System.Linq;
 
 namespace AmesaBackend.Lottery.Services;
 
