@@ -49,23 +49,23 @@ public class HousesFavoritesController : ControllerBase
     public async Task<ActionResult> GetFavorites([FromQuery] int page = 1, [FromQuery] int limit = 20, [FromQuery] string? sortBy = null, [FromQuery] string? sortOrder = "asc")
     {
         // #region agent log
-        try { await System.IO.File.AppendAllTextAsync(@"c:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\.cursor\debug.log", System.Text.Json.JsonSerializer.Serialize(new { sessionId = "debug-session", runId = "run1", hypothesisId = "A,C,D", location = "HousesFavoritesController.cs:49", message = "GetFavorites entry", data = new { page, limit, sortBy, sortOrder }, timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }) + "\n"); } catch { }
+        _logger.LogInformation("[DEBUG] GetFavorites entry - page={Page}, limit={Limit}, sortBy={SortBy}, sortOrder={SortOrder}", page, limit, sortBy, sortOrder);
         // #endregion
         try
         {
             // #region agent log
-            try { await System.IO.File.AppendAllTextAsync(@"c:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\.cursor\debug.log", System.Text.Json.JsonSerializer.Serialize(new { sessionId = "debug-session", runId = "run1", hypothesisId = "E", location = "HousesFavoritesController.cs:53", message = "Before GetUserId", data = new { }, timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }) + "\n"); } catch { }
+            _logger.LogInformation("[DEBUG] Before GetUserId");
             // #endregion
             var userId = GetUserId();
             // #region agent log
-            try { await System.IO.File.AppendAllTextAsync(@"c:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\.cursor\debug.log", System.Text.Json.JsonSerializer.Serialize(new { sessionId = "debug-session", runId = "run1", hypothesisId = "E", location = "HousesFavoritesController.cs:55", message = "After GetUserId", data = new { userId = userId.ToString() }, timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }) + "\n"); } catch { }
+            _logger.LogInformation("[DEBUG] After GetUserId - userId={UserId}", userId);
             // #endregion
             // #region agent log
-            try { await System.IO.File.AppendAllTextAsync(@"c:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\.cursor\debug.log", System.Text.Json.JsonSerializer.Serialize(new { sessionId = "debug-session", runId = "run1", hypothesisId = "A,D", location = "HousesFavoritesController.cs:56", message = "Before GetFavoriteHouseIdsAsync", data = new { userId = userId.ToString(), serviceNull = _userPreferencesService == null }, timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }) + "\n"); } catch { }
+            _logger.LogInformation("[DEBUG] Before GetFavoriteHouseIdsAsync - userId={UserId}, serviceNull={ServiceNull}", userId, _userPreferencesService == null);
             // #endregion
             var favoriteHouseIds = await _userPreferencesService.GetFavoriteHouseIdsAsync(userId);
             // #region agent log
-            try { await System.IO.File.AppendAllTextAsync(@"c:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\.cursor\debug.log", System.Text.Json.JsonSerializer.Serialize(new { sessionId = "debug-session", runId = "run1", hypothesisId = "A", location = "HousesFavoritesController.cs:58", message = "After GetFavoriteHouseIdsAsync", data = new { count = favoriteHouseIds?.Count ?? -1, isNull = favoriteHouseIds == null }, timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }) + "\n"); } catch { }
+            _logger.LogInformation("[DEBUG] After GetFavoriteHouseIdsAsync - count={Count}, isNull={IsNull}", favoriteHouseIds?.Count ?? -1, favoriteHouseIds == null);
             // #endregion
 
             if (favoriteHouseIds == null || !favoriteHouseIds.Any())
@@ -86,7 +86,7 @@ public class HousesFavoritesController : ControllerBase
             }
 
             // #region agent log
-            try { await System.IO.File.AppendAllTextAsync(@"c:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\.cursor\debug.log", System.Text.Json.JsonSerializer.Serialize(new { sessionId = "debug-session", runId = "run1", hypothesisId = "B", location = "HousesFavoritesController.cs:75", message = "Before database query", data = new { contextNull = _context == null, favoriteCount = favoriteHouseIds?.Count ?? 0 }, timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }) + "\n"); } catch { }
+            _logger.LogInformation("[DEBUG] Before database query - contextNull={ContextNull}, favoriteCount={FavoriteCount}", _context == null, favoriteHouseIds?.Count ?? 0);
             // #endregion
             var query = _context.Houses
                 .Where(h => favoriteHouseIds.Contains(h.Id) && h.Status == "Active");
@@ -138,7 +138,7 @@ public class HousesFavoritesController : ControllerBase
         catch (Exception ex)
         {
             // #region agent log
-            try { await System.IO.File.AppendAllTextAsync(@"c:\Users\dror0\Curser-Repos\AmesaBase-Monorepo\.cursor\debug.log", System.Text.Json.JsonSerializer.Serialize(new { sessionId = "debug-session", runId = "run1", hypothesisId = "A,B,C,D,E", location = "HousesFavoritesController.cs:123", message = "Exception caught", data = new { exceptionType = ex.GetType().Name, message = ex.Message, stackTrace = ex.StackTrace?.Substring(0, Math.Min(500, ex.StackTrace.Length ?? 0)) }, timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }) + "\n"); } catch { }
+            _logger.LogError(ex, "[DEBUG] Exception in GetFavorites - Type={ExceptionType}, Message={Message}, StackTrace={StackTrace}", ex.GetType().Name, ex.Message, ex.StackTrace?.Substring(0, Math.Min(500, ex.StackTrace?.Length ?? 0)));
             // #endregion
             _logger.LogError(ex, "Error fetching favorite houses");
             return StatusCode(500, new { success = false, error = new { message = "An error occurred while fetching favorite houses" } });
