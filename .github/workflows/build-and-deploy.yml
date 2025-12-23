@@ -120,9 +120,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          # Use 0 (full history) to avoid shallow clone issues
-          # For workflow_dispatch, we exit early anyway, so depth doesn't matter
+          repository: ${{ github.repository }}
+          ref: ${{ github.ref }}
           fetch-depth: 0
+          lfs: false
+          submodules: false
 
       - name: Detect changed files
         id: changes
@@ -371,7 +373,11 @@ jobs:
         if: steps.check-service.outputs.deploy == 'true'
         uses: actions/checkout@v4
         with:
+          repository: ${{ github.repository }}
+          ref: ${{ github.ref }}
           fetch-depth: 1
+          lfs: false
+          submodules: false
 
       - name: Configure AWS credentials
         if: steps.check-service.outputs.deploy == 'true'
