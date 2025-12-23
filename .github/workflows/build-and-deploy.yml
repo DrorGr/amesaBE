@@ -22,6 +22,16 @@ on:
           - 'amesa-lottery-results-service'
           - 'amesa-analytics-service'
           - 'amesa-admin-service'
+      force_deploy:
+        description: 'Force deploy all services (skip change detection)'
+        required: false
+        default: false
+        type: boolean
+      skip_tests:
+        description: 'Skip running tests'
+        required: false
+        default: false
+        type: boolean
 
 # Cancel previous workflow runs when a new one starts
 # Use shared group so test and build-deploy workflows cancel each other
@@ -41,6 +51,7 @@ jobs:
     name: Run Tests
     runs-on: ubuntu-latest
     continue-on-error: true  # Allow test failures without blocking deployment
+    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.skip_tests != 'true' }}
     
     steps:
       - name: Checkout code
@@ -109,8 +120,23 @@ jobs:
       - name: Detect changed files
         id: changes
         run: |
+          # For workflow_dispatch with force_deploy=true, deploy everything
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]] && [[ "${{ github.event.inputs.force_deploy }}" == "true" ]]; then
+            echo "Force deploy enabled - deploying all services"
+            echo "amesa-auth-service=true" >> $GITHUB_OUTPUT
+            echo "amesa-content-service=true" >> $GITHUB_OUTPUT
+            echo "amesa-notification-service=true" >> $GITHUB_OUTPUT
+            echo "amesa-payment-service=true" >> $GITHUB_OUTPUT
+            echo "amesa-lottery-service=true" >> $GITHUB_OUTPUT
+            echo "amesa-lottery-results-service=true" >> $GITHUB_OUTPUT
+            echo "amesa-analytics-service=true" >> $GITHUB_OUTPUT
+            echo "amesa-admin-service=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
           # For workflow_dispatch with 'all', deploy everything
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]] && [[ "${{ github.event.inputs.services }}" == "all" ]]; then
+            echo "Deploying all services (workflow_dispatch with 'all')"
             echo "amesa-auth-service=true" >> $GITHUB_OUTPUT
             echo "amesa-content-service=true" >> $GITHUB_OUTPUT
             echo "amesa-notification-service=true" >> $GITHUB_OUTPUT
@@ -125,6 +151,7 @@ jobs:
           # For workflow_dispatch with specific service, only deploy that service
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]] && [[ "${{ github.event.inputs.services }}" != "all" ]]; then
             SERVICE="${{ github.event.inputs.services }}"
+            echo "Deploying specific service: ${SERVICE}"
             echo "${SERVICE}=true" >> $GITHUB_OUTPUT
             exit 0
           fi
