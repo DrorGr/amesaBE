@@ -383,35 +383,45 @@ jobs:
       - name: Check if service should be deployed
         id: check-service
         run: |
+          # Debug: Print event info
+          echo "Event name: ${{ github.event_name }}"
+          echo "Matrix service: ${{ matrix.service }}"
+          
           # Check if force_deploy is enabled (for workflow_dispatch)
           FORCE_DEPLOY="${{ github.event.inputs.force_deploy }}"
           SELECTED_SERVICE="${{ github.event.inputs.services }}"
           
-          # If force_deploy is true, deploy all services
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]] && [[ "$FORCE_DEPLOY" == "true" ]]; then
-            echo "deploy=true" >> $GITHUB_OUTPUT
-            echo "✅ ${{ matrix.service }} will be deployed to ECS (force deploy enabled)"
-            exit 0
-          fi
+          echo "Force deploy: '$FORCE_DEPLOY'"
+          echo "Selected service: '$SELECTED_SERVICE'"
           
-          # If workflow_dispatch with 'all', deploy all services
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]] && [[ "$SELECTED_SERVICE" == "all" ]]; then
-            echo "deploy=true" >> $GITHUB_OUTPUT
-            echo "✅ ${{ matrix.service }} will be deployed to ECS (all services selected)"
-            exit 0
-          fi
-          
-          # If workflow_dispatch with specific service, only deploy that service
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]] && [[ "$SELECTED_SERVICE" != "all" ]]; then
-            SERVICE_NAME="${{ matrix.service }}"
-            if [[ "$SERVICE_NAME" == "$SELECTED_SERVICE" ]]; then
+          # If workflow_dispatch, check inputs
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            # If force_deploy is true, deploy all services
+            if [[ "$FORCE_DEPLOY" == "true" ]]; then
               echo "deploy=true" >> $GITHUB_OUTPUT
-              echo "✅ ${{ matrix.service }} will be deployed to ECS (specific service selected)"
-            else
-              echo "deploy=false" >> $GITHUB_OUTPUT
-              echo "⏭️  ${{ matrix.service }} skipped (not selected)"
+              echo "✅ ${{ matrix.service }} will be deployed to ECS (force deploy enabled)"
+              exit 0
             fi
-            exit 0
+            
+            # If 'all' is selected, deploy all services
+            if [[ "$SELECTED_SERVICE" == "all" ]]; then
+              echo "deploy=true" >> $GITHUB_OUTPUT
+              echo "✅ ${{ matrix.service }} will be deployed to ECS (all services selected)"
+              exit 0
+            fi
+            
+            # If specific service is selected, only deploy that service
+            if [[ -n "$SELECTED_SERVICE" ]] && [[ "$SELECTED_SERVICE" != "all" ]]; then
+              SERVICE_NAME="${{ matrix.service }}"
+              if [[ "$SERVICE_NAME" == "$SELECTED_SERVICE" ]]; then
+                echo "deploy=true" >> $GITHUB_OUTPUT
+                echo "✅ ${{ matrix.service }} will be deployed to ECS (specific service selected)"
+              else
+                echo "deploy=false" >> $GITHUB_OUTPUT
+                echo "⏭️  ${{ matrix.service }} skipped (not selected - selected: $SELECTED_SERVICE)"
+              fi
+              exit 0
+            fi
           fi
           
           # For push/PR events, check detect-changes outputs
