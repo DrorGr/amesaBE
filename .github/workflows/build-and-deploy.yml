@@ -122,7 +122,7 @@ jobs:
         with:
           # For workflow_dispatch, we don't need history (force_deploy handles it)
           # For push/PR, we need at least 2 commits to compare
-          fetch-depth: ${{ github.event_name == 'workflow_dispatch' && '0' || '2' }}
+          fetch-depth: ${{ github.event_name == 'workflow_dispatch' && 0 || 2 }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Detect changed files
