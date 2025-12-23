@@ -5,9 +5,9 @@ using System.Text;
 using System.Threading.Tasks;
 using AmesaBackend.Lottery.Data;
 using AmesaBackend.Lottery.Services;
-using AmesaBackend.Lottery.Services.Processors;
-using AmesaBackend.Lottery.Hubs;
-using AmesaBackend.Lottery.Configuration;
+// using AmesaBackend.Lottery.Services.Processors; // Processors namespace doesn't exist
+// using AmesaBackend.Lottery.Hubs; // Hubs namespace doesn't exist
+// using AmesaBackend.Lottery.Configuration; // Configuration namespace doesn't exist
 using Microsoft.Extensions.Options;
 using Polly;
 using Polly.Extensions.Http;
@@ -236,9 +236,10 @@ builder.Services.AddScoped<AmesaBackend.Shared.Configuration.IConfigurationServi
 // Reservation system services
 builder.Services.AddScoped<IRedisInventoryManager, RedisInventoryManager>();
 builder.Services.AddScoped<ITicketReservationService, TicketReservationService>();
-builder.Services.AddScoped<IReservationProcessor, ReservationProcessor>();
-builder.Services.AddScoped<IPaymentProcessor, PaymentProcessor>();
-builder.Services.AddScoped<ITicketCreatorProcessor, TicketCreatorProcessor>();
+// Processor services are not implemented yet - commented out to prevent startup errors
+// builder.Services.AddScoped<IReservationProcessor, ReservationProcessor>();
+// builder.Services.AddScoped<IPaymentProcessor, PaymentProcessor>();
+// builder.Services.AddScoped<ITicketCreatorProcessor, TicketCreatorProcessor>();
 
 // Register IRateLimitService from Auth service (optional)
 // Note: RateLimitService requires ICircuitBreakerService
@@ -248,16 +249,17 @@ builder.Services.AddSingleton<ICircuitBreakerService, CircuitBreakerService>();
 builder.Services.AddScoped<IRateLimitService, RateLimitService>();
 
 // Register HttpClient for payment service with timeout, retry, and circuit breaker policies
-builder.Services.AddHttpClient<IPaymentProcessor, PaymentProcessor>(client =>
-{
-    var paymentServiceUrl = builder.Configuration["PaymentService:BaseUrl"] 
-        ?? "http://amesa-backend-alb-509078867.eu-north-1.elb.amazonaws.com/api/v1";
-    client.BaseAddress = new Uri(paymentServiceUrl);
-    var lotterySettings = builder.Configuration.GetSection("Lottery").Get<LotterySettings>() ?? new LotterySettings();
-    client.Timeout = TimeSpan.FromSeconds(lotterySettings.Payment.TimeoutSeconds);
-})
-.AddPolicyHandler(GetRetryPolicy())
-.AddPolicyHandler(GetCircuitBreakerPolicy());
+// PaymentProcessor is not implemented yet - commented out to prevent startup errors
+// builder.Services.AddHttpClient<IPaymentProcessor, PaymentProcessor>(client =>
+// {
+//     var paymentServiceUrl = builder.Configuration["PaymentService:BaseUrl"] 
+//         ?? "http://amesa-backend-alb-509078867.eu-north-1.elb.amazonaws.com/api/v1";
+//     client.BaseAddress = new Uri(paymentServiceUrl);
+//     var lotterySettings = builder.Configuration.GetSection("Lottery").Get<LotterySettings>() ?? new LotterySettings();
+//     client.Timeout = TimeSpan.FromSeconds(lotterySettings.Payment.TimeoutSeconds);
+// })
+// .AddPolicyHandler(GetRetryPolicy())
+// .AddPolicyHandler(GetCircuitBreakerPolicy());
 
 // Retry policy: Exponential backoff for transient HTTP errors
 static IAsyncPolicy<HttpResponseMessage> GetRetryPolicy()
@@ -354,7 +356,8 @@ app.MapHealthChecks("/health");
 app.MapControllers();
 
 // Map SignalR hubs
-app.MapHub<LotteryHub>("/ws/lottery");
+// LotteryHub is not implemented yet - commented out to prevent startup errors
+// app.MapHub<LotteryHub>("/ws/lottery");
 
 // Ensure database is created
 using (var scope = app.Services.CreateScope())
