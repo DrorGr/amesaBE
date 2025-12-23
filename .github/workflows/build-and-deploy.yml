@@ -427,6 +427,8 @@ jobs:
           # For push/PR events, check detect-changes outputs
           SERVICE_NAME="${{ matrix.service }}"
           
+          echo "Checking detect-changes outputs for push/PR event..."
+          
           # Access the output using the service name
           if [[ "$SERVICE_NAME" == "amesa-auth-service" ]]; then
             SERVICE_CHANGED="${{ needs.detect-changes.outputs.amesa-auth-service }}"
@@ -448,12 +450,20 @@ jobs:
             SERVICE_CHANGED="false"
           fi
           
+          echo "Service changed value: '$SERVICE_CHANGED'"
+          
           if [[ "$SERVICE_CHANGED" == "true" ]]; then
             echo "deploy=true" >> $GITHUB_OUTPUT
             echo "✅ ${{ matrix.service }} will be deployed to ECS"
           else
             echo "deploy=false" >> $GITHUB_OUTPUT
             echo "⏭️  ${{ matrix.service }} skipped (no changes detected)"
+          fi
+          
+          # Always ensure deploy output is set (safety check)
+          if [[ ! -f "$GITHUB_OUTPUT" ]] || ! grep -q "deploy=" "$GITHUB_OUTPUT"; then
+            echo "deploy=false" >> $GITHUB_OUTPUT
+            echo "⚠️  Warning: deploy output was not set, defaulting to false"
           fi
 
       - name: Configure AWS credentials
