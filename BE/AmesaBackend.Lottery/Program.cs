@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using System.Threading.Tasks;
+using System.Linq;
 using AmesaBackend.Lottery.Data;
 using AmesaBackend.Lottery.Services;
 // using AmesaBackend.Lottery.Services.Processors; // Processors namespace doesn't exist
@@ -218,7 +219,27 @@ builder.Services.AddAuthentication(options =>
 
 // Add Services
 // Register UserPreferencesService for favorites functionality
+// #region agent log
+Log.Information("[DEBUG] Registering UserPreferencesService - checking dependencies");
+try
+{
+    // Check if AuthDbContext is registered
+    var authDbContextDescriptor = builder.Services.FirstOrDefault(s => s.ServiceType == typeof(AuthDbContext));
+    Log.Information("[DEBUG] AuthDbContext registration: {IsRegistered}", authDbContextDescriptor != null);
+    
+    // Check if IHttpRequest is registered (optional dependency)
+    var httpRequestDescriptor = builder.Services.FirstOrDefault(s => s.ServiceType.Name == "IHttpRequest");
+    Log.Information("[DEBUG] IHttpRequest registration: {IsRegistered}", httpRequestDescriptor != null);
+}
+catch (Exception ex)
+{
+    Log.Error(ex, "[DEBUG] Error checking UserPreferencesService dependencies");
+}
+// #endregion
 builder.Services.AddScoped<IUserPreferencesService, UserPreferencesService>();
+// #region agent log
+Log.Information("[DEBUG] UserPreferencesService registered successfully");
+// #endregion
 builder.Services.AddScoped<ILotteryService, LotteryService>();
 // PromotionService is excluded from compilation (see .csproj), so registration is commented out
 // Controller handles null IPromotionService gracefully with ServiceUnavailable responses
@@ -329,27 +350,27 @@ app.UseCors("AllowFrontend");
 app.UseResponseCaching(); // Must be before UseRouting for VaryByQueryKeys to work
 app.UseRouting();
 // Debug routing middleware - log all API requests (production and development)
-app.Use(async (context, next) =>
-{
-    var method = context.Request.Method;
-    var path = context.Request.Path;
+    app.Use(async (context, next) =>
+    {
+        var method = context.Request.Method;
+        var path = context.Request.Path;
     var query = context.Request.QueryString.ToString();
-    
+        
     // #region agent log
     Log.Information("[DEBUG] Incoming request: {Method} {Path}{Query}", method, path, query);
     // #endregion
-    
-    await next();
-    
+        
+        await next();
+        
     var statusCode = context.Response.StatusCode;
     // #region agent log
     Log.Information("[DEBUG] Request completed: {Method} {Path}{Query} - Status: {StatusCode}", method, path, query, statusCode);
     // #endregion
     
     if (statusCode == 405)
-    {
-        Log.Warning("405 Method Not Allowed: {Method} {Path}", method, path);
-    }
+        {
+            Log.Warning("405 Method Not Allowed: {Method} {Path}", method, path);
+        }
     if (statusCode >= 400 && statusCode < 500)
     {
         // #region agent log
@@ -362,7 +383,7 @@ app.Use(async (context, next) =>
         Log.Error("[DEBUG] Server error: {Method} {Path}{Query} - Status: {StatusCode}", method, path, query, statusCode);
         // #endregion
     }
-});
+    });
 app.UseAuthentication();
 
 // Service-to-service authentication middleware
@@ -371,6 +392,43 @@ app.UseAuthorization();
 
 app.MapHealthChecks("/health");
 app.MapControllers();
+
+// #region agent log
+// Validate DI resolution for UserPreferencesService
+try
+{
+    using (var scope = app.Services.CreateScope())
+    {
+        Log.Information("[DEBUG] Attempting to resolve IUserPreferencesService...");
+        var userPrefsService = scope.ServiceProvider.GetService<IUserPreferencesService>();
+        if (userPrefsService == null)
+        {
+            Log.Error("[DEBUG] FAILED: IUserPreferencesService could not be resolved from DI container");
+        }
+        else
+        {
+            Log.Information("[DEBUG] SUCCESS: IUserPreferencesService resolved successfully - Type: {Type}", userPrefsService.GetType().Name);
+        }
+        
+        // Also try to resolve AuthDbContext
+        Log.Information("[DEBUG] Attempting to resolve AuthDbContext...");
+        var authDbContext = scope.ServiceProvider.GetService<AuthDbContext>();
+        if (authDbContext == null)
+        {
+            Log.Error("[DEBUG] FAILED: AuthDbContext could not be resolved from DI container");
+        }
+        else
+        {
+            Log.Information("[DEBUG] SUCCESS: AuthDbContext resolved successfully");
+        }
+    }
+}
+catch (Exception ex)
+{
+    Log.Error(ex, "[DEBUG] ERROR resolving IUserPreferencesService or dependencies - Type: {Type}, Message: {Message}, StackTrace: {StackTrace}", 
+        ex.GetType().Name, ex.Message, ex.StackTrace?.Substring(0, Math.Min(1000, ex.StackTrace?.Length ?? 0)));
+}
+// #endregion
 
 // Map SignalR hubs
 // LotteryHub is not implemented yet - commented out to prevent startup errors
