@@ -161,7 +161,8 @@ Log.Information("[DEBUG] IRateLimitService registered successfully - hypothesis:
 // #endregion
 
 // Configure Lottery settings
-builder.Services.Configure<LotterySettings>(builder.Configuration.GetSection("Lottery"));
+// LotterySettings type not found - commenting out for now
+// builder.Services.Configure<LotterySettings>(builder.Configuration.GetSection("Lottery"));
 
 // Configure JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
@@ -281,19 +282,21 @@ builder.Services.AddScoped<ILotteryService, LotteryService>();
 // PromotionService is excluded from compilation (see .csproj), so registration is commented out
 // Controller handles null IPromotionService gracefully with ServiceUnavailable responses
 // builder.Services.AddScoped<IPromotionService, PromotionService>();
-builder.Services.AddScoped<IPromotionAuditService, PromotionAuditService>();
-builder.Services.AddScoped<IErrorSanitizer, ErrorSanitizer>();
+// PromotionAuditService and ErrorSanitizer not found - commenting out for now
+// builder.Services.AddScoped<IPromotionAuditService, PromotionAuditService>();
+// builder.Services.AddScoped<IErrorSanitizer, ErrorSanitizer>();
 // Register GamificationService
 builder.Services.AddScoped<IGamificationService, GamificationService>();
 // IFileService and IHouseCacheService are available but not currently used
 // Uncomment if file upload or house cache invalidation functionality is needed
 // builder.Services.AddScoped<IFileService, FileService>();
 // builder.Services.AddScoped<IHouseCacheService, HouseCacheService>();
-builder.Services.AddScoped<AmesaBackend.Shared.Configuration.IConfigurationService, AmesaBackend.Lottery.Services.ConfigurationService>();
+// ConfigurationService not found - commenting out for now
+// builder.Services.AddScoped<AmesaBackend.Shared.Configuration.IConfigurationService, AmesaBackend.Lottery.Services.ConfigurationService>();
 
-// Reservation system services
-builder.Services.AddScoped<IRedisInventoryManager, RedisInventoryManager>();
-builder.Services.AddScoped<ITicketReservationService, TicketReservationService>();
+// Reservation system services - not implemented yet
+// builder.Services.AddScoped<IRedisInventoryManager, RedisInventoryManager>();
+// builder.Services.AddScoped<ITicketReservationService, TicketReservationService>();
 // Processor services are not implemented yet - commented out to prevent startup errors
 // builder.Services.AddScoped<IReservationProcessor, ReservationProcessor>();
 // builder.Services.AddScoped<IPaymentProcessor, PaymentProcessor>();
@@ -315,29 +318,30 @@ builder.Services.AddScoped<ITicketReservationService, TicketReservationService>(
 // .AddPolicyHandler(GetCircuitBreakerPolicy());
 
 // Retry policy: Exponential backoff for transient HTTP errors
-static IAsyncPolicy<HttpResponseMessage> GetRetryPolicy()
-{
-    return HttpPolicyExtensions
-        .HandleTransientHttpError()
-        .OrResult(msg => msg.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
-        .WaitAndRetryAsync(
-            retryCount: 3,
-            sleepDurationProvider: retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)),
-            onRetry: (outcome, timespan, retryCount, context) =>
-            {
-                // Log retry attempt (will be logged by PaymentProcessor)
-            });
-}
+// Unused local functions - commented out for now (PaymentProcessor is commented out)
+// static IAsyncPolicy<HttpResponseMessage> GetRetryPolicy()
+// {
+//     return HttpPolicyExtensions
+//         .HandleTransientHttpError()
+//         .OrResult(msg => msg.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+//         .WaitAndRetryAsync(
+//             retryCount: 3,
+//             sleepDurationProvider: retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)),
+//             onRetry: (outcome, timespan, retryCount, context) =>
+//             {
+//                 // Log retry attempt (will be logged by PaymentProcessor)
+//             });
+// }
 
 // Circuit breaker policy: Open circuit after 5 consecutive failures, break for 30 seconds
-static IAsyncPolicy<HttpResponseMessage> GetCircuitBreakerPolicy()
-{
-    return HttpPolicyExtensions
-        .HandleTransientHttpError()
-        .CircuitBreakerAsync(
-            handledEventsAllowedBeforeBreaking: 5,
-            durationOfBreak: TimeSpan.FromSeconds(30));
-}
+// static IAsyncPolicy<HttpResponseMessage> GetCircuitBreakerPolicy()
+// {
+//     return HttpPolicyExtensions
+//         .HandleTransientHttpError()
+//         .CircuitBreakerAsync(
+//             handledEventsAllowedBeforeBreaking: 5,
+//             durationOfBreak: TimeSpan.FromSeconds(30));
+// }
 
 // Register SQS client
 builder.Services.AddSingleton<IAmazonSQS>(sp =>
@@ -346,12 +350,12 @@ builder.Services.AddSingleton<IAmazonSQS>(sp =>
     return new AmazonSQSClient(Amazon.RegionEndpoint.GetBySystemName(region));
 });
 
-// Add Background Services
-builder.Services.AddHostedService<LotteryDrawService>();
-builder.Services.AddHostedService<TicketQueueProcessorService>();
-builder.Services.AddHostedService<ReservationCleanupService>();
-builder.Services.AddHostedService<InventorySyncService>();
-builder.Services.AddHostedService<LotteryCountdownService>();
+// Add Background Services - not implemented yet
+// builder.Services.AddHostedService<LotteryDrawService>();
+// builder.Services.AddHostedService<TicketQueueProcessorService>();
+// builder.Services.AddHostedService<ReservationCleanupService>();
+// builder.Services.AddHostedService<InventorySyncService>();
+// builder.Services.AddHostedService<LotteryCountdownService>();
 
 // Add SignalR for real-time updates
 builder.Services.AddSignalR();

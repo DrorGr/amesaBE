@@ -93,7 +93,7 @@ public class HousesFavoritesController : ControllerBase
             _logger.LogInformation("[DEBUG] Before database query - contextNull={ContextNull}, favoriteCount={FavoriteCount}", _context == null, favoriteHouseIds?.Count ?? 0);
             // #endregion
             var query = _context.Houses
-                .Where(h => favoriteHouseIds.Contains(h.Id) && h.Status == "Active");
+                .Where(h => favoriteHouseIds.Contains(h.Id) && h.Status == LotteryStatus.Active);
 
             // Apply sorting
             if (!string.IsNullOrEmpty(sortBy))

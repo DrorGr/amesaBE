@@ -53,7 +53,7 @@ public class TicketsController : ControllerBase
             _logger.LogInformation("[DEBUG] Before database query - userId={UserId}", userId);
             // #endregion
             var activeTickets = await _context.LotteryTickets
-                .Where(t => t.UserId == userId && t.Status == "Active")
+                .Where(t => t.UserId == userId && t.Status == TicketStatus.Active)
                 .Include(t => t.House)
                 .OrderByDescending(t => t.CreatedAt)
                 .ToListAsync();
@@ -106,12 +106,12 @@ public class TicketsController : ControllerBase
             // #endregion
 
             var activeTickets = await _context.LotteryTickets
-                .Where(t => t.UserId == userId && t.Status == "Active")
+                .Where(t => t.UserId == userId && t.Status == TicketStatus.Active)
                 .CountAsync();
 
             var totalSpent = await _context.LotteryTickets
                 .Where(t => t.UserId == userId)
-                .SumAsync(t => t.Price);
+                .SumAsync(t => t.PurchasePrice);
 
             var analytics = new
             {

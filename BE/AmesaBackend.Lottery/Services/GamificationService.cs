@@ -28,11 +28,11 @@ public class GamificationService : IGamificationService
                 .CountAsync();
 
             var activeTickets = await _context.LotteryTickets
-                .Where(t => t.UserId == userId && t.Status == "Active")
+                .Where(t => t.UserId == userId && t.Status == TicketStatus.Active)
                 .CountAsync();
 
             var wonTickets = await _context.LotteryTickets
-                .Where(t => t.UserId == userId && t.Status == "Won")
+                .Where(t => t.UserId == userId && t.Status == TicketStatus.Winner)
                 .CountAsync();
 
             // Return gamification data
