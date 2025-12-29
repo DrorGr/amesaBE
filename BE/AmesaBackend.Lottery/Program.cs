@@ -121,6 +121,12 @@ builder.Services.AddDbContext<AmesaDbContext>(options =>
 });
 
 // Lottery service requires Redis for house list caching and cache invalidation
+// Register IRateLimitService dependencies FIRST (before AddAmesaBackendShared in case it needs them)
+// Register CircuitBreakerService first (required by RateLimitService)
+builder.Services.AddSingleton<AmesaBackend.Auth.Services.ICircuitBreakerService, AmesaBackend.Auth.Services.CircuitBreakerService>();
+// Register RateLimitService (may be used by other services)
+builder.Services.AddScoped<AmesaBackend.Auth.Services.IRateLimitService, AmesaBackend.Auth.Services.RateLimitService>();
+
 builder.Services.AddAmesaBackendShared(builder.Configuration, builder.Environment, requireRedis: true);
 
 // Configure Lottery settings
@@ -262,11 +268,7 @@ builder.Services.AddScoped<ITicketReservationService, TicketReservationService>(
 // builder.Services.AddScoped<IPaymentProcessor, PaymentProcessor>();
 // builder.Services.AddScoped<ITicketCreatorProcessor, TicketCreatorProcessor>();
 
-// Register IRateLimitService from Auth service (required for services that depend on it)
-// Register CircuitBreakerService first (required by RateLimitService)
-builder.Services.AddSingleton<AmesaBackend.Auth.Services.ICircuitBreakerService, AmesaBackend.Auth.Services.CircuitBreakerService>();
-// Register RateLimitService (may be used by other services)
-builder.Services.AddScoped<AmesaBackend.Auth.Services.IRateLimitService, AmesaBackend.Auth.Services.RateLimitService>();
+// IRateLimitService dependencies moved earlier (before AddAmesaBackendShared) to ensure they're available
 
 // Register HttpClient for payment service with timeout, retry, and circuit breaker policies
 // PaymentProcessor is not implemented yet - commented out to prevent startup errors
