@@ -328,24 +328,41 @@ app.UseCors("AllowFrontend");
 
 app.UseResponseCaching(); // Must be before UseRouting for VaryByQueryKeys to work
 app.UseRouting();
-// Debug routing middleware (development only)
-if (app.Environment.IsDevelopment())
+// Debug routing middleware - log all API requests (production and development)
+app.Use(async (context, next) =>
 {
-    app.Use(async (context, next) =>
+    var method = context.Request.Method;
+    var path = context.Request.Path;
+    var query = context.Request.QueryString.ToString();
+    
+    // #region agent log
+    Log.Information("[DEBUG] Incoming request: {Method} {Path}{Query}", method, path, query);
+    // #endregion
+    
+    await next();
+    
+    var statusCode = context.Response.StatusCode;
+    // #region agent log
+    Log.Information("[DEBUG] Request completed: {Method} {Path}{Query} - Status: {StatusCode}", method, path, query, statusCode);
+    // #endregion
+    
+    if (statusCode == 405)
     {
-        var method = context.Request.Method;
-        var path = context.Request.Path;
-        
-        Log.Debug("Request: {Method} {Path}", method, path);
-        
-        await next();
-        
-        if (context.Response.StatusCode == 405)
-        {
-            Log.Warning("405 Method Not Allowed: {Method} {Path}", method, path);
-        }
-    });
-}
+        Log.Warning("405 Method Not Allowed: {Method} {Path}", method, path);
+    }
+    if (statusCode >= 400 && statusCode < 500)
+    {
+        // #region agent log
+        Log.Warning("[DEBUG] Client error: {Method} {Path}{Query} - Status: {StatusCode}", method, path, query, statusCode);
+        // #endregion
+    }
+    if (statusCode >= 500)
+    {
+        // #region agent log
+        Log.Error("[DEBUG] Server error: {Method} {Path}{Query} - Status: {StatusCode}", method, path, query, statusCode);
+        // #endregion
+    }
+});
 app.UseAuthentication();
 
 // Service-to-service authentication middleware
