@@ -121,13 +121,36 @@ builder.Services.AddDbContext<AmesaDbContext>(options =>
 });
 
 // Lottery service requires Redis for house list caching and cache invalidation
-// Register IRateLimitService dependencies FIRST (before AddAmesaBackendShared in case it needs them)
-// Register CircuitBreakerService first (required by RateLimitService)
+// Register CircuitBreakerService FIRST (required by RateLimitService, but doesn't depend on Redis)
+// #region agent log
+Log.Information("[DEBUG] Registering ICircuitBreakerService - hypothesis: A");
+// #endregion
 builder.Services.AddSingleton<AmesaBackend.Auth.Services.ICircuitBreakerService, AmesaBackend.Auth.Services.CircuitBreakerService>();
-// Register RateLimitService (may be used by other services)
-builder.Services.AddScoped<AmesaBackend.Auth.Services.IRateLimitService, AmesaBackend.Auth.Services.RateLimitService>();
+// #region agent log
+Log.Information("[DEBUG] ICircuitBreakerService registered successfully - hypothesis: A");
+// #endregion
 
+// AddAmesaBackendShared registers Redis services (IDistributedCache, IConnectionMultiplexer) which RateLimitService needs
+// #region agent log
+Log.Information("[DEBUG] Calling AddAmesaBackendShared - hypothesis: D");
+// #endregion
 builder.Services.AddAmesaBackendShared(builder.Configuration, builder.Environment, requireRedis: true);
+// #region agent log
+Log.Information("[DEBUG] AddAmesaBackendShared completed - checking Redis services - hypothesis: D");
+var redisCacheDescriptor = builder.Services.FirstOrDefault(s => s.ServiceType == typeof(Microsoft.Extensions.Caching.Distributed.IDistributedCache));
+var redisConnectionDescriptor = builder.Services.FirstOrDefault(s => s.ServiceType == typeof(StackExchange.Redis.IConnectionMultiplexer));
+Log.Information("[DEBUG] Redis services registered - IDistributedCache: {HasCache}, IConnectionMultiplexer: {HasConnection} - hypothesis: D", 
+    redisCacheDescriptor != null, redisConnectionDescriptor != null);
+// #endregion
+
+// Register RateLimitService AFTER AddAmesaBackendShared so Redis services are available
+// #region agent log
+Log.Information("[DEBUG] Registering IRateLimitService - hypothesis: A, D");
+// #endregion
+builder.Services.AddScoped<AmesaBackend.Auth.Services.IRateLimitService, AmesaBackend.Auth.Services.RateLimitService>();
+// #region agent log
+Log.Information("[DEBUG] IRateLimitService registered successfully - hypothesis: A, D");
+// #endregion
 
 // Configure Lottery settings
 builder.Services.Configure<LotterySettings>(builder.Configuration.GetSection("Lottery"));
@@ -268,7 +291,7 @@ builder.Services.AddScoped<ITicketReservationService, TicketReservationService>(
 // builder.Services.AddScoped<IPaymentProcessor, PaymentProcessor>();
 // builder.Services.AddScoped<ITicketCreatorProcessor, TicketCreatorProcessor>();
 
-// IRateLimitService dependencies moved earlier (before AddAmesaBackendShared) to ensure they're available
+// IRateLimitService registered after AddAmesaBackendShared to ensure Redis services (IDistributedCache, IConnectionMultiplexer) are available
 
 // Register HttpClient for payment service with timeout, retry, and circuit breaker policies
 // PaymentProcessor is not implemented yet - commented out to prevent startup errors
@@ -421,6 +444,46 @@ try
         else
         {
             Log.Information("[DEBUG] SUCCESS: AuthDbContext resolved successfully");
+        }
+        
+        // Test RateLimitService resolution (hypothesis: A, D)
+        Log.Information("[DEBUG] Attempting to resolve IRateLimitService... - hypothesis: A, D");
+        try
+        {
+            var rateLimitService = scope.ServiceProvider.GetService<AmesaBackend.Auth.Services.IRateLimitService>();
+            if (rateLimitService == null)
+            {
+                Log.Error("[DEBUG] FAILED: IRateLimitService could not be resolved from DI container - hypothesis: A, D");
+            }
+            else
+            {
+                Log.Information("[DEBUG] SUCCESS: IRateLimitService resolved successfully - Type: {Type} - hypothesis: A, D", rateLimitService.GetType().Name);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "[DEBUG] ERROR resolving IRateLimitService - Type: {Type}, Message: {Message} - hypothesis: A, D", 
+                ex.GetType().Name, ex.Message);
+        }
+        
+        // Test ICircuitBreakerService resolution (hypothesis: A)
+        Log.Information("[DEBUG] Attempting to resolve ICircuitBreakerService... - hypothesis: A");
+        try
+        {
+            var circuitBreakerService = scope.ServiceProvider.GetService<AmesaBackend.Auth.Services.ICircuitBreakerService>();
+            if (circuitBreakerService == null)
+            {
+                Log.Error("[DEBUG] FAILED: ICircuitBreakerService could not be resolved from DI container - hypothesis: A");
+            }
+            else
+            {
+                Log.Information("[DEBUG] SUCCESS: ICircuitBreakerService resolved successfully - Type: {Type} - hypothesis: A", circuitBreakerService.GetType().Name);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "[DEBUG] ERROR resolving ICircuitBreakerService - Type: {Type}, Message: {Message} - hypothesis: A", 
+                ex.GetType().Name, ex.Message);
         }
     }
 }
