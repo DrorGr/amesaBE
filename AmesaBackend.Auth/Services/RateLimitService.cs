@@ -26,12 +26,24 @@ namespace AmesaBackend.Auth.Services
             ICircuitBreakerService circuitBreaker,
             ILogger<RateLimitService> logger)
         {
+            // #region agent log
+            logger.LogInformation("[DEBUG] RateLimitService constructor called - circuitBreakerNull={Null}, cacheNull={CacheNull}, redisNull={RedisNull} - hypothesis: A, D", 
+                circuitBreaker == null, cache == null, redis == null);
+            if (circuitBreaker == null)
+            {
+                logger.LogError("[DEBUG] CRITICAL: ICircuitBreakerService is NULL in RateLimitService constructor - hypothesis: A");
+                throw new InvalidOperationException("ICircuitBreakerService is required but was not provided to RateLimitService");
+            }
+            // #endregion
             _cache = cache;
             _redis = redis;
             _configuration = configuration;
             _circuitBreaker = circuitBreaker;
             _logger = logger;
             _failClosed = _configuration.GetValue<bool>("SecuritySettings:RateLimitFailClosed", false);
+            // #region agent log
+            logger.LogInformation("[DEBUG] RateLimitService constructor completed successfully - hypothesis: A, D");
+            // #endregion
         }
 
         public async Task<bool> CheckRateLimitAsync(string key, int limit, TimeSpan window)
