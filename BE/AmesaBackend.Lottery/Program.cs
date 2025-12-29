@@ -27,6 +27,7 @@ var builder = WebApplication.CreateBuilder(args);
 // JSON support is enabled by default in Npgsql 7.0+
 // No need for GlobalTypeMapper.EnableDynamicJson() (obsolete)
 
+// Deployment trigger: 2025-01-XX - Force rebuild after compilation fixes
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
     .Enrich.FromLogContext()
