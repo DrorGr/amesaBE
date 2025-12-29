@@ -417,7 +417,8 @@ namespace AmesaBackend.Auth.Services
                 _logger.LogError(ex, "[DEBUG] Exception in GetFavoriteHouseIdsAsync - Type={ExceptionType}, Message={Message}, StackTrace={StackTrace}", 
                     ex.GetType().FullName, ex.Message, ex.StackTrace?.Substring(0, Math.Min(500, ex.StackTrace?.Length ?? 0)));
                 // #endregion
-                _logger.LogWarning(ex, "Error parsing favorite house IDs for user {UserId}", userId);
+                _logger.LogError(ex, "Error retrieving favorite house IDs for user {UserId}", userId);
+                return new List<Guid>();
             }
 
             return new List<Guid>();
