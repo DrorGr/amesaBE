@@ -146,6 +146,14 @@ Log.Information("[DEBUG] Redis services registered - IDistributedCache: {HasCach
 // Register RateLimitService AFTER AddAmesaBackendShared so Redis services are available
 // #region agent log
 Log.Information("[DEBUG] Registering IRateLimitService - hypothesis: A, D");
+// Verify ICircuitBreakerService is registered before registering RateLimitService
+var circuitBreakerDescriptor = builder.Services.FirstOrDefault(s => s.ServiceType == typeof(AmesaBackend.Auth.Services.ICircuitBreakerService));
+if (circuitBreakerDescriptor == null)
+{
+    Log.Error("[DEBUG] CRITICAL: ICircuitBreakerService not found before registering RateLimitService - hypothesis: A");
+    throw new InvalidOperationException("ICircuitBreakerService must be registered before RateLimitService");
+}
+Log.Information("[DEBUG] Verified ICircuitBreakerService is registered before RateLimitService - hypothesis: A");
 // #endregion
 builder.Services.AddScoped<AmesaBackend.Auth.Services.IRateLimitService, AmesaBackend.Auth.Services.RateLimitService>();
 // #region agent log
