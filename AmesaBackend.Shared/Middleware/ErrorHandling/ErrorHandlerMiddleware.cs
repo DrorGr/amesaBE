@@ -56,6 +56,10 @@ namespace AmesaBackend.Shared.Middleware.ErrorHandling
                 var requestBody = await new StreamReader(context.Request.Body).ReadToEndAsync();
                 context.Request.Body.Position = 0;
 
+                // #region agent log
+                _logger.LogError(error, "[DEBUG] ErrorHandlerMiddleware caught exception - Type={ExceptionType}, Message={Message}, Path={Path}, Method={Method}, StackTrace={StackTrace}", 
+                    error.GetType().FullName, error.Message, context.Request.Path, context.Request.Method, error.StackTrace);
+                // #endregion
                 _logger.LogError(error, "SessionId: {Id}, Request Body: {RequestBody}", sessionId, requestBody);
 
                 context.Response.ContentType = "application/json";

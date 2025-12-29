@@ -7,7 +7,7 @@
 | Item | Value |
 |------|-------|
 | **Context Version** | 2.7.0 |
-| **Last Updated** | 2025-01-25 (⚠️ Verify deployment status before relying on claims) |
+| **Last Updated** | 2025-01-25 (AWS cost optimization completed - $27.36/mo savings) |
 | **Backend Framework** | .NET 8.0, ASP.NET Core |
 | **Database** | Aurora PostgreSQL Serverless v2 |
 | **Infrastructure** | AWS (ECS Fargate, ECR, ALB, Aurora) |
@@ -693,6 +693,12 @@ git log --oneline -5
 git checkout main
 ```
 
+**⚠️ CRITICAL GIT RULE**:
+- **NEVER commit or push files that are listed in `.gitignore`**
+- Always verify `git status` before committing to ensure no ignored files are staged
+- If ignored files appear in `git status`, they should not be added to the commit
+- This prevents committing sensitive data, build artifacts, local config files, and other ignored content
+
 ### Testing Patterns
 - **Framework**: xUnit for all backend tests
 - **Test Organization**:
@@ -765,6 +771,7 @@ git checkout main
 - Document API changes in Swagger/OpenAPI
 - Test changes with unit and integration tests
 - Ensure database migrations are properly created
+- **NEVER commit or push files listed in `.gitignore`** - Always verify `git status` before committing
 
 ### ✅ **TASK COMPLETION PROTOCOL - MANDATORY**
 **CRITICAL**: For every task you start and complete, you MUST:
@@ -775,7 +782,12 @@ git checkout main
    - Run tests if applicable: `dotnet test`
    - Fix any build errors before pushing to repository
    - This prevents CI/CD failures and broken deployments
-3. **Update context files IMMEDIATELY upon task completion**:
+3. **VERIFY NO IGNORED FILES BEFORE COMMITTING** - **MANDATORY**:
+   - **ALWAYS check `git status`** before committing to ensure no `.gitignore` files are staged
+   - **NEVER commit or push files listed in `.gitignore`**
+   - If ignored files appear in `git status`, do NOT add them to the commit
+   - This prevents committing sensitive data, build artifacts, local config files, and other ignored content
+4. **Update context files IMMEDIATELY upon task completion**:
    - Update `BE/.cursorrules` "Recent Changes" section
    - Update root `.cursorrules` "Recent Changes" section
    - Update `CONTEXT_QUICK_REFERENCE.md` if applicable
@@ -784,10 +796,10 @@ git checkout main
      - Clear descriptions of what was fixed/implemented
      - Technical details for future reference
      - Date and session information
-4. **Commit context updates** to the BE repository:
+5. **Commit context updates** to the BE repository:
    - All backend context updates → commit to BE repository
    - Include context updates in the same commit as code changes when possible
-5. **Provide summary** of what was accomplished for chat continuity
+6. **Provide summary** of what was accomplished for chat continuity
 
 **Why This Matters**: This ensures that when a new agent session starts, the context contains complete, up-to-date information about recent backend work and current status. Without updating context files, new agents will be working with outdated information.
 
@@ -1670,6 +1682,8 @@ Client → CloudFront /api/* → ALB (path-based routing) → ECS Task (microser
 
 | Change | Status | Date | Key Points |
 |--------|--------|------|------------|
+| **AWS Cost Optimization** | ✅ Complete | 2025-01-25 | Performance Insights disabled ($14.40/mo), unused Redis cluster deleted ($12.96/mo), total savings $27.36/mo ($328/year) |
+| **Repository Cleanup** | ✅ Complete | 2025-01-25 | Removed 50+ duplicate SQL files, cleaned up junk files |
 | **Pieces MCP Integration** | ✅ Integrated | 2025-01-25 | LTM engine for agent context, workflow history access |
 | **Admin Panel Security** | ✅ Production Ready | 2025-01-25 | All critical issues fixed, rate limiting, BCrypt, secure sessions |
 | **Auth Security Audit** | ✅ Complete | 2025-01-25 | All critical/high issues resolved, excellent security posture |
@@ -1720,6 +1734,6 @@ Client → CloudFront /api/* → ALB (path-based routing) → ECS Task (microser
 
 ---
 **Last Updated**: 2025-01-25
-**Context Version**: 2.8.0 (100% completion audit added)
+**Context Version**: 2.9.0 (AWS cost optimization and repository cleanup added)
 **Note**: Update this file immediately after API, schema, infra, or deployment changes; add dated "Recent Changes" entries for any 2025 work not yet captured.
 

@@ -23,6 +23,10 @@ public class HousesFavoritesController : ControllerBase
         LotteryDbContext context,
         ILogger<HousesFavoritesController> logger)
     {
+        // #region agent log
+        _logger.LogInformation("[DEBUG] HousesFavoritesController constructor - userPrefsServiceNull={Null}, contextNull={ContextNull}", 
+            userPreferencesService == null, context == null);
+        // #endregion
         _userPreferencesService = userPreferencesService;
         _context = context;
         _logger = logger;
