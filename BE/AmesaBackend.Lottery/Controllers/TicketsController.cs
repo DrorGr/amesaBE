@@ -71,7 +71,7 @@ public class TicketsController : ControllerBase
             return Ok(new
             {
                 success = true,
-                data = activeTickets ?? new List<object>(),
+                data = activeTickets,
                 message = "Active tickets retrieved successfully"
             });
         }

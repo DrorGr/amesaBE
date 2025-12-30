@@ -55,6 +55,9 @@ public class LotteryDbContext : DbContext
         {
             entity.ToTable("user_promotions", "amesa_admin");
             entity.HasKey(e => e.Id);
+            entity.Property(e => e.PromotionId).HasColumnName("promotion_id");
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.UsedAt).HasColumnName("used_at");
         });
 
         // Configure TicketReservation entity
