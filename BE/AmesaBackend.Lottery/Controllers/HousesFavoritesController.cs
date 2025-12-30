@@ -55,6 +55,24 @@ public class HousesFavoritesController : ControllerBase
         // #region agent log
         _logger.LogInformation("[DEBUG] GetFavorites entry - page={Page}, limit={Limit}, sortBy={SortBy}, sortOrder={SortOrder}", page, limit, sortBy, sortOrder);
         // #endregion
+        
+        // Validate pagination parameters
+        if (page < 1)
+        {
+            return BadRequest(new { success = false, error = new { message = "Page must be greater than 0" } });
+        }
+        
+        const int maxLimit = 100;
+        if (limit > maxLimit)
+        {
+            return BadRequest(new { success = false, error = new { message = $"Maximum limit is {maxLimit}" } });
+        }
+        
+        if (limit < 1)
+        {
+            return BadRequest(new { success = false, error = new { message = "Limit must be greater than 0" } });
+        }
+        
         try
         {
             // #region agent log

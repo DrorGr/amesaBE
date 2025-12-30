@@ -46,6 +46,13 @@ public class TicketsController : ControllerBase
         // #region agent log
         _logger.LogInformation("[DEBUG] GetActiveTickets entry - contextNull={ContextNull}", _context == null);
         // #endregion
+        
+        if (_context == null)
+        {
+            _logger.LogError("LotteryDbContext is not available");
+            return StatusCode(503, new { success = false, error = new { message = "Database service is not available" } });
+        }
+        
         try
         {
             var userId = GetUserId();
@@ -64,7 +71,7 @@ public class TicketsController : ControllerBase
             return Ok(new
             {
                 success = true,
-                data = activeTickets,
+                data = activeTickets ?? new List<object>(),
                 message = "Active tickets retrieved successfully"
             });
         }
@@ -76,10 +83,11 @@ public class TicketsController : ControllerBase
         catch (Exception ex)
         {
             // #region agent log
-            _logger.LogError(ex, "[DEBUG] Exception in GetActiveTickets - Type={ExceptionType}, Message={Message}", ex.GetType().Name, ex.Message);
+            _logger.LogError(ex, "[DEBUG] Exception in GetActiveTickets - Type={ExceptionType}, Message={Message}, StackTrace={StackTrace}", 
+                ex.GetType().FullName, ex.Message, ex.StackTrace);
             // #endregion
-            _logger.LogError(ex, "Error fetching active tickets");
-            return StatusCode(500, new { success = false, error = new { message = "An error occurred while fetching active tickets" } });
+            _logger.LogError(ex, "Error fetching active tickets - InnerException: {InnerException}", ex.InnerException?.Message);
+            return StatusCode(500, new { success = false, error = new { message = "An error occurred while fetching active tickets", details = ex.Message } });
         }
     }
 
@@ -90,8 +98,15 @@ public class TicketsController : ControllerBase
     public async Task<ActionResult> GetTicketAnalytics()
     {
         // #region agent log
-        _logger.LogInformation("[DEBUG] GetTicketAnalytics entry");
+        _logger.LogInformation("[DEBUG] GetTicketAnalytics entry - contextNull={ContextNull}", _context == null);
         // #endregion
+        
+        if (_context == null)
+        {
+            _logger.LogError("LotteryDbContext is not available");
+            return StatusCode(503, new { success = false, error = new { message = "Database service is not available" } });
+        }
+        
         try
         {
             var userId = GetUserId();
@@ -111,7 +126,7 @@ public class TicketsController : ControllerBase
 
             var totalSpent = await _context.LotteryTickets
                 .Where(t => t.UserId == userId)
-                .SumAsync(t => t.PurchasePrice);
+                .SumAsync(t => (decimal?)t.PurchasePrice) ?? 0;
 
             var analytics = new
             {
@@ -136,10 +151,11 @@ public class TicketsController : ControllerBase
         catch (Exception ex)
         {
             // #region agent log
-            _logger.LogError(ex, "[DEBUG] Exception in GetTicketAnalytics - Type={ExceptionType}, Message={Message}", ex.GetType().Name, ex.Message);
+            _logger.LogError(ex, "[DEBUG] Exception in GetTicketAnalytics - Type={ExceptionType}, Message={Message}, StackTrace={StackTrace}", 
+                ex.GetType().Name, ex.Message, ex.StackTrace);
             // #endregion
             _logger.LogError(ex, "Error fetching ticket analytics");
-            return StatusCode(500, new { success = false, error = new { message = "An error occurred while fetching ticket analytics" } });
+            return StatusCode(500, new { success = false, error = new { message = "An error occurred while fetching ticket analytics", details = ex.Message } });
         }
     }
 }

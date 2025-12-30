@@ -44,6 +44,13 @@ public class GamificationController : ControllerBase
         // #region agent log
         _logger.LogInformation("[DEBUG] GetGamificationData entry - serviceNull={ServiceNull}", _gamificationService == null);
         // #endregion
+        
+        if (_gamificationService == null)
+        {
+            _logger.LogError("GamificationService is not available");
+            return StatusCode(503, new { success = false, error = new { message = "Gamification service is not available" } });
+        }
+        
         try
         {
             var userId = GetUserId();
@@ -51,7 +58,6 @@ public class GamificationController : ControllerBase
             _logger.LogInformation("[DEBUG] Before GetUserGamificationDataAsync - userId={UserId}", userId);
             // #endregion
             // Call the gamification service to get user's gamification data
-            // Note: Adjust this based on the actual IGamificationService interface
             var data = await _gamificationService.GetUserGamificationDataAsync(userId);
             // #region agent log
             _logger.LogInformation("[DEBUG] After GetUserGamificationDataAsync - dataNull={DataNull}", data == null);
@@ -72,10 +78,11 @@ public class GamificationController : ControllerBase
         catch (Exception ex)
         {
             // #region agent log
-            _logger.LogError(ex, "[DEBUG] Exception in GetGamificationData - Type={ExceptionType}, Message={Message}", ex.GetType().Name, ex.Message);
+            _logger.LogError(ex, "[DEBUG] Exception in GetGamificationData - Type={ExceptionType}, Message={Message}, StackTrace={StackTrace}", 
+                ex.GetType().Name, ex.Message, ex.StackTrace);
             // #endregion
             _logger.LogError(ex, "Error fetching gamification data");
-            return StatusCode(500, new { success = false, error = new { message = "An error occurred while fetching gamification data" } });
+            return StatusCode(500, new { success = false, error = new { message = "An error occurred while fetching gamification data", details = ex.Message } });
         }
     }
 }

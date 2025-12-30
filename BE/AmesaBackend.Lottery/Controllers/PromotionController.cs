@@ -397,6 +397,20 @@ public class PromotionController : ControllerBase
     public async Task<ActionResult<StandardApiResponse<List<PromotionDto>>>> GetAvailablePromotions(
         [FromQuery] Guid? houseId = null)
     {
+        if (_promotionService == null)
+        {
+            _logger.LogError("PromotionService is not available");
+            return StatusCode(503, new StandardApiResponse<List<PromotionDto>>
+            {
+                Success = false,
+                Error = new StandardErrorResponse
+                {
+                    Code = "SERVICE_UNAVAILABLE",
+                    Message = "Promotion service is not available"
+                }
+            });
+        }
+        
         try
         {
             var userId = GetUserId();
@@ -417,19 +431,21 @@ public class PromotionController : ControllerBase
             return Ok(new StandardApiResponse<List<PromotionDto>>
             {
                 Success = true,
-                Data = promotions
+                Data = promotions ?? new List<PromotionDto>()
             });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching available promotions");
+            _logger.LogError(ex, "Error fetching available promotions - Type: {ExceptionType}, Message: {Message}, StackTrace: {StackTrace}", 
+                ex.GetType().Name, ex.Message, ex.StackTrace);
             return StatusCode(500, new StandardApiResponse<List<PromotionDto>>
             {
                 Success = false,
                 Error = new StandardErrorResponse
                 {
                     Code = "INTERNAL_ERROR",
-                    Message = "Failed to fetch available promotions"
+                    Message = "Failed to fetch available promotions",
+                    Details = ex.Message
                 }
             });
         }
