@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using AmesaBackend.Models;
+using AmesaBackend.Lottery.Models;
 
 namespace AmesaBackend.Lottery.Data;
 
@@ -12,6 +13,8 @@ public class LotteryDbContext : DbContext
 
     public DbSet<House> Houses { get; set; }
     public DbSet<LotteryTicket> LotteryTickets { get; set; }
+    public DbSet<LotteryDraw> LotteryDraws { get; set; }
+    public DbSet<TicketReservation> TicketReservations { get; set; }
     public DbSet<Promotion> Promotions { get; set; }
     public DbSet<UserPromotion> UserPromotions { get; set; }
 
@@ -52,6 +55,36 @@ public class LotteryDbContext : DbContext
         {
             entity.ToTable("user_promotions", "amesa_admin");
             entity.HasKey(e => e.Id);
+        });
+
+        // Configure TicketReservation entity
+        modelBuilder.Entity<TicketReservation>(entity =>
+        {
+            entity.ToTable("ticket_reservations", "amesa_lottery");
+            entity.HasKey(e => e.Id);
+            entity.HasOne(e => e.House)
+                .WithMany()
+                .HasForeignKey(e => e.HouseId)
+                .OnDelete(DeleteBehavior.Restrict);
+            
+            // Add indexes for performance
+            entity.HasIndex(e => new { e.ExpiresAt, e.Status })
+                .HasDatabaseName("IX_ticket_reservations_ExpiresAt_Status");
+        });
+
+        // Configure LotteryDraw entity
+        modelBuilder.Entity<LotteryDraw>(entity =>
+        {
+            entity.ToTable("lottery_draws", "amesa_lottery");
+            entity.HasKey(e => e.Id);
+            entity.HasOne(e => e.House)
+                .WithMany(h => h.Draws)
+                .HasForeignKey(e => e.HouseId)
+                .OnDelete(DeleteBehavior.Restrict);
+            
+            // Add indexes for performance
+            entity.HasIndex(e => new { e.DrawDate, e.DrawStatus })
+                .HasDatabaseName("IX_lottery_draws_DrawDate_Status");
         });
     }
 }

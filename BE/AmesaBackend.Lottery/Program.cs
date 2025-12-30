@@ -7,7 +7,7 @@ using System.Linq;
 using AmesaBackend.Lottery.Data;
 using AmesaBackend.Lottery.Services;
 // using AmesaBackend.Lottery.Services.Processors; // Processors namespace doesn't exist
-// using AmesaBackend.Lottery.Hubs; // Hubs namespace doesn't exist
+using AmesaBackend.Lottery.Hubs;
 // using AmesaBackend.Lottery.Configuration; // Configuration namespace doesn't exist
 using Microsoft.Extensions.Options;
 using Polly;
@@ -351,12 +351,12 @@ builder.Services.AddSingleton<IAmazonSQS>(sp =>
     return new AmazonSQSClient(Amazon.RegionEndpoint.GetBySystemName(region));
 });
 
-// Add Background Services - not implemented yet
-// builder.Services.AddHostedService<LotteryDrawService>();
-// builder.Services.AddHostedService<TicketQueueProcessorService>();
-// builder.Services.AddHostedService<ReservationCleanupService>();
-// builder.Services.AddHostedService<InventorySyncService>();
-// builder.Services.AddHostedService<LotteryCountdownService>();
+// Add Background Services
+builder.Services.AddHostedService<LotteryDrawService>();
+builder.Services.AddHostedService<TicketQueueProcessorService>();
+builder.Services.AddHostedService<ReservationCleanupService>();
+builder.Services.AddHostedService<InventorySyncService>();
+builder.Services.AddHostedService<LotteryCountdownService>();
 
 // Add SignalR for real-time updates
 builder.Services.AddSignalR();
@@ -508,8 +508,7 @@ catch (Exception ex)
 // #endregion
 
 // Map SignalR hubs
-// LotteryHub is not implemented yet - commented out to prevent startup errors
-// app.MapHub<LotteryHub>("/ws/lottery");
+app.MapHub<LotteryHub>("/ws/lottery");
 
 // Ensure database is created
 using (var scope = app.Services.CreateScope())
