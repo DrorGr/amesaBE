@@ -51,6 +51,14 @@ public class LotteryDbContext : DbContext
         {
             entity.ToTable("promotions", "amesa_admin");
             entity.HasKey(e => e.Id);
+            // Map properties to snake_case column names (standard PostgreSQL convention)
+            entity.Property(e => e.IsActive).HasColumnName("is_active");
+            entity.Property(e => e.StartDate).HasColumnName("start_date");
+            entity.Property(e => e.EndDate).HasColumnName("end_date");
+            entity.Property(e => e.UsageLimit).HasColumnName("usage_limit");
+            entity.Property(e => e.UsageCount).HasColumnName("usage_count");
+            entity.Property(e => e.ApplicableHouses).HasColumnName("applicable_houses");
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at");
         });
 
         // Configure UserPromotion entity
