@@ -71,19 +71,6 @@ public class LotteryDbContext : DbContext
         {
             entity.ToTable("ticket_reservations", "amesa_lottery");
             entity.HasKey(e => e.Id);
-            entity.Property(e => e.HouseId).HasColumnName("house_id");
-            entity.Property(e => e.UserId).HasColumnName("user_id");
-            entity.Property(e => e.TotalPrice).HasColumnName("total_price");
-            entity.Property(e => e.PaymentMethodId).HasColumnName("payment_method_id");
-            entity.Property(e => e.ReservationToken).HasColumnName("reservation_token");
-            entity.Property(e => e.ExpiresAt).HasColumnName("expires_at");
-            entity.Property(e => e.ProcessedAt).HasColumnName("processed_at");
-            entity.Property(e => e.PaymentTransactionId).HasColumnName("payment_transaction_id");
-            entity.Property(e => e.PromotionCode).HasColumnName("promotion_code");
-            entity.Property(e => e.DiscountAmount).HasColumnName("discount_amount");
-            entity.Property(e => e.ErrorMessage).HasColumnName("error_message");
-            entity.Property(e => e.CreatedAt).HasColumnName("created_at");
-            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
             entity.HasOne(e => e.House)
                 .WithMany()
                 .HasForeignKey(e => e.HouseId)
