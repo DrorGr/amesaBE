@@ -57,11 +57,12 @@ public class LotteryDbContext : DbContext
         });
 
         // Configure Promotion entity (if it exists in amesa_admin schema)
+        // Note: promotions table uses snake_case column names (like user_promotions in same schema)
         modelBuilder.Entity<Promotion>(entity =>
         {
             entity.ToTable("promotions", "amesa_admin");
             entity.HasKey(e => e.Id);
-            // Map properties to snake_case column names (standard PostgreSQL convention)
+            // Map properties to snake_case column names (matching amesa_admin schema convention)
             entity.Property(e => e.IsActive).HasColumnName("is_active");
             entity.Property(e => e.StartDate).HasColumnName("start_date");
             entity.Property(e => e.EndDate).HasColumnName("end_date");
