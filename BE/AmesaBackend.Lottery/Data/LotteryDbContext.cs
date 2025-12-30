@@ -34,12 +34,19 @@ public class LotteryDbContext : DbContext
 
         // Configure LotteryTicket entity
         // Note: lottery_tickets table uses PascalCase column names (Id, TicketNumber, HouseId, UserId, etc.)
-        // No column mapping needed - EF Core will use property names as-is
+        // Explicitly map to PascalCase column names to ensure EF Core uses correct column names
         modelBuilder.Entity<LotteryTicket>(entity =>
         {
             entity.ToTable("lottery_tickets", "amesa_lottery");
             entity.HasKey(e => e.Id);
-            // Column names match property names (PascalCase) - no mapping needed
+            // Explicitly map to PascalCase column names (matching database schema)
+            entity.Property(e => e.UserId).HasColumnName("UserId");
+            entity.Property(e => e.HouseId).HasColumnName("HouseId");
+            entity.Property(e => e.PurchasePrice).HasColumnName("PurchasePrice");
+            entity.Property(e => e.CreatedAt).HasColumnName("CreatedAt");
+            entity.Property(e => e.UpdatedAt).HasColumnName("UpdatedAt");
+            entity.Property(e => e.TicketNumber).HasColumnName("TicketNumber");
+            entity.Property(e => e.Status).HasColumnName("Status");
             entity.HasOne(e => e.House)
                 .WithMany()
                 .HasForeignKey(e => e.HouseId)
