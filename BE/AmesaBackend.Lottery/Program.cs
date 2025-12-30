@@ -280,9 +280,8 @@ builder.Services.AddScoped<IUserPreferencesService, UserPreferencesService>();
 Log.Information("[DEBUG] UserPreferencesService registered successfully");
 // #endregion
 builder.Services.AddScoped<ILotteryService, LotteryService>();
-// PromotionService is excluded from compilation (see .csproj), so registration is commented out
-// Controller handles null IPromotionService gracefully with ServiceUnavailable responses
-// builder.Services.AddScoped<IPromotionService, PromotionService>();
+// Register PromotionService
+builder.Services.AddScoped<IPromotionService, PromotionService>();
 // PromotionAuditService and ErrorSanitizer not found - commenting out for now
 // builder.Services.AddScoped<IPromotionAuditService, PromotionAuditService>();
 // builder.Services.AddScoped<IErrorSanitizer, ErrorSanitizer>();

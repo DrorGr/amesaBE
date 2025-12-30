@@ -495,7 +495,7 @@ namespace AmesaBackend.Lottery.Services
                     PromotionId = userPromotion.PromotionId,
                     UserId = userPromotion.UserId,
                     TransactionId = userPromotion.TransactionId,
-                    DiscountAmount = userPromotion.DiscountAmount,
+                    DiscountAmount = userPromotion.DiscountAmount ?? 0,
                     UsedAt = userPromotion.UsedAt
                 };
             }
@@ -509,6 +509,7 @@ namespace AmesaBackend.Lottery.Services
         public async Task<List<PromotionUsageDto>> GetUserPromotionHistoryAsync(Guid userId)
         {
             var userPromotions = await _context.UserPromotions
+                .Include(up => up.Promotion)
                 .Where(up => up.UserId == userId)
                 .OrderByDescending(up => up.UsedAt)
                 .ToListAsync();
@@ -517,9 +518,10 @@ namespace AmesaBackend.Lottery.Services
             {
                 Id = up.Id,
                 PromotionId = up.PromotionId,
+                PromotionCode = up.Promotion?.Code ?? string.Empty,
                 UserId = up.UserId,
                 TransactionId = up.TransactionId,
-                DiscountAmount = up.DiscountAmount,
+                DiscountAmount = up.DiscountAmount ?? 0,
                 UsedAt = up.UsedAt
             }).ToList();
         }
@@ -576,16 +578,19 @@ namespace AmesaBackend.Lottery.Services
             var firstUsed = usages.Any() ? usages.Min(u => u.UsedAt) : (DateTime?)null;
             var lastUsed = usages.Any() ? usages.Max(u => u.UsedAt) : (DateTime?)null;
 
+            var uniqueUsers = usages.Select(u => u.UserId).Distinct().Count();
+            
             return new PromotionAnalyticsDto
             {
                 PromotionId = promotion.Id,
                 Code = promotion.Code ?? string.Empty,
                 Name = promotion.Title, // Map Title → Name
                 TotalUsage = totalUsage,
-                TotalDiscountGiven = totalDiscountGiven,
-                AverageDiscount = averageDiscount,
-                FirstUsed = firstUsed,
-                LastUsed = lastUsed
+                UniqueUsers = uniqueUsers,
+                TotalDiscountAmount = totalDiscountGiven,
+                AverageDiscountAmount = averageDiscount,
+                FirstUsedAt = firstUsed,
+                LastUsedAt = lastUsed
             };
         }
 

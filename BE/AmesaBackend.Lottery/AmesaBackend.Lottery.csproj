@@ -24,10 +24,7 @@
     <ProjectReference Include="..\..\AmesaBackend\AmesaBackend.csproj" />
   </ItemGroup>
 
-  <!-- Temporarily exclude legacy promotion service (missing DTOs/interfaces) -->
-  <ItemGroup>
-    <Compile Remove="Services\PromotionService.cs" />
-  </ItemGroup>
+  <!-- PromotionService is now enabled with all required DTOs and interfaces -->
 
   <!-- Exclude appsettings.json from referenced Auth project during publish -->
   <Target Name="ExcludeAuthAppSettings" BeforeTargets="_GetCopyToPublishDirectoryItems">
