@@ -17,6 +17,9 @@ public class LotteryDbContext : DbContext
     public DbSet<TicketReservation> TicketReservations { get; set; }
     public DbSet<Promotion> Promotions { get; set; }
     public DbSet<UserPromotion> UserPromotions { get; set; }
+    public DbSet<UserGamification> UserGamification { get; set; }
+    public DbSet<UserAchievement> UserAchievements { get; set; }
+    public DbSet<PointsHistory> PointsHistory { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -121,6 +124,55 @@ public class LotteryDbContext : DbContext
             // Add indexes for performance
             entity.HasIndex(e => new { e.DrawDate, e.DrawStatus })
                 .HasDatabaseName("IX_lottery_draws_DrawDate_Status");
+        });
+
+        // Configure UserGamification entity
+        modelBuilder.Entity<UserGamification>(entity =>
+        {
+            entity.ToTable("user_gamification", "amesa_lottery");
+            entity.HasKey(e => e.UserId);
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.TotalPoints).HasColumnName("total_points");
+            entity.Property(e => e.CurrentLevel).HasColumnName("current_level");
+            entity.Property(e => e.CurrentTier).HasColumnName("current_tier");
+            entity.Property(e => e.CurrentStreak).HasColumnName("current_streak");
+            entity.Property(e => e.LongestStreak).HasColumnName("longest_streak");
+            entity.Property(e => e.LastEntryDate).HasColumnName("last_entry_date");
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
+        });
+
+        // Configure UserAchievement entity
+        modelBuilder.Entity<UserAchievement>(entity =>
+        {
+            entity.ToTable("user_achievements", "amesa_lottery");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.AchievementType).HasColumnName("achievement_type");
+            entity.Property(e => e.AchievementName).HasColumnName("achievement_name");
+            entity.Property(e => e.AchievementIcon).HasColumnName("achievement_icon");
+            entity.Property(e => e.UnlockedAt).HasColumnName("unlocked_at");
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at");
+            
+            // Add index for user lookups
+            entity.HasIndex(e => e.UserId).HasDatabaseName("IX_user_achievements_user_id");
+        });
+
+        // Configure PointsHistory entity
+        modelBuilder.Entity<PointsHistory>(entity =>
+        {
+            entity.ToTable("points_history", "amesa_lottery");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.PointsChange).HasColumnName("points_change");
+            entity.Property(e => e.Reason).HasColumnName("reason");
+            entity.Property(e => e.ReferenceId).HasColumnName("reference_id");
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at");
+            
+            // Add index for user lookups
+            entity.HasIndex(e => e.UserId).HasDatabaseName("IX_points_history_user_id");
         });
     }
 }

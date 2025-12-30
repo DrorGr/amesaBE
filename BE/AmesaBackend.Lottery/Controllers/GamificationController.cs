@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using AmesaBackend.Lottery.Services;
+using AmesaBackend.Lottery.DTOs;
+using AmesaBackend.Shared.Contracts;
 using System.Security.Claims;
 
 namespace AmesaBackend.Lottery.Controllers;
@@ -58,16 +60,15 @@ public class GamificationController : ControllerBase
             _logger.LogInformation("[DEBUG] Before GetUserGamificationDataAsync - userId={UserId}", userId);
             // #endregion
             // Call the gamification service to get user's gamification data
-            var data = await _gamificationService.GetUserGamificationDataAsync(userId);
+            var gamification = await _gamificationService.GetUserGamificationAsync(userId);
             // #region agent log
-            _logger.LogInformation("[DEBUG] After GetUserGamificationDataAsync - dataNull={DataNull}", data == null);
+            _logger.LogInformation("[DEBUG] After GetUserGamificationAsync - dataNull={DataNull}", gamification == null);
             // #endregion
 
-            return Ok(new
+            return Ok(new StandardApiResponse<UserGamificationDto>
             {
-                success = true,
-                data = data,
-                message = "Gamification data retrieved successfully"
+                Success = true,
+                Data = gamification
             });
         }
         catch (UnauthorizedAccessException ex)
