@@ -238,7 +238,10 @@ builder.Services.AddScoped<IReservationProcessor, ReservationProcessor>();
 builder.Services.AddScoped<IPaymentProcessor, PaymentProcessor>();
 builder.Services.AddScoped<ITicketCreatorProcessor, TicketCreatorProcessor>();
 
-// Register IRateLimitService from Auth service (optional)
+// Register CircuitBreakerService FIRST (required by RateLimitService)
+builder.Services.AddSingleton<AmesaBackend.Auth.Services.ICircuitBreakerService, AmesaBackend.Auth.Services.CircuitBreakerService>();
+
+// Register IRateLimitService from Auth service (requires ICircuitBreakerService)
 var rateLimitServiceType = typeof(IRateLimitService);
 if (rateLimitServiceType != null)
 {
