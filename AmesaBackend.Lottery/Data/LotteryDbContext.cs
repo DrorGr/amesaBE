@@ -129,6 +129,28 @@ namespace AmesaBackend.Lottery.Data
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => e.Code);
                 entity.HasIndex(e => e.IsActive);
+                
+                // Explicit snake_case mappings (production schema is snake_case)
+                // Avoids Postgres 42703 errors like: column p.Id does not exist
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.Title).HasColumnName("title");
+                entity.Property(e => e.Description).HasColumnName("description");
+                entity.Property(e => e.Type).HasColumnName("type");
+                entity.Property(e => e.Value).HasColumnName("value");
+                entity.Property(e => e.ValueType).HasColumnName("value_type");
+                entity.Property(e => e.Code).HasColumnName("code");
+                entity.Property(e => e.IsActive).HasColumnName("is_active");
+                entity.Property(e => e.StartDate).HasColumnName("start_date");
+                entity.Property(e => e.EndDate).HasColumnName("end_date");
+                entity.Property(e => e.UsageLimit).HasColumnName("usage_limit");
+                entity.Property(e => e.UsageCount).HasColumnName("usage_count");
+                entity.Property(e => e.MinPurchaseAmount).HasColumnName("min_purchase_amount");
+                entity.Property(e => e.MaxDiscountAmount).HasColumnName("max_discount_amount");
+                entity.Property(e => e.ApplicableHouses).HasColumnName("applicable_houses");
+                entity.Property(e => e.CreatedBy).HasColumnName("created_by");
+                entity.Property(e => e.CreatedAt).HasColumnName("created_at");
+                entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
+                
                 // Ignore legacy navigation properties to keep this context focused
                 entity.Ignore(e => e.CreatedByUser);
                 entity.Ignore(e => e.UserPromotions);
@@ -142,6 +164,15 @@ namespace AmesaBackend.Lottery.Data
                 entity.HasIndex(e => e.UserId);
                 entity.HasIndex(e => e.PromotionId);
                 entity.HasIndex(e => new { e.UserId, e.PromotionId });
+                
+                // Explicit snake_case mappings (production schema is snake_case)
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.UserId).HasColumnName("user_id");
+                entity.Property(e => e.PromotionId).HasColumnName("promotion_id");
+                entity.Property(e => e.UsedAt).HasColumnName("used_at");
+                entity.Property(e => e.TransactionId).HasColumnName("transaction_id");
+                entity.Property(e => e.DiscountAmount).HasColumnName("discount_amount");
+                
                 // Ignore navigation properties not mapped in this context
                 entity.Ignore(e => e.User);
                 entity.Ignore(e => e.Promotion);
