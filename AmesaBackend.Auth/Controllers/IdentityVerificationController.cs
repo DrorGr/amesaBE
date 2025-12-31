@@ -8,6 +8,7 @@ namespace AmesaBackend.Auth.Controllers
 {
     [ApiController]
     [Route("api/v1/auth/identity")]
+    [Authorize]
     public class IdentityVerificationController : ControllerBase
     {
         private readonly IIdentityVerificationService _verificationService;
@@ -119,7 +120,42 @@ namespace AmesaBackend.Auth.Controllers
         {
             try
             {
-                // Validate request
+                var userIdClaim = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (userIdClaim == null || !Guid.TryParse(userIdClaim, out var userId))
+                {
+                    return new UnauthorizedObjectResult(new ApiResponse<IdentityVerificationResult>
+                    {
+                        Success = false,
+                        Message = "User not authenticated",
+                        Error = new ErrorResponse { Code = "UNAUTHORIZED", Message = "User not authenticated" }
+                    });
+                }
+
+                // ✅ UX hardening: if user is already verified, don't require image re-upload.
+                // This prevents the frontend from blocking verified users due to an accidental retry call.
+                var currentStatus = await _verificationService.GetVerificationStatusAsync(userId);
+                if (string.Equals(currentStatus.VerificationStatus, "verified", StringComparison.OrdinalIgnoreCase))
+                {
+                    return Ok(new ApiResponse<IdentityVerificationResult>
+                    {
+                        Success = true,
+                        Data = new IdentityVerificationResult
+                        {
+                            IsVerified = true,
+                            ValidationKey = currentStatus.ValidationKey ?? Guid.Empty,
+                            LivenessScore = currentStatus.LivenessScore,
+                            FaceMatchScore = currentStatus.FaceMatchScore,
+                            VerificationStatus = "verified",
+                            RejectionReason = null,
+                            VerificationMetadata = currentStatus.VerifiedAt.HasValue
+                                ? new Dictionary<string, object> { ["verifiedAt"] = currentStatus.VerifiedAt.Value }
+                                : null
+                        },
+                        Message = "User is already verified"
+                    });
+                }
+
+                // Not verified -> require a full retry payload (we don't store images).
                 if (request == null)
                 {
                     return BadRequest(new ApiResponse<IdentityVerificationResult>
@@ -133,7 +169,6 @@ namespace AmesaBackend.Auth.Controllers
                     });
                 }
 
-                // Validate required fields
                 if (string.IsNullOrWhiteSpace(request.IdFrontImage))
                 {
                     return BadRequest(new ApiResponse<IdentityVerificationResult>
@@ -157,17 +192,6 @@ namespace AmesaBackend.Auth.Controllers
                             Code = "VALIDATION_ERROR",
                             Message = "SelfieImage is required"
                         }
-                    });
-                }
-
-                var userIdClaim = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (userIdClaim == null || !Guid.TryParse(userIdClaim, out var userId))
-                {
-                    return new UnauthorizedObjectResult(new ApiResponse<IdentityVerificationResult>
-                    {
-                        Success = false,
-                        Message = "User not authenticated",
-                        Error = new ErrorResponse { Code = "UNAUTHORIZED", Message = "User not authenticated" }
                     });
                 }
 
