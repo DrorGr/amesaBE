@@ -7,16 +7,20 @@ namespace AmesaBackend.Models
     public class Promotion
     {
         [Key]
+        [Column("id")]
         public Guid Id { get; set; }
 
         [Required]
         [MaxLength(255)]
+        [Column("title")]
         public string Title { get; set; } = string.Empty;
 
+        [Column("description")]
         public string? Description { get; set; }
 
         [Required]
         [MaxLength(50)]
+        [Column("type")]
         public string Type { get; set; } = string.Empty;
 
         // amesa_admin.promotions.value
@@ -28,6 +32,7 @@ namespace AmesaBackend.Models
         public string? ValueType { get; set; }
 
         [MaxLength(50)]
+        [Column("code")]
         public string? Code { get; set; }
 
         [Column("is_active")]
@@ -72,6 +77,7 @@ namespace AmesaBackend.Models
     public class UserPromotion
     {
         [Key]
+        [Column("id")]
         public Guid Id { get; set; }
 
         [Required]
