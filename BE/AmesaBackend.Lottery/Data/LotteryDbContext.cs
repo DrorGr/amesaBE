@@ -51,19 +51,8 @@ public class LotteryDbContext : DbContext
             entity.Property(e => e.UpdatedAt).HasColumnName("UpdatedAt");
             entity.Property(e => e.TicketNumber).HasColumnName("TicketNumber");
             entity.Property(e => e.Status).HasColumnName("Status");
-            // Map additional columns if they exist in the model (based on SQL validation results)
-            // Note: These properties may not exist in the model - if build fails, remove the mapping
-            var ticketType = typeof(LotteryTicket);
-            if (ticketType.GetProperty("PromotionCode") != null)
-                entity.Property("PromotionCode").HasColumnName("promotion_code");
-            if (ticketType.GetProperty("DiscountAmount") != null)
-                entity.Property("DiscountAmount").HasColumnName("discount_amount");
-            if (ticketType.GetProperty("PurchaseDate") != null)
-                entity.Property("PurchaseDate").HasColumnName("PurchaseDate");
-            if (ticketType.GetProperty("PaymentId") != null)
-                entity.Property("PaymentId").HasColumnName("PaymentId");
-            if (ticketType.GetProperty("IsWinner") != null)
-                entity.Property("IsWinner").HasColumnName("IsWinner");
+            // Note: Database has promotion_code and discount_amount in snake_case, but these may not be in the model
+            // If queries fail with column not found errors, add explicit mappings here
             entity.HasOne(e => e.House)
                 .WithMany()
                 .HasForeignKey(e => e.HouseId)
@@ -75,6 +64,7 @@ public class LotteryDbContext : DbContext
         // Based on SQL validation: table has id, title, description, type, value, value_type, code, is_active,
         // start_date, end_date, usage_limit, usage_count, min_purchase_amount, max_discount_amount,
         // applicable_houses, created_by, created_at, updated_at
+        // Only mapping properties that are actually used in the codebase
         modelBuilder.Entity<Promotion>(entity =>
         {
             entity.ToTable("promotions", "amesa_admin");
@@ -91,20 +81,6 @@ public class LotteryDbContext : DbContext
             entity.Property(e => e.ApplicableHouses).HasColumnName("applicable_houses");
             entity.Property(e => e.CreatedAt).HasColumnName("created_at");
             entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
-            // Map additional columns if they exist in the model (based on SQL validation results)
-            var promotionType = typeof(Promotion);
-            if (promotionType.GetProperty("Title") != null)
-                entity.Property("Title").HasColumnName("title");
-            if (promotionType.GetProperty("Value") != null)
-                entity.Property("Value").HasColumnName("value");
-            if (promotionType.GetProperty("ValueType") != null)
-                entity.Property("ValueType").HasColumnName("value_type");
-            if (promotionType.GetProperty("MinPurchaseAmount") != null)
-                entity.Property("MinPurchaseAmount").HasColumnName("min_purchase_amount");
-            if (promotionType.GetProperty("MaxDiscountAmount") != null)
-                entity.Property("MaxDiscountAmount").HasColumnName("max_discount_amount");
-            if (promotionType.GetProperty("CreatedBy") != null)
-                entity.Property("CreatedBy").HasColumnName("created_by");
         });
 
         // Configure UserPromotion entity
