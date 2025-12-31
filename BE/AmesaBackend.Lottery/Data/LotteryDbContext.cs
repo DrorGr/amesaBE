@@ -63,6 +63,9 @@ public class LotteryDbContext : DbContext
             entity.ToTable("promotions", "amesa_admin");
             entity.HasKey(e => e.Id);
             // Map properties to snake_case column names (matching amesa_admin schema convention)
+            entity.Property(e => e.Code).HasColumnName("code");
+            entity.Property(e => e.Type).HasColumnName("type");
+            entity.Property(e => e.Description).HasColumnName("description");
             entity.Property(e => e.IsActive).HasColumnName("is_active");
             entity.Property(e => e.StartDate).HasColumnName("start_date");
             entity.Property(e => e.EndDate).HasColumnName("end_date");
@@ -70,6 +73,7 @@ public class LotteryDbContext : DbContext
             entity.Property(e => e.UsageCount).HasColumnName("usage_count");
             entity.Property(e => e.ApplicableHouses).HasColumnName("applicable_houses");
             entity.Property(e => e.CreatedAt).HasColumnName("created_at");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
         });
 
         // Configure UserPromotion entity
