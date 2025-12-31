@@ -142,9 +142,10 @@ namespace AmesaBackend.Lottery.Models
         public Guid? PaymentId { get; set; }
 
         [MaxLength(50)]
+        [Column("promotion_code")]
         public string? PromotionCode { get; set; }
 
-        [Column(TypeName = "decimal(10,2)")]
+        [Column("discount_amount", TypeName = "decimal(10,2)")]
         public decimal? DiscountAmount { get; set; }
 
         public bool IsWinner { get; set; } = false;

@@ -19,37 +19,48 @@ namespace AmesaBackend.Models
         [MaxLength(50)]
         public string Type { get; set; } = string.Empty;
 
-        [Column(TypeName = "decimal(10,2)")]
+        // amesa_admin.promotions.value
+        [Column("value", TypeName = "decimal(10,2)")]
         public decimal? Value { get; set; }
 
         [MaxLength(20)]
+        [Column("value_type")]
         public string? ValueType { get; set; }
 
         [MaxLength(50)]
         public string? Code { get; set; }
 
+        [Column("is_active")]
         public bool IsActive { get; set; } = true;
 
+        [Column("start_date")]
         public DateTime? StartDate { get; set; }
 
+        [Column("end_date")]
         public DateTime? EndDate { get; set; }
 
+        [Column("usage_limit")]
         public int? UsageLimit { get; set; }
 
+        [Column("usage_count")]
         public int UsageCount { get; set; } = 0;
 
-        [Column(TypeName = "decimal(10,2)")]
+        [Column("min_purchase_amount", TypeName = "decimal(10,2)")]
         public decimal? MinPurchaseAmount { get; set; }
 
-        [Column(TypeName = "decimal(10,2)")]
+        [Column("max_discount_amount", TypeName = "decimal(10,2)")]
         public decimal? MaxDiscountAmount { get; set; }
 
+        [Column("applicable_houses")]
         public Guid[]? ApplicableHouses { get; set; }
 
+        [Column("created_by")]
         public Guid? CreatedBy { get; set; }
 
+        [Column("created_at")]
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+        [Column("updated_at")]
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
         // Navigation properties
@@ -64,16 +75,20 @@ namespace AmesaBackend.Models
         public Guid Id { get; set; }
 
         [Required]
+        [Column("user_id")]
         public Guid UserId { get; set; }
 
         [Required]
+        [Column("promotion_id")]
         public Guid PromotionId { get; set; }
 
+        [Column("used_at")]
         public DateTime UsedAt { get; set; } = DateTime.UtcNow;
 
+        [Column("transaction_id")]
         public Guid? TransactionId { get; set; }
 
-        [Column(TypeName = "decimal(10,2)")]
+        [Column("discount_amount", TypeName = "decimal(10,2)")]
         public decimal? DiscountAmount { get; set; }
 
         // Navigation properties
