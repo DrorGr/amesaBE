@@ -4,6 +4,7 @@ using AmesaBackend.Lottery.DTOs;
 using AmesaBackend.Lottery.Models;
 using AmesaBackend.Models;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 
 namespace AmesaBackend.Lottery.Services
 {
@@ -349,6 +350,22 @@ namespace AmesaBackend.Lottery.Services
                     LongestStreak = gamification.LongestStreak,
                     LastEntryDate = gamification.LastEntryDate?.ToDateTime(TimeOnly.MinValue),
                     RecentAchievements = achievements
+                };
+            }
+            catch (Npgsql.PostgresException pgEx)
+            {
+                _logger.LogError(pgEx, "PostgreSQL error retrieving gamification data for user {UserId}: {ErrorCode} - {Message}", userId, pgEx.SqlState, pgEx.Message);
+                // Return default values on database error to allow service to continue
+                return new UserGamificationDto
+                {
+                    UserId = userId.ToString(),
+                    TotalPoints = 0,
+                    CurrentLevel = 1,
+                    CurrentTier = "Bronze",
+                    CurrentStreak = 0,
+                    LongestStreak = 0,
+                    LastEntryDate = null,
+                    RecentAchievements = new List<AchievementDto>()
                 };
             }
             catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
