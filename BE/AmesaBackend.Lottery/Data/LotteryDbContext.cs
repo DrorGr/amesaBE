@@ -29,10 +29,14 @@ public class LotteryDbContext : DbContext
         modelBuilder.HasDefaultSchema("amesa_lottery");
 
         // Configure House entity
+        // Note: houses table uses PascalCase column names (Id, Name, Description, etc.)
+        // EF Core will use property names as column names by default, which should match
         modelBuilder.Entity<House>(entity =>
         {
             entity.ToTable("houses", "amesa_lottery");
             entity.HasKey(e => e.Id);
+            // Explicitly map common properties to ensure correct column names
+            // If queries fail, add more explicit mappings here based on actual database schema
         });
 
         // Configure LotteryTicket entity
@@ -51,6 +55,7 @@ public class LotteryDbContext : DbContext
             entity.Property(e => e.UpdatedAt).HasColumnName("UpdatedAt");
             entity.Property(e => e.TicketNumber).HasColumnName("TicketNumber");
             entity.Property(e => e.Status).HasColumnName("Status");
+            // Note: Status is an enum, EF Core will automatically convert to/from string if database column is text type
             // Note: Database has promotion_code and discount_amount in snake_case, but these may not be in the model
             // If queries fail with column not found errors, add explicit mappings here
             entity.HasOne(e => e.House)

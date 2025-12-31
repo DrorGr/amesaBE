@@ -196,8 +196,11 @@ namespace AmesaBackend.Lottery.Services
                     .ToListAsync();
 
                 // Get user statistics for achievement checking
+                // Use Select() to only query the properties we need (Status and PurchasePrice)
+                // This avoids EF Core trying to SELECT all columns, including unmapped ones
                 var tickets = await _context.LotteryTickets
                     .Where(t => t.UserId == userId)
+                    .Select(t => new { t.Status, t.PurchasePrice })
                     .ToListAsync();
 
                 var totalEntries = tickets.Count;
