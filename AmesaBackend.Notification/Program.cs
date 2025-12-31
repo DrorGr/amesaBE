@@ -149,50 +149,15 @@ if (!string.IsNullOrWhiteSpace(secretKey))
         {
             OnMessageReceived = context =>
             {
-                // #region agent log
                 var accessToken = context.Request.Query["access_token"];
                 var path = context.HttpContext.Request.Path;
-                var hasToken = !string.IsNullOrEmpty(accessToken);
-                var isWsPath = path.StartsWithSegments("/ws");
-                var queryString = context.Request.QueryString.ToString();
-                Log.Information("[DEBUG] OnMessageReceived: path={Path} hasToken={HasToken} isWsPath={IsWsPath} queryString={QueryString}", 
-                    path, hasToken, isWsPath, queryString);
-                // #endregion
                 
                 if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/ws"))
                 {
                     context.Token = accessToken;
-                    // #region agent log
-                    Log.Information("[DEBUG] OnMessageReceived: token set in context");
-                    // #endregion
-                }
-                else
-                {
-                    // #region agent log
-                    Log.Warning("[DEBUG] OnMessageReceived: token NOT set - hasToken={HasToken} isWsPath={IsWsPath}", hasToken, isWsPath);
-                    // #endregion
                 }
                 return Task.CompletedTask;
             },
-            OnAuthenticationFailed = context =>
-            {
-                // #region agent log
-                var path = context.HttpContext.Request.Path;
-                var queryString = context.HttpContext.Request.QueryString.ToString();
-                Log.Warning("[DEBUG] OnAuthenticationFailed: path={Path} queryString={QueryString} exception={Exception}", 
-                    path, queryString, context.Exception?.Message ?? "null");
-                // #endregion
-                return Task.CompletedTask;
-            },
-            OnChallenge = context =>
-            {
-                // #region agent log
-                var path = context.HttpContext.Request.Path;
-                var queryString = context.HttpContext.Request.QueryString.ToString();
-                Log.Warning("[DEBUG] OnChallenge: path={Path} queryString={QueryString}", path, queryString);
-                // #endregion
-                return Task.CompletedTask;
-            }
         };
     });
 }
@@ -334,46 +299,25 @@ app.UseRouting();
 // Extract JWT token from query string for SignalR HTTP requests (negotiate endpoint)
 app.Use(async (context, next) =>
 {
-    // #region agent log
     var path = context.Request.Path;
-    var method = context.Request.Method;
     var isWsPath = path.StartsWithSegments("/ws");
     var accessTokenQuery = context.Request.Query["access_token"];
-    var accessToken = accessTokenQuery.ToString();
-    var hasToken = !string.IsNullOrWhiteSpace(accessToken);
     var existingAuthHeader = context.Request.Headers["Authorization"].ToString();
     var hasAuthHeader = !string.IsNullOrWhiteSpace(existingAuthHeader);
-    Log.Information("[DEBUG] SignalRTokenExtractor:entry path={Path} method={Method} isWsPath={IsWsPath} hasToken={HasToken} hasAuthHeader={HasAuthHeader} tokenLength={TokenLength}", 
-        path, method, isWsPath, hasToken, hasAuthHeader, accessToken.Length);
-    // #endregion
 
     // For SignalR negotiate requests, extract token from query string if not in header
+    var accessToken = accessTokenQuery.ToString();
+    var hasToken = !string.IsNullOrWhiteSpace(accessToken);
     if (isWsPath && hasToken)
     {
         if (!hasAuthHeader)
         {
-            // #region agent log
-            Log.Information("[DEBUG] SignalRTokenExtractor:extracting path={Path} method={Method} tokenLength={TokenLength}", path, method, accessToken.Length);
-            // #endregion
             // Add token to Authorization header for JWT middleware
             context.Request.Headers["Authorization"] = $"Bearer {accessToken}";
-            // #region agent log
-            Log.Information("[DEBUG] SignalRTokenExtractor:extracted path={Path} method={Method} headerSet={HeaderSet}", path, method, context.Request.Headers.ContainsKey("Authorization"));
-            // #endregion
-        }
-        else
-        {
-            // #region agent log
-            Log.Information("[DEBUG] SignalRTokenExtractor:skipped path={Path} method={Method} existingHeader={ExistingHeader}", path, method, existingAuthHeader);
-            // #endregion
         }
     }
     
     await next();
-    
-    // #region agent log
-    Log.Information("[DEBUG] SignalRTokenExtractor:exit path={Path} method={Method} statusCode={StatusCode}", path, method, context.Response.StatusCode);
-    // #endregion
 });
 
 app.UseAuthentication();

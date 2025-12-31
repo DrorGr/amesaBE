@@ -23,10 +23,6 @@ public class HousesFavoritesController : ControllerBase
         LotteryDbContext context,
         ILogger<HousesFavoritesController> logger)
     {
-        // #region agent log
-        _logger.LogInformation("[DEBUG] HousesFavoritesController constructor - userPrefsServiceNull={Null}, contextNull={ContextNull}", 
-            userPreferencesService == null, context == null);
-        // #endregion
         _userPreferencesService = userPreferencesService;
         _context = context;
         _logger = logger;
@@ -52,10 +48,6 @@ public class HousesFavoritesController : ControllerBase
     [HttpGet("favorites")]
     public async Task<ActionResult> GetFavorites([FromQuery] int page = 1, [FromQuery] int limit = 20, [FromQuery] string? sortBy = null, [FromQuery] string? sortOrder = "asc")
     {
-        // #region agent log
-        _logger.LogInformation("[DEBUG] GetFavorites entry - page={Page}, limit={Limit}, sortBy={SortBy}, sortOrder={SortOrder}", page, limit, sortBy, sortOrder);
-        // #endregion
-        
         // Validate pagination parameters
         if (page < 1)
         {
@@ -75,20 +67,8 @@ public class HousesFavoritesController : ControllerBase
         
         try
         {
-            // #region agent log
-            _logger.LogInformation("[DEBUG] Before GetUserId");
-            // #endregion
             var userId = GetUserId();
-            // #region agent log
-            _logger.LogInformation("[DEBUG] After GetUserId - userId={UserId}", userId);
-            // #endregion
-            // #region agent log
-            _logger.LogInformation("[DEBUG] Before GetFavoriteHouseIdsAsync - userId={UserId}, serviceNull={ServiceNull}", userId, _userPreferencesService == null);
-            // #endregion
             var favoriteHouseIds = await _userPreferencesService.GetFavoriteHouseIdsAsync(userId);
-            // #region agent log
-            _logger.LogInformation("[DEBUG] After GetFavoriteHouseIdsAsync - count={Count}, isNull={IsNull}", favoriteHouseIds?.Count ?? -1, favoriteHouseIds == null);
-            // #endregion
 
             if (favoriteHouseIds == null || !favoriteHouseIds.Any())
             {
@@ -107,9 +87,6 @@ public class HousesFavoritesController : ControllerBase
                 });
             }
 
-            // #region agent log
-            _logger.LogInformation("[DEBUG] Before database query - contextNull={ContextNull}, favoriteCount={FavoriteCount}", _context == null, favoriteHouseIds?.Count ?? 0);
-            // #endregion
             var query = _context.Houses
                 .Where(h => favoriteHouseIds.Contains(h.Id) && h.Status == LotteryStatus.Active);
 
@@ -159,9 +136,6 @@ public class HousesFavoritesController : ControllerBase
         }
         catch (Exception ex)
         {
-            // #region agent log
-            _logger.LogError(ex, "[DEBUG] Exception in GetFavorites - Type={ExceptionType}, Message={Message}, StackTrace={StackTrace}", ex.GetType().Name, ex.Message, ex.StackTrace?.Substring(0, Math.Min(500, ex.StackTrace?.Length ?? 0)));
-            // #endregion
             _logger.LogError(ex, "Error fetching favorite houses");
             return StatusCode(500, new { success = false, error = new { message = "An error occurred while fetching favorite houses" } });
         }

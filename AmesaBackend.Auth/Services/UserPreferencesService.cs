@@ -34,26 +34,14 @@ namespace AmesaBackend.Auth.Services
 
         public async Task<UserPreferencesDto?> GetUserPreferencesAsync(Guid userId, CancellationToken cancellationToken = default)
         {
-            // #region agent log
-            _logger.LogInformation("[DEBUG] GetUserPreferencesAsync entry - userId={UserId}, contextNull={ContextNull}", userId, _context == null);
-            // #endregion
             try
             {
                 if (_context == null)
                 {
-                    // #region agent log
-                    _logger.LogError("[DEBUG] AuthDbContext is null in GetUserPreferencesAsync");
-                    // #endregion
                     throw new InvalidOperationException("Database context is not initialized");
                 }
-                // #region agent log
-                _logger.LogInformation("[DEBUG] Before database query - userId={UserId}", userId);
-                // #endregion
                 var preferences = await _context.UserPreferences
                     .FirstOrDefaultAsync(up => up.UserId == userId, cancellationToken);
-                // #region agent log
-                _logger.LogInformation("[DEBUG] After database query - preferencesNull={Null}", preferences == null);
-                // #endregion
 
                 if (preferences == null)
                 {
@@ -70,10 +58,6 @@ namespace AmesaBackend.Auth.Services
             }
             catch (Exception ex)
             {
-                // #region agent log
-                _logger.LogError(ex, "[DEBUG] Exception in GetUserPreferencesAsync - Type={ExceptionType}, Message={Message}, StackTrace={StackTrace}", 
-                    ex.GetType().FullName, ex.Message, ex.StackTrace?.Substring(0, Math.Min(500, ex.StackTrace?.Length ?? 0)));
-                // #endregion
                 _logger.LogError(ex, "Error retrieving user preferences for user {UserId}", userId);
                 throw;
             }
@@ -352,15 +336,9 @@ namespace AmesaBackend.Auth.Services
 
         public async Task<List<Guid>> GetFavoriteHouseIdsAsync(Guid userId, CancellationToken cancellationToken = default)
         {
-            // #region agent log
-            _logger.LogInformation("[DEBUG] GetFavoriteHouseIdsAsync entry - userId={UserId}, contextNull={ContextNull}", userId, _context == null);
-            // #endregion
             try
             {
                 var preferences = await GetUserPreferencesAsync(userId, cancellationToken);
-                // #region agent log
-                _logger.LogInformation("[DEBUG] After GetUserPreferencesAsync - preferencesNull={Null}, hasJson={HasJson}", preferences == null, !string.IsNullOrEmpty(preferences?.PreferencesJson));
-                // #endregion
                 if (preferences == null)
                 {
                     return new List<Guid>();
@@ -370,9 +348,6 @@ namespace AmesaBackend.Auth.Services
                 {
                     return new List<Guid>();
                 }
-                // #region agent log
-                _logger.LogInformation("[DEBUG] Before JSON parsing - jsonLength={Length}", preferences.PreferencesJson?.Length ?? 0);
-                // #endregion
                 using var jsonDoc = JsonDocument.Parse(preferences.PreferencesJson);
                 if (jsonDoc.RootElement.TryGetProperty("lotteryPreferences", out var lotteryPrefs))
                 {
@@ -413,10 +388,6 @@ namespace AmesaBackend.Auth.Services
             }
             catch (Exception ex)
             {
-                // #region agent log
-                _logger.LogError(ex, "[DEBUG] Exception in GetFavoriteHouseIdsAsync - Type={ExceptionType}, Message={Message}, StackTrace={StackTrace}", 
-                    ex.GetType().FullName, ex.Message, ex.StackTrace?.Substring(0, Math.Min(500, ex.StackTrace?.Length ?? 0)));
-                // #endregion
                 _logger.LogError(ex, "Error retrieving favorite house IDs for user {UserId}", userId);
                 return new List<Guid>();
             }

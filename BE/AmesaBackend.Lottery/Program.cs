@@ -123,43 +123,13 @@ builder.Services.AddDbContext<AmesaDbContext>(options =>
 
 // Lottery service requires Redis for house list caching and cache invalidation
 // Register CircuitBreakerService FIRST (required by RateLimitService, but doesn't depend on Redis)
-// #region agent log
-Log.Information("[DEBUG] Registering ICircuitBreakerService - hypothesis: A");
-// #endregion
 builder.Services.AddSingleton<AmesaBackend.Auth.Services.ICircuitBreakerService, AmesaBackend.Auth.Services.CircuitBreakerService>();
-// #region agent log
-Log.Information("[DEBUG] ICircuitBreakerService registered successfully - hypothesis: A");
-// #endregion
 
 // AddAmesaBackendShared registers Redis services (IDistributedCache, IConnectionMultiplexer) which RateLimitService needs
-// #region agent log
-Log.Information("[DEBUG] Calling AddAmesaBackendShared - hypothesis: D");
-// #endregion
 builder.Services.AddAmesaBackendShared(builder.Configuration, builder.Environment, requireRedis: true);
-// #region agent log
-Log.Information("[DEBUG] AddAmesaBackendShared completed - checking Redis services - hypothesis: D");
-var redisCacheDescriptor = builder.Services.FirstOrDefault(s => s.ServiceType == typeof(Microsoft.Extensions.Caching.Distributed.IDistributedCache));
-var redisConnectionDescriptor = builder.Services.FirstOrDefault(s => s.ServiceType == typeof(StackExchange.Redis.IConnectionMultiplexer));
-Log.Information("[DEBUG] Redis services registered - IDistributedCache: {HasCache}, IConnectionMultiplexer: {HasConnection} - hypothesis: D", 
-    redisCacheDescriptor != null, redisConnectionDescriptor != null);
-// #endregion
 
 // Register RateLimitService AFTER AddAmesaBackendShared so Redis services are available
-// #region agent log
-Log.Information("[DEBUG] Registering IRateLimitService - hypothesis: A, D");
-// Verify ICircuitBreakerService is registered before registering RateLimitService
-var circuitBreakerDescriptor = builder.Services.FirstOrDefault(s => s.ServiceType == typeof(AmesaBackend.Auth.Services.ICircuitBreakerService));
-if (circuitBreakerDescriptor == null)
-{
-    Log.Error("[DEBUG] CRITICAL: ICircuitBreakerService not found before registering RateLimitService - hypothesis: A");
-    throw new InvalidOperationException("ICircuitBreakerService must be registered before RateLimitService");
-}
-Log.Information("[DEBUG] Verified ICircuitBreakerService is registered before RateLimitService - hypothesis: A");
-// #endregion
 builder.Services.AddScoped<AmesaBackend.Auth.Services.IRateLimitService, AmesaBackend.Auth.Services.RateLimitService>();
-// #region agent log
-Log.Information("[DEBUG] IRateLimitService registered successfully - hypothesis: A, D");
-// #endregion
 
 // Configure Lottery settings
 // LotterySettings type not found - commenting out for now
@@ -258,27 +228,7 @@ builder.Services.AddAuthentication(options =>
 
 // Add Services
 // Register UserPreferencesService for favorites functionality
-// #region agent log
-Log.Information("[DEBUG] Registering UserPreferencesService - checking dependencies");
-try
-{
-    // Check if AuthDbContext is registered
-    var authDbContextDescriptor = builder.Services.FirstOrDefault(s => s.ServiceType == typeof(AuthDbContext));
-    Log.Information("[DEBUG] AuthDbContext registration: {IsRegistered}", authDbContextDescriptor != null);
-    
-    // Check if IHttpRequest is registered (optional dependency)
-    var httpRequestDescriptor = builder.Services.FirstOrDefault(s => s.ServiceType.Name == "IHttpRequest");
-    Log.Information("[DEBUG] IHttpRequest registration: {IsRegistered}", httpRequestDescriptor != null);
-}
-catch (Exception ex)
-{
-    Log.Error(ex, "[DEBUG] Error checking UserPreferencesService dependencies");
-}
-// #endregion
 builder.Services.AddScoped<IUserPreferencesService, UserPreferencesService>();
-// #region agent log
-Log.Information("[DEBUG] UserPreferencesService registered successfully");
-// #endregion
 builder.Services.AddScoped<ILotteryService, LotteryService>();
 // Register PromotionService
 builder.Services.AddScoped<IPromotionService, PromotionService>();
@@ -385,41 +335,6 @@ app.UseCors("AllowFrontend");
 
 app.UseResponseCaching(); // Must be before UseRouting for VaryByQueryKeys to work
 app.UseRouting();
-// Debug routing middleware - log all API requests (production and development)
-    app.Use(async (context, next) =>
-    {
-        var method = context.Request.Method;
-        var path = context.Request.Path;
-    var query = context.Request.QueryString.ToString();
-        
-    // #region agent log
-    Log.Information("[DEBUG] Incoming request: {Method} {Path}{Query}", method, path, query);
-    // #endregion
-        
-        await next();
-        
-    var statusCode = context.Response.StatusCode;
-    // #region agent log
-    Log.Information("[DEBUG] Request completed: {Method} {Path}{Query} - Status: {StatusCode}", method, path, query, statusCode);
-    // #endregion
-    
-    if (statusCode == 405)
-        {
-            Log.Warning("405 Method Not Allowed: {Method} {Path}", method, path);
-        }
-    if (statusCode >= 400 && statusCode < 500)
-    {
-        // #region agent log
-        Log.Warning("[DEBUG] Client error: {Method} {Path}{Query} - Status: {StatusCode}", method, path, query, statusCode);
-        // #endregion
-    }
-    if (statusCode >= 500)
-    {
-        // #region agent log
-        Log.Error("[DEBUG] Server error: {Method} {Path}{Query} - Status: {StatusCode}", method, path, query, statusCode);
-        // #endregion
-    }
-    });
 app.UseAuthentication();
 
 // Service-to-service authentication middleware
@@ -428,83 +343,6 @@ app.UseAuthorization();
 
 app.MapHealthChecks("/health");
 app.MapControllers();
-
-// #region agent log
-// Validate DI resolution for UserPreferencesService
-try
-{
-    using (var scope = app.Services.CreateScope())
-    {
-        Log.Information("[DEBUG] Attempting to resolve IUserPreferencesService...");
-        var userPrefsService = scope.ServiceProvider.GetService<IUserPreferencesService>();
-        if (userPrefsService == null)
-        {
-            Log.Error("[DEBUG] FAILED: IUserPreferencesService could not be resolved from DI container");
-        }
-        else
-        {
-            Log.Information("[DEBUG] SUCCESS: IUserPreferencesService resolved successfully - Type: {Type}", userPrefsService.GetType().Name);
-        }
-        
-        // Also try to resolve AuthDbContext
-        Log.Information("[DEBUG] Attempting to resolve AuthDbContext...");
-        var authDbContext = scope.ServiceProvider.GetService<AuthDbContext>();
-        if (authDbContext == null)
-        {
-            Log.Error("[DEBUG] FAILED: AuthDbContext could not be resolved from DI container");
-        }
-        else
-        {
-            Log.Information("[DEBUG] SUCCESS: AuthDbContext resolved successfully");
-        }
-        
-        // Test RateLimitService resolution (hypothesis: A, D)
-        Log.Information("[DEBUG] Attempting to resolve IRateLimitService... - hypothesis: A, D");
-        try
-        {
-            var rateLimitService = scope.ServiceProvider.GetService<AmesaBackend.Auth.Services.IRateLimitService>();
-            if (rateLimitService == null)
-            {
-                Log.Error("[DEBUG] FAILED: IRateLimitService could not be resolved from DI container - hypothesis: A, D");
-            }
-            else
-            {
-                Log.Information("[DEBUG] SUCCESS: IRateLimitService resolved successfully - Type: {Type} - hypothesis: A, D", rateLimitService.GetType().Name);
-            }
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "[DEBUG] ERROR resolving IRateLimitService - Type: {Type}, Message: {Message} - hypothesis: A, D", 
-                ex.GetType().Name, ex.Message);
-        }
-        
-        // Test ICircuitBreakerService resolution (hypothesis: A)
-        Log.Information("[DEBUG] Attempting to resolve ICircuitBreakerService... - hypothesis: A");
-        try
-        {
-            var circuitBreakerService = scope.ServiceProvider.GetService<AmesaBackend.Auth.Services.ICircuitBreakerService>();
-            if (circuitBreakerService == null)
-            {
-                Log.Error("[DEBUG] FAILED: ICircuitBreakerService could not be resolved from DI container - hypothesis: A");
-            }
-            else
-            {
-                Log.Information("[DEBUG] SUCCESS: ICircuitBreakerService resolved successfully - Type: {Type} - hypothesis: A", circuitBreakerService.GetType().Name);
-            }
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "[DEBUG] ERROR resolving ICircuitBreakerService - Type: {Type}, Message: {Message} - hypothesis: A", 
-                ex.GetType().Name, ex.Message);
-        }
-    }
-}
-catch (Exception ex)
-{
-    Log.Error(ex, "[DEBUG] ERROR resolving IUserPreferencesService or dependencies - Type: {Type}, Message: {Message}, StackTrace: {StackTrace}", 
-        ex.GetType().Name, ex.Message, ex.StackTrace?.Substring(0, Math.Min(1000, ex.StackTrace?.Length ?? 0)));
-}
-// #endregion
 
 // Map SignalR hubs
 app.MapHub<LotteryHub>("/ws/lottery");

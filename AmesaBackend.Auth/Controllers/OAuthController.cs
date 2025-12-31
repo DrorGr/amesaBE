@@ -212,21 +212,7 @@ namespace AmesaBackend.Auth.Controllers
                     return Redirect($"{errorFrontendUrl}/auth/callback?error={Uri.EscapeDataString("Too many authentication attempts. Please try again later.")}");
                 }
 
-                // #region agent log
-                _logger.LogInformation("[DEBUG] GoogleCallback:entry hypothesisId=C,D queryString={QueryString} hasCodeParam={HasCodeParam} hasErrorParam={HasErrorParam}", 
-                    Request.QueryString.ToString(), 
-                    Request.Query.ContainsKey("code"), 
-                    Request.Query.ContainsKey("error"));
-                // #endregion
-
                 var googleResult = await HttpContext.AuthenticateAsync(GoogleDefaults.AuthenticationScheme);
-                
-                // #region agent log
-                _logger.LogInformation("[DEBUG] GoogleCallback:after-AuthenticateAsync hypothesisId=C,D succeeded={Succeeded} hasPrincipal={HasPrincipal} hasProperties={HasProperties}", 
-                    googleResult.Succeeded, 
-                    googleResult.Principal != null, 
-                    googleResult.Properties != null);
-                // #endregion
                 
                 if (!googleResult.Succeeded)
                 {
@@ -242,26 +228,10 @@ namespace AmesaBackend.Auth.Controllers
                 // Get email from authenticated principal (used in multiple places)
                 var email = googleResult.Principal?.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
                 
-                // #region agent log
-                var propertiesItemsCount = googleResult.Properties?.Items?.Count ?? 0;
-                var hasTempTokenInProperties = googleResult.Properties?.Items?.ContainsKey("temp_token") ?? false;
-                var redirectUri = googleResult.Properties?.RedirectUri;
-                _logger.LogInformation("[DEBUG] GoogleCallback:before-tempToken-lookup hypothesisId=C,D email={Email} propertiesItemsCount={PropertiesItemsCount} hasTempTokenInProperties={HasTempTokenInProperties} redirectUri={RedirectUri}", 
-                    email, propertiesItemsCount, hasTempTokenInProperties, redirectUri);
-                // #endregion
-                
                 // Try to get temp_token from authentication properties (set in OnCreatingTicket)
                 var tempToken = googleResult.Properties?.Items.TryGetValue("temp_token", out var token) == true 
                     ? token 
                     : Request.Query["temp_token"].FirstOrDefault();
-                
-                // #region agent log
-                _logger.LogInformation("[DEBUG] GoogleCallback:after-tempToken-lookup hypothesisId=C,D tempTokenFound={TempTokenFound} tempTokenLength={TempTokenLength} source={Source}", 
-                    !string.IsNullOrEmpty(tempToken), 
-                    tempToken?.Length ?? 0,
-                    googleResult.Properties?.Items.TryGetValue("temp_token", out _) == true ? "Properties" : Request.Query.ContainsKey("temp_token") ? "Query" : "None");
-                // Note: tempToken value is NOT logged for security
-                // #endregion
                 
                 // If not found in properties, try to get it from email cache (fallback)
                 if (string.IsNullOrEmpty(tempToken) && !string.IsNullOrEmpty(email))
@@ -333,11 +303,6 @@ namespace AmesaBackend.Auth.Controllers
 
                         var fallbackTempToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
                         var cacheKey = $"oauth_token_{fallbackTempToken}";
-                        _logger.LogInformation("[DEBUG] GoogleCallback:creating-token-cache hasAccessToken={HasAccessToken} isNewUser={IsNewUser} userAlreadyExists={UserAlreadyExists}", 
-                            !string.IsNullOrEmpty(authResponse.Response.AccessToken),
-                            authResponse.IsNewUser,
-                            !authResponse.IsNewUser);
-                        // Note: cacheKey and token values are NOT logged for security
                         var cacheExpiration = TimeSpan.FromMinutes(
                             _configuration.GetValue<int>("SecuritySettings:OAuthTokenCacheExpirationMinutes", 5));
                         var cacheData = new OAuthTokenCache
@@ -554,11 +519,6 @@ namespace AmesaBackend.Auth.Controllers
                 var tempToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
                 
                 var cacheKey = $"oauth_token_{tempToken}";
-                _logger.LogInformation("[DEBUG] MetaCallback:creating-token-cache hasAccessToken={HasAccessToken} isNewUser={IsNewUser} userAlreadyExists={UserAlreadyExists}", 
-                    !string.IsNullOrEmpty(authResponse.Response.AccessToken),
-                    authResponse.IsNewUser,
-                    !authResponse.IsNewUser);
-                // Note: cacheKey and token values are NOT logged for security
                 var cacheExpiration = TimeSpan.FromMinutes(
                     _configuration.GetValue<int>("SecuritySettings:OAuthTokenCacheExpirationMinutes", 5));
                 var cacheData = new OAuthTokenCache
@@ -869,17 +829,12 @@ namespace AmesaBackend.Auth.Controllers
                 }
 
                 var cacheKey = $"oauth_token_{request.Code}";
-                _logger.LogInformation("[DEBUG] ExchangeToken:entry codeLength={CodeLength} cacheKey={CacheKey}", 
-                    request.Code?.Length ?? 0, 
-                    cacheKey);
                 
                 var cachedDataBytes = await _distributedCache.GetAsync(cacheKey);
                 OAuthTokenCache? cachedData = null;
                 
                 if (cachedDataBytes == null || cachedDataBytes.Length == 0)
                 {
-                _logger.LogWarning("[DEBUG] ExchangeToken:cache-miss codeLength={CodeLength}", 
-                    request.Code?.Length ?? 0);
                     _logger.LogWarning("Invalid or expired OAuth exchange token");
                     return Unauthorized(new ApiResponse<object>
                     {
@@ -915,13 +870,6 @@ namespace AmesaBackend.Auth.Controllers
                         }
                     });
                 }
-                
-                _logger.LogInformation("[DEBUG] ExchangeToken:cache-hit hasAccessToken={HasAccessToken} hasRefreshToken={HasRefreshToken} isNewUser={IsNewUser} userAlreadyExists={UserAlreadyExists}", 
-                    !string.IsNullOrEmpty(cachedData.AccessToken),
-                    !string.IsNullOrEmpty(cachedData.RefreshToken),
-                    cachedData.IsNewUser,
-                    cachedData.UserAlreadyExists);
-                // Note: AccessToken and RefreshToken values are NOT logged for security
                 
                 _logger.LogInformation("Successfully retrieved tokens from cache for code");
 

@@ -43,10 +43,6 @@ public class GamificationController : ControllerBase
     [HttpGet]
     public async Task<ActionResult> GetGamificationData()
     {
-        // #region agent log
-        _logger.LogInformation("[DEBUG] GetGamificationData entry - serviceNull={ServiceNull}", _gamificationService == null);
-        // #endregion
-        
         if (_gamificationService == null)
         {
             _logger.LogError("GamificationService is not available");
@@ -56,14 +52,8 @@ public class GamificationController : ControllerBase
         try
         {
             var userId = GetUserId();
-            // #region agent log
-            _logger.LogInformation("[DEBUG] Before GetUserGamificationDataAsync - userId={UserId}", userId);
-            // #endregion
             // Call the gamification service to get user's gamification data
             var gamification = await _gamificationService.GetUserGamificationAsync(userId);
-            // #region agent log
-            _logger.LogInformation("[DEBUG] After GetUserGamificationAsync - dataNull={DataNull}", gamification == null);
-            // #endregion
 
             return Ok(new StandardApiResponse<UserGamificationDto>
             {
@@ -78,10 +68,6 @@ public class GamificationController : ControllerBase
         }
         catch (Exception ex)
         {
-            // #region agent log
-            _logger.LogError(ex, "[DEBUG] Exception in GetGamificationData - Type={ExceptionType}, Message={Message}, StackTrace={StackTrace}", 
-                ex.GetType().Name, ex.Message, ex.StackTrace);
-            // #endregion
             _logger.LogError(ex, "Error fetching gamification data");
             return StatusCode(500, new { success = false, error = new { message = "An error occurred while fetching gamification data", details = ex.Message } });
         }

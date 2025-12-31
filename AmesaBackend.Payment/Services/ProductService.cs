@@ -45,81 +45,40 @@ public class ProductService : IProductService
 
     public async Task<ProductDto?> GetProductByHouseIdAsync(Guid houseId)
     {
-        // #region agent log
-        _logger.LogInformation("[DEBUG] GetProductByHouseIdAsync entry - HouseId: {HouseId}", houseId);
-        // #endregion
-        
         ProductLink? productLink = null;
         try
         {
-            // #region agent log
-            _logger.LogInformation("[DEBUG] Before database query - HouseId: {HouseId}, ContextExists: {ContextExists}", houseId, _context != null);
-            // #endregion
-            
             // Fix: Check Product nullability before accessing DeletedAt
             productLink = await _context.ProductLinks
                 .Include(pl => pl.Product)
                 .FirstOrDefaultAsync(pl => pl.LinkedEntityType == "house" && 
                                             pl.LinkedEntityId == houseId);
-            
-            // #region agent log
-            _logger.LogInformation("[DEBUG] After database query - ProductLinkFound: {Found}, ProductExists: {ProductExists}, ProductDeletedAt: {DeletedAt}", 
-                productLink != null, 
-                productLink?.Product != null, 
-                productLink?.Product?.DeletedAt?.ToString() ?? "null");
-            // #endregion
         }
         catch (Exception ex)
         {
-            // #region agent log
-            _logger.LogError(ex, "[DEBUG] Database query exception - HouseId: {HouseId}, ExceptionType: {Type}, Message: {Message}", 
-                houseId, ex.GetType().Name, ex.Message);
-            // #endregion
+            _logger.LogError(ex, "Database query exception in GetProductByHouseIdAsync for house {HouseId}", houseId);
             throw;
         }
 
         if (productLink == null || productLink.Product == null)
         {
-            // #region agent log
-            _logger.LogInformation("[DEBUG] Product link or product is null - ProductLinkNull: {LinkNull}, ProductNull: {ProductNull}", 
-                productLink == null, productLink?.Product == null);
-            // #endregion
             return null;
         }
 
         // Check if product is deleted
         if (productLink.Product.DeletedAt != null)
         {
-            // #region agent log
-            _logger.LogInformation("[DEBUG] Product is deleted - ProductId: {ProductId}, DeletedAt: {DeletedAt}", 
-                productLink.Product.Id, productLink.Product.DeletedAt);
-            // #endregion
             return null;
         }
-
-        // #region agent log
-        _logger.LogInformation("[DEBUG] Before MapToProductDto - ProductId: {ProductId}, HasPricingMetadata: {HasPricing}, HasProductMetadata: {HasProduct}", 
-            productLink.Product.Id, 
-            !string.IsNullOrEmpty(productLink.Product.PricingMetadata), 
-            !string.IsNullOrEmpty(productLink.Product.ProductMetadata));
-        // #endregion
         
         try
         {
             var result = MapToProductDto(productLink.Product);
-            
-            // #region agent log
-            _logger.LogInformation("[DEBUG] After MapToProductDto success - ProductId: {ProductId}", result.Id);
-            // #endregion
-            
             return result;
         }
         catch (Exception ex)
         {
-            // #region agent log
-            _logger.LogError(ex, "[DEBUG] MapToProductDto exception - ProductId: {ProductId}, ExceptionType: {Type}, Message: {Message}", 
-                productLink.Product.Id, ex.GetType().Name, ex.Message);
-            // #endregion
+            _logger.LogError(ex, "MapToProductDto exception for product {ProductId}", productLink.Product.Id);
             throw;
         }
     }
@@ -213,22 +172,10 @@ public class ProductService : IProductService
 
     public async Task<ProductValidationResult> ValidateProductPurchaseAsync(Guid productId, int quantity, Guid userId)
     {
-        // #region agent log
-        _logger.LogInformation("[DEBUG] ValidateProductPurchaseAsync entry - ProductId: {ProductId}, Quantity: {Quantity}, UserId: {UserId}", productId, quantity, userId);
-        // #endregion
-        
         try
         {
-            // #region agent log
-            _logger.LogInformation("[DEBUG] Before product query - ProductId: {ProductId}", productId);
-            // #endregion
-            
             var product = await _context.Products
                 .FirstOrDefaultAsync(p => p.Id == productId && p.IsActive && p.Status == "active" && p.DeletedAt == null);
-
-            // #region agent log
-            _logger.LogInformation("[DEBUG] After product query - ProductFound: {Found}, ProductId: {ProductId}", product != null, product?.Id.ToString() ?? "null");
-            // #endregion
 
             if (product == null)
             {
@@ -276,10 +223,6 @@ public class ProductService : IProductService
             // Validate user quantity limit
             if (product.MaxQuantityPerUser.HasValue)
             {
-                // #region agent log
-                _logger.LogInformation("[DEBUG] Before TransactionItems query - ProductId: {ProductId}, UserId: {UserId}", productId, userId);
-                // #endregion
-                
                 try
                 {
                     // Fix: Add Include to properly load Transaction navigation property
@@ -290,10 +233,6 @@ public class ProductService : IProductService
                                      ti.Transaction.Status == "Completed")
                         .SumAsync(ti => ti.Quantity);
 
-                    // #region agent log
-                    _logger.LogInformation("[DEBUG] After TransactionItems query - UserPurchases: {Purchases}", userPurchases);
-                    // #endregion
-
                     if (userPurchases + quantity > product.MaxQuantityPerUser.Value)
                     {
                         errors.Add($"You have already purchased {userPurchases} items. Maximum allowed is {product.MaxQuantityPerUser.Value}");
@@ -301,24 +240,12 @@ public class ProductService : IProductService
                 }
                 catch (Exception ex)
                 {
-                    // #region agent log
-                    _logger.LogError(ex, "[DEBUG] Exception in TransactionItems query - ProductId: {ProductId}, UserId: {UserId}, ExceptionType: {Type}, Message: {Message}", 
-                        productId, userId, ex.GetType().Name, ex.Message);
-                    // #endregion
+                    _logger.LogError(ex, "Error validating user purchase quantity for product {ProductId}", productId);
                     throw;
                 }
             }
 
-            // #region agent log
-            _logger.LogInformation("[DEBUG] Before CalculatePriceAsync - ProductId: {ProductId}, Quantity: {Quantity}", productId, quantity);
-            // #endregion
-
             var calculatedPrice = errors.Count == 0 ? await CalculatePriceAsync(productId, quantity, userId) : 0;
-
-            // #region agent log
-            _logger.LogInformation("[DEBUG] ValidateProductPurchaseAsync success - IsValid: {IsValid}, Errors: {ErrorCount}, Price: {Price}", 
-                errors.Count == 0, errors.Count, calculatedPrice);
-            // #endregion
 
             return new ProductValidationResult
             {
@@ -329,10 +256,7 @@ public class ProductService : IProductService
         }
         catch (Exception ex)
         {
-            // #region agent log
-            _logger.LogError(ex, "[DEBUG] Exception in ValidateProductPurchaseAsync - ProductId: {ProductId}, ExceptionType: {Type}, Message: {Message}", 
-                productId, ex.GetType().Name, ex.Message);
-            // #endregion
+            _logger.LogError(ex, "Error validating product purchase for product {ProductId}", productId);
             throw;
         }
     }

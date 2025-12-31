@@ -37,12 +37,6 @@ public static class AuthenticationConfiguration
                 options.SignInScheme = "Cookies"; // Use cookies for OAuth sign-in
                 options.SaveTokens = true;
 
-                // Log configuration for debugging
-                Console.WriteLine($"[OAuth] Google ClientId: {googleClientId?.Substring(0, Math.Min(30, googleClientId?.Length ?? 0))}...");
-                Console.WriteLine($"[OAuth] Google ClientSecret: {(string.IsNullOrWhiteSpace(googleClientSecret) ? "MISSING" : googleClientSecret.Substring(0, Math.Min(10, googleClientSecret.Length)) + "...")}");
-                Console.WriteLine($"[OAuth] Google CallbackPath: {options.CallbackPath}");
-                Console.WriteLine($"[OAuth] Frontend URL: {frontendUrl}");
-
                 // Configure OAuth cookie for state management
                 options.CorrelationCookie.Name = ".Amesa.Google.Correlation";
                 options.CorrelationCookie.HttpOnly = true;
@@ -76,11 +70,6 @@ public static class AuthenticationConfiguration
                         var authService = serviceProvider.GetRequiredService<IAuthService>();
                         var memoryCache = serviceProvider.GetRequiredService<IMemoryCache>();
                         var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
-                        
-                        // #region agent log
-                        var redirectUriBefore = context.Properties.RedirectUri ?? "NULL";
-                        logger.LogInformation("[DEBUG] OnCreatingTicket:entry hypothesisId=A,B redirectUriBefore={RedirectUriBefore}", redirectUriBefore);
-                        // #endregion
                         
                         // Get user info from claims (these are populated from Google's OAuth response)
                         var claims = context.Principal?.Claims.ToList() ?? new List<Claim>();
@@ -157,21 +146,12 @@ public static class AuthenticationConfiguration
                         var frontendUrlForRedirect = configuration["FrontendUrl"] ?? "http://localhost:4200";
                         var baseRedirectUri = context.Properties.RedirectUri ?? $"{frontendUrlForRedirect}/auth/callback";
                         
-                        // #region agent log
-                        var tempTokenPreview = tempToken?.Substring(0, Math.Min(10, tempToken?.Length ?? 0)) + "...";
-                        logger.LogInformation("[DEBUG] OnCreatingTicket:before-modify hypothesisId=A,B,C baseRedirectUri={BaseRedirectUri} tempTokenPreview={TempTokenPreview}", baseRedirectUri, tempTokenPreview);
-                        // #endregion
-                        
                         // Append code parameter to redirect URI
                         if (!string.IsNullOrEmpty(tempToken))
                         {
                             var separator = baseRedirectUri.Contains("?") ? "&" : "?";
                             var modifiedRedirectUri = $"{baseRedirectUri}{separator}code={Uri.EscapeDataString(tempToken)}";
                             context.Properties.RedirectUri = modifiedRedirectUri;
-                        
-                            // #region agent log
-                            logger.LogInformation("[DEBUG] OnCreatingTicket:after-modify hypothesisId=A,B,C redirectUriAfter={RedirectUriAfter} hasCode={HasCode}", modifiedRedirectUri, modifiedRedirectUri.Contains("code="));
-                            // #endregion
                         }
                         
                         logger.LogInformation("OnCreatingTicket: Modified RedirectUri to include code parameter: {RedirectUri}", context.Properties.RedirectUri);

@@ -43,10 +43,6 @@ public class TicketsController : ControllerBase
     [HttpGet("active")]
     public async Task<ActionResult> GetActiveTickets()
     {
-        // #region agent log
-        _logger.LogInformation("[DEBUG] GetActiveTickets entry - contextNull={ContextNull}", _context == null);
-        // #endregion
-        
         if (_context == null)
         {
             _logger.LogError("LotteryDbContext is not available");
@@ -56,9 +52,6 @@ public class TicketsController : ControllerBase
         try
         {
             var userId = GetUserId();
-            // #region agent log
-            _logger.LogInformation("[DEBUG] Before database query - userId={UserId}", userId);
-            // #endregion
             // Use Select() to only query properties that exist in the model
             // This avoids EF Core trying to SELECT promotion_code and discount_amount which don't exist in the model
             var activeTickets = await _context.LotteryTickets
@@ -81,9 +74,6 @@ public class TicketsController : ControllerBase
                     House = t.House
                 })
                 .ToListAsync();
-            // #region agent log
-            _logger.LogInformation("[DEBUG] After database query - count={Count}", activeTickets?.Count ?? -1);
-            // #endregion
 
             return Ok(new
             {
@@ -99,10 +89,6 @@ public class TicketsController : ControllerBase
         }
         catch (Exception ex)
         {
-            // #region agent log
-            _logger.LogError(ex, "[DEBUG] Exception in GetActiveTickets - Type={ExceptionType}, Message={Message}, StackTrace={StackTrace}", 
-                ex.GetType().FullName, ex.Message, ex.StackTrace);
-            // #endregion
             _logger.LogError(ex, "Error fetching active tickets - InnerException: {InnerException}", ex.InnerException?.Message);
             return StatusCode(500, new { success = false, error = new { message = "An error occurred while fetching active tickets", details = ex.Message } });
         }
@@ -114,10 +100,6 @@ public class TicketsController : ControllerBase
     [HttpGet("analytics")]
     public async Task<ActionResult> GetTicketAnalytics()
     {
-        // #region agent log
-        _logger.LogInformation("[DEBUG] GetTicketAnalytics entry - contextNull={ContextNull}", _context == null);
-        // #endregion
-        
         if (_context == null)
         {
             _logger.LogError("LotteryDbContext is not available");
@@ -127,15 +109,9 @@ public class TicketsController : ControllerBase
         try
         {
             var userId = GetUserId();
-            // #region agent log
-            _logger.LogInformation("[DEBUG] Before CountAsync - userId={UserId}", userId);
-            // #endregion
             var totalTickets = await _context.LotteryTickets
                 .Where(t => t.UserId == userId)
                 .CountAsync();
-            // #region agent log
-            _logger.LogInformation("[DEBUG] After CountAsync - totalTickets={TotalTickets}", totalTickets);
-            // #endregion
 
             var activeTickets = await _context.LotteryTickets
                 .Where(t => t.UserId == userId && t.Status == TicketStatus.Active)
@@ -167,10 +143,6 @@ public class TicketsController : ControllerBase
         }
         catch (Exception ex)
         {
-            // #region agent log
-            _logger.LogError(ex, "[DEBUG] Exception in GetTicketAnalytics - Type={ExceptionType}, Message={Message}, StackTrace={StackTrace}", 
-                ex.GetType().Name, ex.Message, ex.StackTrace);
-            // #endregion
             _logger.LogError(ex, "Error fetching ticket analytics");
             return StatusCode(500, new { success = false, error = new { message = "An error occurred while fetching ticket analytics", details = ex.Message } });
         }

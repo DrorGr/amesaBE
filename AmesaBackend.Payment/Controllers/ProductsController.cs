@@ -81,22 +81,9 @@ public class ProductsController : ControllerBase
     [AllowAnonymous]
     public async Task<ActionResult<ApiResponse<ProductDto>>> GetProductByHouseId(Guid houseId)
     {
-        // #region agent log
-        _logger.LogInformation("[DEBUG] GetProductByHouseId entry - HouseId: {HouseId}", houseId);
-        // #endregion
-        
         try
         {
-            // #region agent log
-            _logger.LogInformation("[DEBUG] Before GetProductByHouseIdAsync call - HouseId: {HouseId}", houseId);
-            // #endregion
-            
             var product = await _productService.GetProductByHouseIdAsync(houseId);
-            
-            // #region agent log
-            _logger.LogInformation("[DEBUG] After GetProductByHouseIdAsync call - ProductIsNull: {IsNull}, ProductId: {ProductId}", 
-                product == null, product?.Id.ToString() ?? "null");
-            // #endregion
             
             if (product == null)
             {
@@ -106,11 +93,6 @@ public class ProductsController : ControllerBase
         }
         catch (Exception ex)
         {
-            // #region agent log
-            _logger.LogError(ex, "[DEBUG] Exception in GetProductByHouseId - HouseId: {HouseId}, ExceptionType: {Type}, Message: {Message}, InnerException: {Inner}", 
-                houseId, ex.GetType().Name, ex.Message, ex.InnerException?.Message ?? "none");
-            // #endregion
-            
             _logger.LogError(ex, "Error getting product for house {HouseId}", houseId);
             return StatusCode(500, new ApiResponse<ProductDto> 
             { 
@@ -130,19 +112,10 @@ public class ProductsController : ControllerBase
         Guid id, 
         [FromBody] ProductValidationRequest request)
     {
-        // #region agent log
-        _logger.LogInformation("[DEBUG] ValidateProduct entry - ProductId: {ProductId}, Quantity: {Quantity}", id, request?.Quantity ?? 0);
-        // #endregion
-        
         try
         {
-            // #region agent log
-            _logger.LogInformation("[DEBUG] ValidateProduct - Request null check - IsNull: {IsNull}", request == null);
-            // #endregion
-
             if (request == null)
             {
-                _logger.LogWarning("[DEBUG] ValidateProduct - Request body is null");
                 return BadRequest(new ApiResponse<ProductValidationResponse>
                 {
                     Success = false,
@@ -156,22 +129,10 @@ public class ProductsController : ControllerBase
 
             if (!ControllerHelpers.TryGetUserId(User, out var userId))
             {
-                // #region agent log
-                _logger.LogWarning("[DEBUG] ValidateProduct - User not authenticated");
-                // #endregion
                 return ControllerHelpers.UnauthorizedResponse<ProductValidationResponse>();
             }
 
-            // #region agent log
-            _logger.LogInformation("[DEBUG] ValidateProduct - Before ValidateProductPurchaseAsync - ProductId: {ProductId}, Quantity: {Quantity}, UserId: {UserId}", id, request.Quantity, userId);
-            // #endregion
-
             var result = await _productService.ValidateProductPurchaseAsync(id, request.Quantity, userId);
-            
-            // #region agent log
-            _logger.LogInformation("[DEBUG] ValidateProduct - After ValidateProductPurchaseAsync - IsValid: {IsValid}, Errors: {Errors}, Price: {Price}", 
-                result.IsValid, string.Join(", ", result.Errors), result.CalculatedPrice);
-            // #endregion
             
             return Ok(new ApiResponse<ProductValidationResponse>
             {
@@ -186,11 +147,6 @@ public class ProductsController : ControllerBase
         }
         catch (Exception ex)
         {
-            // #region agent log
-            _logger.LogError(ex, "[DEBUG] Exception in ValidateProduct - ProductId: {ProductId}, ExceptionType: {Type}, Message: {Message}, InnerException: {Inner}", 
-                id, ex.GetType().Name, ex.Message, ex.InnerException?.Message ?? "none");
-            // #endregion
-            
             _logger.LogError(ex, "Error validating product {ProductId}", id);
             return StatusCode(500, new ApiResponse<ProductValidationResponse> 
             { 

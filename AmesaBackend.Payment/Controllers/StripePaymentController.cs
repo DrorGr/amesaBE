@@ -209,7 +209,7 @@ public class StripePaymentController : ControllerBase
 
             if (string.IsNullOrWhiteSpace(publishableKey))
             {
-                _logger.LogError("[DEBUG] GetPublishableKey - PublishableKey not found in config or environment variables");
+                _logger.LogError("GetPublishableKey: publishable key not found in config or environment variables");
                 return StatusCode(500, new ApiResponse<StripeConfigResponse> 
                 { 
                     Success = false, 

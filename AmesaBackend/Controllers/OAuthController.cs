@@ -87,10 +87,6 @@ namespace AmesaBackend.Controllers
                 // Set RedirectUri to frontend - OnCreatingTicket will modify it to include the code parameter
                 var initialRedirectUri = $"{frontendUrl}/auth/callback";
                 
-                // #region agent log
-                _logger.LogInformation("[DEBUG] GoogleLogin hypothesisId=A,E initialRedirectUri={InitialRedirectUri} frontendUrl={FrontendUrl}", initialRedirectUri, frontendUrl);
-                // #endregion
-                
                 var properties = new AuthenticationProperties
                 {
                     RedirectUri = initialRedirectUri, // Frontend callback - OnCreatingTicket will add code parameter
@@ -119,12 +115,6 @@ namespace AmesaBackend.Controllers
         {
             try
             {
-                // #region agent log
-                var requestUrl = $"{Request.Scheme}://{Request.Host}{Request.Path}{Request.QueryString}";
-                _logger.LogInformation("[DEBUG] GoogleCallback:entry hypothesisId=D requestUrl={RequestUrl} queryString={QueryString} hasCodeInQuery={HasCodeInQuery}", 
-                    requestUrl, Request.QueryString.ToString(), Request.Query.ContainsKey("code"));
-                // #endregion
-                
                 _logger.LogInformation("Google OAuth callback endpoint hit");
                 var frontendUrl = _configuration["FrontendUrl"] ?? "http://localhost:4200";
 
@@ -186,10 +176,6 @@ namespace AmesaBackend.Controllers
                     await HttpContext.SignOutAsync("Cookies");
                     await HttpContext.SignOutAsync(GoogleDefaults.AuthenticationScheme);
                     var redirectUrl = $"{frontendUrl}/auth/callback?code={Uri.EscapeDataString(tempToken)}";
-                    
-                    // #region agent log
-                    _logger.LogInformation("[DEBUG] GoogleCallback:redirect hypothesisId=D redirectUrl={RedirectUrl} hasCode={HasCode}", redirectUrl, redirectUrl.Contains("code="));
-                    // #endregion
                     
                     _logger.LogInformation("Google OAuth callback: Redirecting to: {RedirectUrl}", redirectUrl);
                     return Redirect(redirectUrl);

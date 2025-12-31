@@ -45,10 +45,6 @@ public static class PaymentSecretsConfiguration
                             var publishableKey = secrets.GetValueOrDefault("PublishableKey");
                             var webhookSecret = secrets.GetValueOrDefault("WebhookSecret");
                             
-                            // #region agent log
-                            Console.WriteLine($"[DEBUG] Stripe secrets loaded from Secrets Manager - SecretKey present: {!string.IsNullOrEmpty(secretKey)}, PublishableKey present: {!string.IsNullOrEmpty(publishableKey)}, WebhookSecret present: {!string.IsNullOrEmpty(webhookSecret)}");
-                            // #endregion
-                            
                             // Add in-memory collection - this should override appsettings.json values
                             // Note: AddInMemoryCollection is added last, so it has highest priority
                             var stripeConfig = new Dictionary<string, string?>
@@ -60,17 +56,12 @@ public static class PaymentSecretsConfiguration
                             };
                             
                             configurationBuilder.AddInMemoryCollection(stripeConfig);
-                            
-                            // #region agent log
-                            Console.WriteLine($"[DEBUG] Stripe configuration keys set from Secrets Manager - ApiKey: {(!string.IsNullOrEmpty(secretKey) ? "SET" : "EMPTY")}, PublishableKey: {(!string.IsNullOrEmpty(publishableKey) ? "SET" : "EMPTY")}, WebhookSecret: {(!string.IsNullOrEmpty(webhookSecret) ? "SET" : "EMPTY")}");
-                            Console.WriteLine($"[DEBUG] Stripe ApiKey value (first 20 chars): {(string.IsNullOrEmpty(secretKey) ? "EMPTY" : secretKey.Substring(0, Math.Min(20, secretKey.Length)) + "...")}");
-                            // #endregion
                         }
                     });
                 }
                 else
                 {
-                    Console.WriteLine($"[DEBUG] Stripe API key already set via environment variable, skipping Secrets Manager load");
+                    // Stripe API key is already set via environment variables, skipping Secrets Manager load
                 }
 
                 // Load Coinbase Commerce secrets

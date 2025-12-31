@@ -49,17 +49,9 @@ namespace AmesaBackend.Auth.Controllers
                     });
                 }
 
-                // #region agent log
-                _logger.LogInformation("[DEBUG] GetUserPreferences:before-query userId={UserId}", userId);
-                // #endregion
-                
                 var userPreferences = await _context.UserPreferences
                     .AsNoTracking()
                     .FirstOrDefaultAsync(up => up.UserId == userId);
-                
-                // #region agent log
-                _logger.LogInformation("[DEBUG] GetUserPreferences:after-query found={Found}", userPreferences != null);
-                // #endregion
 
                 if (userPreferences == null)
                 {
@@ -82,20 +74,6 @@ namespace AmesaBackend.Auth.Controllers
             }
             catch (Exception ex)
             {
-                // #region agent log
-                var innerEx = ex.InnerException;
-                var postgresEx = innerEx as Npgsql.PostgresException;
-                _logger.LogError(ex, "[DEBUG] GetPreferences:catch exType={ExType} exMessage={ExMessage} innerExType={InnerExType} innerExMessage={InnerExMessage} innerExFull={InnerExFull} stackTrace={StackTrace} postgresSqlState={PostgresSqlState} postgresMessageText={PostgresMessageText} postgresDetail={PostgresDetail}",
-                    ex.GetType().Name,
-                    ex.Message,
-                    innerEx?.GetType().Name ?? "null",
-                    innerEx?.Message ?? "null",
-                    innerEx?.ToString() ?? "null",
-                    ex.StackTrace,
-                    postgresEx?.SqlState ?? "N/A",
-                    postgresEx?.MessageText ?? "N/A",
-                    postgresEx?.Detail ?? "N/A");
-                // #endregion
                 _logger.LogError(ex, "Error retrieving user preferences");
                 return StatusCode(500, new ApiResponse<UserPreferencesDto>
                 {
@@ -120,32 +98,8 @@ namespace AmesaBackend.Auth.Controllers
         {
             try
             {
-                // #region agent log
-                _logger.LogInformation("[DEBUG] UpdatePreferences:entry requestNull={RequestNull} requestVersion={RequestVersion}", 
-                    request == null, request?.Version ?? "null");
-                if (request != null)
-                {
-                    var preferencesValueKind = request.Preferences.ValueKind.ToString();
-                    var preferencesHasValue = request.Preferences.ValueKind != System.Text.Json.JsonValueKind.Undefined;
-                    string preferencesRawText = "N/A";
-                    try
-                    {
-                        preferencesRawText = request.Preferences.GetRawText();
-                    }
-                    catch (Exception ex)
-                    {
-                        preferencesRawText = $"ERROR: {ex.Message}";
-                    }
-                    _logger.LogInformation("[DEBUG] UpdatePreferences:request-details preferencesValueKind={ValueKind} preferencesHasValue={HasValue} preferencesLength={Length}", 
-                        preferencesValueKind, preferencesHasValue, preferencesRawText.Length);
-                }
-                // #endregion
-                
                 if (request == null)
                 {
-                    // #region agent log
-                    _logger.LogWarning("[DEBUG] UpdatePreferences:bad-request request is null");
-                    // #endregion
                     return BadRequest(new ApiResponse<UserPreferencesDto>
                     {
                         Success = false,
@@ -156,72 +110,88 @@ namespace AmesaBackend.Auth.Controllers
                 var userId = GetCurrentUserId();
                 if (userId == null)
                 {
-                    // #region agent log
-                    _logger.LogWarning("[DEBUG] UpdatePreferences:unauthorized userId is null");
-                    // #endregion
                     return Unauthorized(new ApiResponse<UserPreferencesDto>
                     {
                         Success = false,
                         Message = "User not authenticated"
                     });
                 }
-
-                // #region agent log
-                _logger.LogInformation("[DEBUG] UpdatePreferences:before-query userId={UserId}", userId);
-                // #endregion
                 
                 // Check if preferences exist (use AsNoTracking for the check only)
                 var existingPreferences = await _context.UserPreferences
                     .AsNoTracking()
                     .FirstOrDefaultAsync(up => up.UserId == userId);
 
-                // #region agent log
-                _logger.LogInformation("[DEBUG] UpdatePreferences:after-query hasExistingPreferences={HasExistingPreferences}", existingPreferences != null);
-                // #endregion
-
                 if (existingPreferences == null)
                 {
                     // Create new preferences
-                    // #region agent log
-                    string preferencesJson = "ERROR";
                     try
                     {
                         if (request.Preferences.ValueKind == JsonValueKind.Undefined || request.Preferences.ValueKind == JsonValueKind.Null)
                         {
-                            _logger.LogWarning("[DEBUG] UpdatePreferences:getRawText-skipped ValueKind={ValueKind}", request.Preferences.ValueKind);
                             return BadRequest(new ApiResponse<UserPreferencesDto>
                             {
                                 Success = false,
                                 Message = "Preferences field is required and cannot be null or undefined"
                             });
                         }
-                        preferencesJson = request.Preferences.GetRawText();
-                        _logger.LogInformation("[DEBUG] UpdatePreferences:getRawText-success length={Length}", preferencesJson.Length);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "[DEBUG] UpdatePreferences:getRawText-failed exType={ExType} exMessage={ExMessage}", 
-                            ex.GetType().Name, ex.Message);
-                        throw;
-                    }
-                    // #endregion
-                    
-                    // Double-check that preferences weren't created between the check and now (race condition)
-                    var doubleCheckPreferences = await _context.UserPreferences
-                        .FirstOrDefaultAsync(up => up.UserId == userId);
-                    
-                    if (doubleCheckPreferences != null)
-                    {
-                        // Another request created preferences, update instead
-                        _logger.LogInformation("[DEBUG] UpdatePreferences:race-condition-detected, updating existing preferences userId={UserId}", userId);
-                        doubleCheckPreferences.PreferencesJson = preferencesJson;
-                        doubleCheckPreferences.Version = request.Version ?? doubleCheckPreferences.Version;
-                        doubleCheckPreferences.UpdatedAt = DateTime.UtcNow;
-                        doubleCheckPreferences.UpdatedBy = userId.ToString()!;
+                        var preferencesJson = request.Preferences.GetRawText();
                         
+                        // Double-check that preferences weren't created between the check and now (race condition)
+                        var doubleCheckPreferences = await _context.UserPreferences
+                            .FirstOrDefaultAsync(up => up.UserId == userId);
+                        
+                        if (doubleCheckPreferences != null)
+                        {
+                            // Another request created preferences, update instead
+                            _logger.LogInformation("Preferences were created concurrently; updating existing preferences for user {UserId}", userId);
+                            doubleCheckPreferences.PreferencesJson = preferencesJson;
+                            doubleCheckPreferences.Version = request.Version ?? doubleCheckPreferences.Version;
+                            doubleCheckPreferences.UpdatedAt = DateTime.UtcNow;
+                            doubleCheckPreferences.UpdatedBy = userId.ToString()!;
+                            
+                            await _context.SaveChangesAsync();
+                            
+                            // Sync notification preferences
+                            if (_notificationSyncService != null)
+                            {
+                                try
+                                {
+                                    await _notificationSyncService.SyncNotificationPreferencesAsync(
+                                        userId.Value, preferencesJson);
+                                }
+                                catch (Exception syncEx)
+                                {
+                                    _logger.LogWarning(syncEx,
+                                        "Failed to sync notification preferences for user {UserId}. Preferences saved in Auth service.",
+                                        userId);
+                                }
+                            }
+                            
+                            return Ok(new ApiResponse<UserPreferencesDto>
+                            {
+                                Success = true,
+                                Data = MapToDto(doubleCheckPreferences),
+                                Message = "Preferences updated successfully"
+                            });
+                        }
+                        
+                        var newPreferences = new UserPreferences
+                        {
+                            Id = Guid.NewGuid(),
+                            UserId = userId.Value,
+                            PreferencesJson = preferencesJson,
+                            Version = request.Version ?? "1.0.0",
+                            CreatedAt = DateTime.UtcNow,
+                            UpdatedAt = DateTime.UtcNow,
+                            CreatedBy = userId.ToString()!,
+                            UpdatedBy = userId.ToString()!
+                        };
+                        
+                        _context.UserPreferences.Add(newPreferences);
                         await _context.SaveChangesAsync();
                         
-                        // Sync notification preferences
+                        // Sync notification preferences to Notification service (if service is available)
                         if (_notificationSyncService != null)
                         {
                             try
@@ -231,84 +201,36 @@ namespace AmesaBackend.Auth.Controllers
                             }
                             catch (Exception syncEx)
                             {
+                                // Log but don't fail the request - preferences are saved in Auth service
                                 _logger.LogWarning(syncEx,
                                     "Failed to sync notification preferences for user {UserId}. Preferences saved in Auth service.",
                                     userId);
                             }
                         }
                         
+                        _logger.LogInformation("Created new user preferences for user {UserId}", userId);
+                        
                         return Ok(new ApiResponse<UserPreferencesDto>
                         {
                             Success = true,
-                            Data = MapToDto(doubleCheckPreferences),
-                            Message = "Preferences updated successfully"
+                            Data = MapToDto(newPreferences),
+                            Message = "Preferences created successfully"
                         });
                     }
-                    
-                    var newPreferences = new UserPreferences
+                    catch (Exception ex)
                     {
-                        Id = Guid.NewGuid(),
-                        UserId = userId.Value,
-                        PreferencesJson = preferencesJson,
-                        Version = request.Version ?? "1.0.0",
-                        CreatedAt = DateTime.UtcNow,
-                        UpdatedAt = DateTime.UtcNow,
-                        CreatedBy = userId.ToString()!,
-                        UpdatedBy = userId.ToString()!
-                    };
-
-                    // #region agent log
-                    _logger.LogInformation("[DEBUG] UpdatePreferences:before-Add newPreferences.UserId={UserId}", newPreferences.UserId);
-                    // #endregion
-                    
-                    _context.UserPreferences.Add(newPreferences);
-                    
-                    // #region agent log
-                    _logger.LogInformation("[DEBUG] UpdatePreferences:before-SaveChangesAsync");
-                    // #endregion
-                    
-                    await _context.SaveChangesAsync();
-                    
-                    // #region agent log
-                    _logger.LogInformation("[DEBUG] UpdatePreferences:after-SaveChangesAsync success");
-                    // #endregion
-
-                    // Sync notification preferences to Notification service (if service is available)
-                    if (_notificationSyncService != null)
-                    {
-                        try
-                        {
-                            await _notificationSyncService.SyncNotificationPreferencesAsync(
-                                userId.Value, preferencesJson);
-                        }
-                        catch (Exception syncEx)
-                        {
-                            // Log but don't fail the request - preferences are saved in Auth service
-                            _logger.LogWarning(syncEx,
-                                "Failed to sync notification preferences for user {UserId}. Preferences saved in Auth service.",
-                                userId);
-                        }
+                        _logger.LogError(ex, "Error creating new user preferences for user {UserId}", userId);
+                        throw;
                     }
-
-                    _logger.LogInformation("Created new user preferences for user {UserId}", userId);
-
-                    return Ok(new ApiResponse<UserPreferencesDto>
-                    {
-                        Success = true,
-                        Data = MapToDto(newPreferences),
-                        Message = "Preferences created successfully"
-                    });
                 }
                 else
                 {
                     // Update existing preferences
-                    // #region agent log
-                    string preferencesJson = "ERROR";
+                    string preferencesJson;
                     try
                     {
                         if (request.Preferences.ValueKind == JsonValueKind.Undefined || request.Preferences.ValueKind == JsonValueKind.Null)
                         {
-                            _logger.LogWarning("[DEBUG] UpdatePreferences:getRawText-update-skipped ValueKind={ValueKind}", request.Preferences.ValueKind);
                             return BadRequest(new ApiResponse<UserPreferencesDto>
                             {
                                 Success = false,
@@ -316,15 +238,12 @@ namespace AmesaBackend.Auth.Controllers
                             });
                         }
                         preferencesJson = request.Preferences.GetRawText();
-                        _logger.LogInformation("[DEBUG] UpdatePreferences:getRawText-update-success length={Length}", preferencesJson.Length);
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "[DEBUG] UpdatePreferences:getRawText-update-failed exType={ExType} exMessage={ExMessage}", 
-                            ex.GetType().Name, ex.Message);
+                        _logger.LogError(ex, "Failed to parse preferences JSON for update");
                         throw;
                     }
-                    // #endregion
                     
                     // Since UpdatedAt is a concurrency token, we need to read the entity with tracking
                     // to get the original UpdatedAt value, then update it
@@ -334,7 +253,7 @@ namespace AmesaBackend.Auth.Controllers
                     if (trackedPreferences == null)
                     {
                         // This shouldn't happen, but handle it gracefully
-                        _logger.LogWarning("[DEBUG] UpdatePreferences:tracked-entity-not-found userId={UserId}", userId);
+                        _logger.LogWarning("Tracked preferences entity not found for user {UserId}", userId);
                         return NotFound(new ApiResponse<UserPreferencesDto>
                         {
                             Success = false,
@@ -347,17 +266,9 @@ namespace AmesaBackend.Auth.Controllers
                     trackedPreferences.Version = request.Version ?? trackedPreferences.Version;
                     trackedPreferences.UpdatedAt = DateTime.UtcNow;
                     trackedPreferences.UpdatedBy = userId.ToString()!;
-
-                    // #region agent log
-                    _logger.LogInformation("[DEBUG] UpdatePreferences:before-SaveChangesAsync-update trackedPreferences.UserId={UserId}", trackedPreferences.UserId);
-                    // #endregion
                     
                     // Save changes - EF Core will handle the concurrency token check
                     await _context.SaveChangesAsync();
-                    
-                    // #region agent log
-                    _logger.LogInformation("[DEBUG] UpdatePreferences:after-SaveChangesAsync-update success");
-                    // #endregion
 
                     // Sync notification preferences to Notification service (if service is available)
                     if (_notificationSyncService != null)
@@ -391,7 +302,7 @@ namespace AmesaBackend.Auth.Controllers
                 // Handle concurrency conflicts (UpdatedAt concurrency token)
                 var userIdForRetry = GetCurrentUserId();
                 _logger.LogWarning(concurrencyEx, 
-                    "[DEBUG] UpdatePreferences:concurrency-conflict userId={UserId}. Retrying with fresh data.",
+                    "Preferences concurrency conflict for user {UserId}. Retrying with fresh data.",
                     userIdForRetry);
                 
                 // Retry once with fresh data
@@ -493,20 +404,6 @@ namespace AmesaBackend.Auth.Controllers
             }
             catch (Exception ex)
             {
-                // #region agent log
-                var innerEx = ex.InnerException;
-                var postgresEx = innerEx as Npgsql.PostgresException;
-                _logger.LogError(ex, "[DEBUG] UpdatePreferences:catch exType={ExType} exMessage={ExMessage} innerExType={InnerExType} innerExMessage={InnerExMessage} innerExFull={InnerExFull} stackTrace={StackTrace} postgresSqlState={PostgresSqlState} postgresMessageText={PostgresMessageText} postgresDetail={PostgresDetail}",
-                    ex.GetType().Name,
-                    ex.Message,
-                    innerEx?.GetType().Name ?? "null",
-                    innerEx?.Message ?? "null",
-                    innerEx?.ToString() ?? "null",
-                    ex.StackTrace,
-                    postgresEx?.SqlState ?? "N/A",
-                    postgresEx?.MessageText ?? "N/A",
-                    postgresEx?.Detail ?? "N/A");
-                // #endregion
                 _logger.LogError(ex, "Error updating user preferences");
                 return StatusCode(500, new ApiResponse<UserPreferencesDto>
                 {
