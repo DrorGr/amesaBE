@@ -56,9 +56,15 @@ public class LotteryDbContext : DbContext
             entity.Property(e => e.TicketNumber).HasColumnName("TicketNumber");
             entity.Property(e => e.Status).HasColumnName("Status");
             // Note: Status is an enum, EF Core will automatically convert to/from string if database column is text type
-            // Map snake_case columns that exist in database but use PascalCase in model
-            entity.Property(e => e.PromotionCode).HasColumnName("promotion_code");
-            entity.Property(e => e.DiscountAmount).HasColumnName("discount_amount");
+            // Map properties that exist in the model (based on database schema: PurchaseDate, PaymentId, IsWinner are PascalCase)
+            entity.Property(e => e.PurchaseDate).HasColumnName("PurchaseDate");
+            entity.Property(e => e.PaymentId).HasColumnName("PaymentId");
+            entity.Property(e => e.IsWinner).HasColumnName("IsWinner");
+            // CRITICAL FIX: promotion_code and discount_amount exist in database but NOT in LotteryTicket model
+            // EF Core tries to SELECT them when doing .ToListAsync(), causing "column does not exist" errors
+            // Solution: Add shadow properties to map these columns without adding them to the model
+            entity.Property<string>("PromotionCode").HasColumnName("promotion_code");
+            entity.Property<decimal?>("DiscountAmount").HasColumnName("discount_amount");
             entity.HasOne(e => e.House)
                 .WithMany()
                 .HasForeignKey(e => e.HouseId)

@@ -59,10 +59,27 @@ public class TicketsController : ControllerBase
             // #region agent log
             _logger.LogInformation("[DEBUG] Before database query - userId={UserId}", userId);
             // #endregion
+            // Use Select() to only query properties that exist in the model
+            // This avoids EF Core trying to SELECT promotion_code and discount_amount which don't exist in the model
             var activeTickets = await _context.LotteryTickets
                 .Where(t => t.UserId == userId && t.Status == TicketStatus.Active)
                 .Include(t => t.House)
                 .OrderByDescending(t => t.CreatedAt)
+                .Select(t => new LotteryTicket
+                {
+                    Id = t.Id,
+                    TicketNumber = t.TicketNumber,
+                    HouseId = t.HouseId,
+                    UserId = t.UserId,
+                    PurchasePrice = t.PurchasePrice,
+                    Status = t.Status,
+                    PurchaseDate = t.PurchaseDate,
+                    PaymentId = t.PaymentId,
+                    IsWinner = t.IsWinner,
+                    CreatedAt = t.CreatedAt,
+                    UpdatedAt = t.UpdatedAt,
+                    House = t.House
+                })
                 .ToListAsync();
             // #region agent log
             _logger.LogInformation("[DEBUG] After database query - count={Count}", activeTickets?.Count ?? -1);
