@@ -1,12 +1,8 @@
+using AmesaBackend.Lottery.Services.Interfaces;
 using AmesaBackend.Shared.Caching;
 using Microsoft.Extensions.Logging;
 
 namespace AmesaBackend.Lottery.Services;
-
-public interface IHouseCacheService
-{
-    Task InvalidateHouseCachesAsync();
-}
 
 public class HouseCacheService : IHouseCacheService
 {

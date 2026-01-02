@@ -58,21 +58,6 @@ public class TicketsController : ControllerBase
                 .Where(t => t.UserId == userId && t.Status == TicketStatus.Active)
                 .Include(t => t.House)
                 .OrderByDescending(t => t.CreatedAt)
-                .Select(t => new LotteryTicket
-                {
-                    Id = t.Id,
-                    TicketNumber = t.TicketNumber,
-                    HouseId = t.HouseId,
-                    UserId = t.UserId,
-                    PurchasePrice = t.PurchasePrice,
-                    Status = t.Status,
-                    PurchaseDate = t.PurchaseDate,
-                    PaymentId = t.PaymentId,
-                    IsWinner = t.IsWinner,
-                    CreatedAt = t.CreatedAt,
-                    UpdatedAt = t.UpdatedAt,
-                    House = t.House
-                })
                 .ToListAsync();
 
             return Ok(new

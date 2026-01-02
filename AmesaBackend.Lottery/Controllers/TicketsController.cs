@@ -4,12 +4,14 @@ using System.Security.Claims;
 using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 using AmesaBackend.Lottery.Services;
+using AmesaBackend.Lottery.Services.Interfaces;
 using AmesaBackend.Lottery.DTOs;
 using AmesaBackend.Lottery.Data;
 using AmesaBackend.Shared.Helpers;
 using AmesaBackend.Shared.Caching;
 using AmesaBackend.Shared.Events;
 using AmesaBackend.Auth.Services;
+using AmesaBackend.Auth.Services.Interfaces;
 using Npgsql;
 
 namespace AmesaBackend.Lottery.Controllers

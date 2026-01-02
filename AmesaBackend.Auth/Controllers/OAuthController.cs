@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authentication.Facebook;
 using AspNet.Security.OAuth.Apple;
 using Microsoft.AspNetCore.Authorization;
 using AmesaBackend.Auth.Services;
+using AmesaBackend.Auth.Services.Interfaces;
 using AmesaBackend.Auth.Models;
 using AmesaBackend.Auth.DTOs;
 using Microsoft.Extensions.Caching.Distributed;

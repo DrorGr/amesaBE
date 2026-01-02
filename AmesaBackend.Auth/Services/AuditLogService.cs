@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using AmesaBackend.Auth.Data;
 using AmesaBackend.Auth.Models;
+using AmesaBackend.Auth.Services.Interfaces;
 
 namespace AmesaBackend.Auth.Services
 {

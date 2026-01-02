@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
 using AmesaBackend.Lottery.Services;
+using AmesaBackend.Lottery.Services.Interfaces;
 using AmesaBackend.Lottery.DTOs;
 using AmesaBackend.Shared.Helpers;
 

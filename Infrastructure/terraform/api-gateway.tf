@@ -77,6 +77,18 @@ resource "aws_apigatewayv2_route" "lottery_promotions_route" {
   target    = "integrations/${aws_apigatewayv2_integration.lottery_service.id}"
 }
 
+resource "aws_apigatewayv2_route" "lottery_gamification_route" {
+  api_id    = aws_apigatewayv2_api.amesa_api.id
+  route_key = "ANY /api/v1/gamification"
+  target    = "integrations/${aws_apigatewayv2_integration.lottery_service.id}"
+}
+
+resource "aws_apigatewayv2_route" "lottery_gamification_proxy_route" {
+  api_id    = aws_apigatewayv2_api.amesa_api.id
+  route_key = "ANY /api/v1/gamification/{proxy+}"
+  target    = "integrations/${aws_apigatewayv2_integration.lottery_service.id}"
+}
+
 # Integration for Payment Service
 resource "aws_apigatewayv2_integration" "payment_service" {
   api_id           = aws_apigatewayv2_api.amesa_api.id

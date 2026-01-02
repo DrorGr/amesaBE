@@ -1,6 +1,7 @@
 using MailKit.Net.Smtp;
 using MimeKit;
 using AmesaBackend.Notification.Data;
+using AmesaBackend.Notification.Services.Interfaces;
 
 namespace AmesaBackend.Notification.Services
 {

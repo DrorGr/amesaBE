@@ -1,150 +1,50 @@
-using Microsoft.EntityFrameworkCore;
-using AmesaBackend.Content.Data;
-using AmesaBackend.Shared.Extensions;
-using AmesaBackend.Shared.Middleware.Extensions;
+using AmesaBackend.Content.Configuration;
 using Serilog;
-using Npgsql;
-using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // JSON support is enabled by default in Npgsql 7.0+
 // No need for GlobalTypeMapper.EnableDynamicJson() (obsolete)
 
-Log.Logger = new LoggerConfiguration()
-    .ReadFrom.Configuration(builder.Configuration)
-    .Enrich.FromLogContext()
-    .WriteTo.Console()
-    .WriteTo.File("logs/content-.txt", rollingInterval: RollingInterval.Day)
-    .CreateLogger();
+// Configure Serilog logging
+builder.Host.UseContentSerilog(builder.Configuration);
 
-builder.Host.UseSerilog();
+// Add Controllers with camelCase JSON serialization
+builder.Services.AddContentControllers();
 
-builder.Services.AddControllers()
-    .AddJsonOptions(options =>
-    {
-        // Configure JSON serialization to use camelCase for property names
-        // This ensures frontend receives properties in camelCase (e.g., "success" instead of "Success")
-        options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
-        options.JsonSerializerOptions.WriteIndented = false;
-    });
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(options =>
-{
-    options.SwaggerDoc("v1", new OpenApiInfo
-    {
-        Title = "Amesa Content API",
-        Version = "v1",
-        Description = "Content service endpoints for listing and retrieving content."
-    });
+// Configure Swagger/OpenAPI with Bearer token security
+builder.Services.AddContentSwagger();
 
-    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
-    {
-        Name = "Authorization",
-        Type = SecuritySchemeType.Http,
-        Scheme = "bearer",
-        BearerFormat = "JWT",
-        In = ParameterLocation.Header,
-        Description = "Enter JWT Bearer token"
-    });
+// Configure Entity Framework with PostgreSQL
+builder.Services.AddContentDatabase(builder.Configuration, builder.Environment);
 
-    options.AddSecurityRequirement(new OpenApiSecurityRequirement
-    {
-        {
-            new OpenApiSecurityScheme
-            {
-                Reference = new OpenApiReference
-                {
-                    Type = ReferenceType.SecurityScheme,
-                    Id = "Bearer"
-                }
-            },
-            Array.Empty<string>()
-        }
-    });
-});
-
-// Add CORS policy for frontend access (using shared extension)
-builder.Services.AddAmesaCors(builder.Configuration);
-
-// Configure Entity Framework
-builder.Services.AddDbContext<ContentDbContext>(options =>
-{
-    var connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING") 
-        ?? builder.Configuration.GetConnectionString("DefaultConnection");
-
-    if (!string.IsNullOrEmpty(connectionString))
-    {
-        options.UseNpgsql(connectionString, npgsqlOptions =>
-        {
-            npgsqlOptions.EnableRetryOnFailure(
-                maxRetryCount: 3,
-                maxRetryDelay: TimeSpan.FromSeconds(30),
-                errorCodesToAdd: null);
-        });
-    }
-
-    if (builder.Environment.IsDevelopment())
-    {
-        options.EnableSensitiveDataLogging();
-        options.EnableDetailedErrors();
-    }
-});
-
-// Content service requires Redis for translations and languages caching
-builder.Services.AddAmesaBackendShared(builder.Configuration, builder.Environment, requireRedis: true);
-builder.Services.AddHealthChecks();
+// Register all application services
+builder.Services.AddContentServices(builder.Configuration, builder.Environment);
 
 var app = builder.Build();
 
-app.UseSwagger();
-app.UseSwaggerUI();
+// Configure middleware pipeline
+app.UseContentMiddleware(builder.Configuration, builder.Environment);
 
-// Enable X-Ray tracing if configured
-if (builder.Configuration.GetValue<bool>("XRay:Enabled", false))
+// Ensure database is created (development only)
+await app.EnsureDatabaseCreatedAsync(builder.Environment);
+
+// Configure graceful shutdown
+app.ConfigureGracefulShutdown();
+
+try
 {
-    // X-Ray tracing removed for microservices
+    Log.Information("Starting Amesa Content Service");
+    await app.RunAsync();
+}
+catch (Exception ex)
+{
+    Log.Fatal(ex, "Application terminated unexpectedly");
+}
+finally
+{
+    Log.CloseAndFlush();
 }
 
-app.UseAmesaSecurityHeaders(); // Security headers (before other middleware)
-app.UseAmesaMiddleware();
-app.UseAmesaLogging();
-app.UseRouting();
-
-// Add CORS early in pipeline (before UseAuthentication)
-app.UseCors("AllowFrontend");
-
-app.UseAuthentication();
-app.UseAuthorization();
-
-app.MapHealthChecks("/health");
-app.MapControllers();
-
-// Ensure database is created
-using (var scope = app.Services.CreateScope())
-{
-    var context = scope.ServiceProvider.GetRequiredService<ContentDbContext>();
-    try
-    {
-        if (builder.Environment.IsDevelopment())
-        {
-            Log.Information("Development mode: Ensuring Content database tables are created...");
-            await context.Database.EnsureCreatedAsync();
-            Log.Information("Content database setup completed successfully");
-        }
-        else
-        {
-            Log.Information("Production mode: Skipping EnsureCreated (use migrations)");
-        }
-    }
-    catch (Exception ex)
-    {
-        Log.Error(ex, "Error setting up database");
-    }
-}
-
-Log.Information("Starting Amesa Content Service");
-await app.RunAsync();
-
+// Make Program class accessible to test projects
 public partial class Program { }
-

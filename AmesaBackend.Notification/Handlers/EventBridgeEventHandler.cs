@@ -2,6 +2,7 @@ using Amazon.EventBridge;
 using Amazon.EventBridge.Model;
 using AmesaBackend.Shared.Events;
 using AmesaBackend.Notification.Services;
+using AmesaBackend.Notification.Services.Interfaces;
 using Microsoft.Extensions.Hosting;
 using System.Text.Json;
 

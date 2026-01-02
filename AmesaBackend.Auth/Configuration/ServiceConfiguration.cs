@@ -2,6 +2,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using AmesaBackend.Auth.Services;
+using AmesaBackend.Auth.Services.Interfaces;
 using AmesaBackend.Auth.BackgroundServices;
 using AmesaBackend.Auth.DTOs;
 using AmesaBackend.Auth.Data;

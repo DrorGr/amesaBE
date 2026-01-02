@@ -5,10 +5,12 @@ using AmesaBackend.Lottery.Data;
 using AmesaBackend.Lottery.DTOs;
 using AmesaBackend.Lottery.Models;
 using AmesaBackend.Lottery.Services;
+using AmesaBackend.Lottery.Services.Interfaces;
 using AmesaBackend.Shared.Events;
 using AmesaBackend.Shared.Caching;
 using AmesaBackend.Shared.Helpers;
 using AmesaBackend.Auth.Services;
+using AmesaBackend.Auth.Services.Interfaces;
 using System.Security.Claims;
 using Microsoft.Extensions.DependencyInjection;
 

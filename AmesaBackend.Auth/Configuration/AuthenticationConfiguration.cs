@@ -10,6 +10,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Logging;
 using AmesaBackend.Auth.Services;
+using AmesaBackend.Auth.Services.Interfaces;
 using AmesaBackend.Auth.Models;
 using Amazon.EventBridge;
 using Serilog;

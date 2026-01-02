@@ -1,213 +1,53 @@
-using Microsoft.EntityFrameworkCore;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.IdentityModel.Tokens;
-using System.Text;
-using AmesaBackend.Payment.Data;
-using AmesaBackend.Payment.Services;
 using AmesaBackend.Payment.Configuration;
-using AmesaBackend.Shared.Middleware;
-using AmesaBackend.Shared.Extensions;
-using AmesaBackend.Shared.Middleware.Extensions;
-using AmesaBackend.Auth.Services;
 using Serilog;
-using Npgsql;
-using ProductHandlers = AmesaBackend.Payment.Services.ProductHandlers;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Load payment secrets from AWS Secrets Manager (production only)
-// This must be called AFTER builder is created but configuration is built later
-// AddInMemoryCollection will override appsettings.json values
 builder.Configuration.LoadPaymentSecretsFromAws(builder.Environment);
 
-Log.Logger = new LoggerConfiguration()
-    .ReadFrom.Configuration(builder.Configuration)
-    .Enrich.FromLogContext()
-    .WriteTo.Console()
-    .WriteTo.File("logs/payment-.txt", rollingInterval: RollingInterval.Day)
-    .CreateLogger();
+// Configure Serilog logging
+builder.Host.UsePaymentSerilog(builder.Configuration);
 
-builder.Host.UseSerilog();
+// Add Controllers with camelCase JSON serialization
+builder.Services.AddPaymentControllers();
 
-builder.Services.AddControllers()
-    .AddJsonOptions(options =>
-    {
-        options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
-        options.JsonSerializerOptions.WriteIndented = false;
-    });
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+// Configure Swagger/OpenAPI with Bearer token security
+builder.Services.AddPaymentSwagger();
 
-// Configure Entity Framework
-builder.Services.AddDbContext<PaymentDbContext>(options =>
-{
-    var connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING") 
-        ?? builder.Configuration.GetConnectionString("DefaultConnection");
-
-    if (!string.IsNullOrEmpty(connectionString))
-    {
-        options.UseNpgsql(connectionString, npgsqlOptions =>
-        {
-            npgsqlOptions.EnableRetryOnFailure(
-                maxRetryCount: 3,
-                maxRetryDelay: TimeSpan.FromSeconds(30),
-                errorCodesToAdd: null);
-            // JSON support is enabled by default in Npgsql 7.0+
-            // No need for GlobalTypeMapper.EnableDynamicJson() (obsolete)
-        });
-    }
-
-    // Never enable sensitive data logging in production
-    if (builder.Environment.IsDevelopment())
-    {
-        options.EnableSensitiveDataLogging();
-        options.EnableDetailedErrors();
-    }
-});
-
-// Add shared services with Redis required for rate limiting
-builder.Services.AddAmesaBackendShared(builder.Configuration, builder.Environment, requireRedis: true);
+// Configure Entity Framework with PostgreSQL
+builder.Services.AddPaymentDatabase(builder.Configuration, builder.Environment);
 
 // Configure JWT Authentication
-var jwtSettings = builder.Configuration.GetSection("JwtSettings");
-var secretKey = jwtSettings["SecretKey"] 
-    ?? Environment.GetEnvironmentVariable("JwtSettings__SecretKey");
+builder.Services.AddPaymentJwtAuthentication(builder.Configuration, builder.Environment);
 
-// Track if authentication was configured
-bool authenticationConfigured = false;
-
-if (!string.IsNullOrWhiteSpace(secretKey))
-{
-    builder.Services.AddAuthentication(options =>
-    {
-        options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
-        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-    })
-    .AddJwtBearer(options =>
-    {
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = true,
-            ValidateAudience = true,
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
-            ValidIssuer = jwtSettings["Issuer"] ?? "AmesaAuthService",
-            ValidAudience = jwtSettings["Audience"] ?? "AmesaFrontend",
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey!)),
-            ClockSkew = TimeSpan.FromMinutes(5) // Allow 5 minute clock difference for reliability
-        };
-    });
-    authenticationConfigured = true;
-    Log.Information("JWT Authentication configured successfully");
-}
-else
-{
-    Log.Warning("JWT SecretKey is not configured. Authentication will not work. Set JwtSettings__SecretKey environment variable or configure JwtSettings:SecretKey in appsettings.");
-}
-
-// Add Circuit Breaker Service (required by RateLimitService)
-builder.Services.AddSingleton<ICircuitBreakerService, CircuitBreakerService>();
-
-// Add Rate Limit Service (required by PaymentRateLimitService)
-builder.Services.AddScoped<IRateLimitService, RateLimitService>();
-
-// Add Services
-builder.Services.AddScoped<IPaymentService, PaymentService>();
-builder.Services.AddScoped<IPaymentRateLimitService, PaymentRateLimitService>();
-builder.Services.AddScoped<IProductService, ProductService>();
-builder.Services.AddScoped<IStripeService, StripeService>();
-builder.Services.AddScoped<ICoinbaseCommerceService, CoinbaseCommerceService>();
-builder.Services.AddScoped<IPaymentAuditService, PaymentAuditService>();
-
-// Product Handlers
-builder.Services.AddScoped<ProductHandlers.IProductHandler, ProductHandlers.LotteryTicketProductHandler>();
-builder.Services.AddSingleton<ProductHandlers.IProductHandlerRegistry>(serviceProvider =>
-{
-    var registry = new ProductHandlers.ProductHandlerRegistry();
-    var lotteryHandler = serviceProvider.GetRequiredService<ProductHandlers.IProductHandler>();
-    registry.RegisterHandler(lotteryHandler);
-    return registry;
-});
-
-// Add CORS policy for frontend access
-builder.Services.AddAmesaCors(builder.Configuration);
-
-builder.Services.AddHealthChecks();
+// Register all application services
+builder.Services.AddPaymentServices(builder.Configuration, builder.Environment);
 
 var app = builder.Build();
 
-// Security headers middleware (before other middleware)
-app.UseAmesaSecurityHeaders();
+// Configure middleware pipeline
+app.UsePaymentMiddleware(builder.Configuration, builder.Environment);
 
-// HTTPS redirection and HSTS (production only)
-if (!app.Environment.IsDevelopment())
+// Ensure database is created (development only)
+await app.EnsureDatabaseCreatedAsync(builder.Environment);
+
+// Configure graceful shutdown
+app.ConfigureGracefulShutdown();
+
+try
 {
-    app.UseHsts();
-    app.UseHttpsRedirection();
+    Log.Information("Starting Amesa Payment Service");
+    await app.RunAsync();
+}
+catch (Exception ex)
+{
+    Log.Fatal(ex, "Application terminated unexpectedly");
+}
+finally
+{
+    Log.CloseAndFlush();
 }
 
-app.UseSwagger();
-app.UseSwaggerUI();
-
-// Enable X-Ray tracing if configured
-if (builder.Configuration.GetValue<bool>("XRay:Enabled", false))
-{
-    // X-Ray tracing removed for microservices
-}
-
-app.UseAmesaMiddleware();
-app.UseAmesaLogging();
-
-// Add CORS early in pipeline (before routing)
-app.UseCors("AllowFrontend");
-
-app.UseRouting();
-
-// Only use authentication if it was configured
-// Check if JWT secret is available at runtime
-var jwtSecretAtRuntime = app.Configuration["JwtSettings:SecretKey"] 
-    ?? Environment.GetEnvironmentVariable("JwtSettings__SecretKey");
-    
-if (!string.IsNullOrWhiteSpace(jwtSecretAtRuntime))
-{
-    app.UseAuthentication();
-    app.UseAuthorization();
-    Log.Information("Authentication middleware enabled - JWT secret found");
-}
-else
-{
-    Log.Warning("Skipping UseAuthentication() and UseAuthorization() - JWT secret not configured");
-}
-
-app.MapHealthChecks("/health");
-app.MapControllers();
-
-// Ensure database is created
-using (var scope = app.Services.CreateScope())
-{
-    var context = scope.ServiceProvider.GetRequiredService<PaymentDbContext>();
-    try
-    {
-        if (builder.Environment.IsDevelopment())
-        {
-            Log.Information("Development mode: Ensuring Payment database tables are created...");
-            await context.Database.EnsureCreatedAsync();
-            Log.Information("Payment database setup completed successfully");
-        }
-        else
-        {
-            Log.Information("Production mode: Skipping EnsureCreated (use migrations)");
-        }
-    }
-    catch (Exception ex)
-    {
-        Log.Error(ex, "Error setting up database");
-    }
-}
-
-Log.Information("Starting Amesa Payment Service");
-await app.RunAsync();
-
+// Make Program class accessible to test projects
 public partial class Program { }
-

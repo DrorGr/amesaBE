@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
 using AmesaBackend.Payment.Services;
+using AmesaBackend.Payment.Services.Interfaces;
 using AmesaBackend.Payment.DTOs;
 using AmesaBackend.Shared.Helpers;
 using PaymentHelpers = AmesaBackend.Payment.Helpers;

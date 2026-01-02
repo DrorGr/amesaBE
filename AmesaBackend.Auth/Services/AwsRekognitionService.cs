@@ -1,5 +1,6 @@
 using Amazon.Rekognition;
 using Amazon.Rekognition.Model;
+using AmesaBackend.Auth.Services.Interfaces;
 using Microsoft.Extensions.Logging;
 
 namespace AmesaBackend.Auth.Services

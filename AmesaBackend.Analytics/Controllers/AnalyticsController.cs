@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
 using AmesaBackend.Analytics.Services;
+using AmesaBackend.Analytics.Services.Interfaces;
 using AmesaBackend.Shared.Helpers;
 using AmesaBackend.Analytics.DTOs;
 

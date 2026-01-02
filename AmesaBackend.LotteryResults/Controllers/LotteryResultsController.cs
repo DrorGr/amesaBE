@@ -6,6 +6,7 @@ using AmesaBackend.LotteryResults.Data;
 using AmesaBackend.LotteryResults.DTOs;
 using AmesaBackend.LotteryResults.Models;
 using AmesaBackend.LotteryResults.Services;
+using AmesaBackend.LotteryResults.Services.Interfaces;
 using AmesaBackend.Shared.Events;
 
 namespace AmesaBackend.LotteryResults.Controllers

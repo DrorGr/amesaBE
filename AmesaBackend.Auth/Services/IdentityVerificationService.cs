@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using AmesaBackend.Auth.Data;
 using AmesaBackend.Auth.DTOs;
 using AmesaBackend.Auth.Models;
+using AmesaBackend.Auth.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
 namespace AmesaBackend.Auth.Services

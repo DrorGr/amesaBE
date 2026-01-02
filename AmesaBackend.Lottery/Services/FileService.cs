@@ -1,6 +1,7 @@
 using Amazon.S3;
 using Amazon.S3.Model;
 using AmesaBackend.Lottery.Services;
+using AmesaBackend.Lottery.Services.Interfaces;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Processing;
 using SixLabors.ImageSharp.Formats.Webp;

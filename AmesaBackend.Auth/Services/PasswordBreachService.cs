@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
+using AmesaBackend.Auth.Services.Interfaces;
 
 namespace AmesaBackend.Auth.Services
 {

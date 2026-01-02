@@ -1,12 +1,14 @@
 using Microsoft.AspNetCore.Mvc;
 using AmesaBackend.Notification.Handlers;
 using AmesaBackend.Notification.Services;
+using AmesaBackend.Notification.Services.Interfaces;
 using AmesaBackend.Notification.Constants;
 using AmesaBackend.Notification.DTOs;
 using AmesaBackend.Shared.Events;
 using AmesaBackend.Shared.Rest;
 using AmesaBackend.Shared.Caching;
 using AmesaBackend.Auth.Services;
+using AmesaBackend.Auth.Services.Interfaces;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;

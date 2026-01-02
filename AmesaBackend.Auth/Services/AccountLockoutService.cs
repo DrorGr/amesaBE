@@ -2,6 +2,7 @@ using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Configuration;
 using Microsoft.EntityFrameworkCore;
 using AmesaBackend.Auth.Data;
+using AmesaBackend.Auth.Services.Interfaces;
 using StackExchange.Redis;
 using System.Text.Json;
 using Polly;

@@ -1,5 +1,6 @@
 using AmesaBackend.Auth.Data;
 using AmesaBackend.Auth.Models;
+using AmesaBackend.Auth.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -177,7 +178,7 @@ namespace AmesaBackend.Auth.Services
             return isValid;
         }
 
-        public async Task<Services.RecoveryMethodsResponse> GetRecoveryMethodsAsync(string identifier)
+        public async Task<Services.Interfaces.RecoveryMethodsResponse> GetRecoveryMethodsAsync(string identifier)
         {
             // Try to find user by email or phone (with IgnoreQueryFilters to allow soft-deleted users during grace period)
             var user = await _context.Users
@@ -187,13 +188,13 @@ namespace AmesaBackend.Auth.Services
             if (user == null)
             {
                 // Don't reveal if user exists - return empty methods
-                return new Services.RecoveryMethodsResponse();
+                return new Services.Interfaces.RecoveryMethodsResponse();
             }
 
             var hasSecurityQuestions = await _context.SecurityQuestions
                 .AnyAsync(sq => sq.UserId == user.Id);
 
-            return new Services.RecoveryMethodsResponse
+            return new Services.Interfaces.RecoveryMethodsResponse
             {
                 HasEmail = !string.IsNullOrEmpty(user.Email),
                 HasPhone = !string.IsNullOrEmpty(user.Phone) && user.PhoneVerified,
@@ -203,7 +204,7 @@ namespace AmesaBackend.Auth.Services
             };
         }
 
-        public async Task SetupSecurityQuestionsAsync(Guid userId, List<Services.SecurityQuestionRequest> questions)
+        public async Task SetupSecurityQuestionsAsync(Guid userId, List<Services.Interfaces.SecurityQuestionRequest> questions)
         {
             var user = await _context.Users.FindAsync(userId);
             if (user == null)
@@ -234,11 +235,11 @@ namespace AmesaBackend.Auth.Services
             _logger.LogInformation("Security questions set up for user: {UserId} ({Count} questions)", userId, questions.Count);
         }
 
-        public async Task<bool> VerifyRecoveryCodeAsync(string identifier, string code, RecoveryMethod method)
+        public async Task<bool> VerifyRecoveryCodeAsync(string identifier, string code, Services.Interfaces.RecoveryMethod method)
         {
             User? user = null;
 
-            if (method == RecoveryMethod.Email)
+            if (method == Services.Interfaces.RecoveryMethod.Email)
             {
                 user = await _context.Users
                     .IgnoreQueryFilters() // Allow soft-deleted users during grace period
@@ -266,7 +267,7 @@ namespace AmesaBackend.Auth.Services
                     return true;
                 }
             }
-            else if (method == RecoveryMethod.Phone)
+            else if (method == Services.Interfaces.RecoveryMethod.Phone)
             {
                 user = await _context.Users
                     .IgnoreQueryFilters() // Allow soft-deleted users during grace period

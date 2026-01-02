@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.IO;
 using Microsoft.Extensions.DependencyInjection;
 using AmesaBackend.Auth.Services;
+using AmesaBackend.Auth.Services.Interfaces;
 
 namespace AmesaBackend.Auth.Middleware
 {

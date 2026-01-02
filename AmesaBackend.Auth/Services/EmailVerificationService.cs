@@ -1,6 +1,7 @@
 using AmesaBackend.Auth.Data;
 using AmesaBackend.Auth.DTOs;
 using AmesaBackend.Auth.Models;
+using AmesaBackend.Auth.Services.Interfaces;
 using AmesaBackend.Shared.Events;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;

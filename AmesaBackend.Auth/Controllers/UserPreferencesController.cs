@@ -5,6 +5,7 @@ using AmesaBackend.Auth.Data;
 using AmesaBackend.Auth.DTOs;
 using AmesaBackend.Auth.Models;
 using AmesaBackend.Auth.Services;
+using AmesaBackend.Auth.Services.Interfaces;
 using System.Security.Claims;
 using System.Text.Json;
 using Npgsql;

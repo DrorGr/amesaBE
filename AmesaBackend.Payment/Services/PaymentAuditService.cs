@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using AmesaBackend.Payment.Data;
 using AmesaBackend.Payment.Models;
+using AmesaBackend.Payment.Services.Interfaces;
 using System.Text.Json;
 
 namespace AmesaBackend.Payment.Services;

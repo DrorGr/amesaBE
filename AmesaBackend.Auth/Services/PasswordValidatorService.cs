@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using AmesaBackend.Auth.Data;
 using AmesaBackend.Auth.DTOs;
 using AmesaBackend.Auth.Models;
+using AmesaBackend.Auth.Services.Interfaces;
 using BCrypt.Net;
 using System.Text.RegularExpressions;
 

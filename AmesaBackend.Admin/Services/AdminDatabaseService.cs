@@ -1,3 +1,5 @@
+using AmesaBackend.Admin.Services.Interfaces;
+
 namespace AmesaBackend.Admin.Services
 {
     public class AdminDatabaseService : IAdminDatabaseService

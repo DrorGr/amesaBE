@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore.Storage;
 using AmesaBackend.Lottery.Data;
 using AmesaBackend.Lottery.Models;
 using AmesaBackend.Lottery.Services;
+using AmesaBackend.Lottery.Services.Interfaces;
 using StackExchange.Redis;
 using Microsoft.Extensions.Logging;
 

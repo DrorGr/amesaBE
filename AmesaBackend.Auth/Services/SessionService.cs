@@ -1,5 +1,6 @@
 using AmesaBackend.Auth.Data;
 using AmesaBackend.Auth.DTOs;
+using AmesaBackend.Auth.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Cryptography;
 

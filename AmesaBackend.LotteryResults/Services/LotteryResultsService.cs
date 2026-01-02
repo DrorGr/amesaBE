@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using AmesaBackend.LotteryResults.Data;
 using AmesaBackend.LotteryResults.Models;
 using AmesaBackend.LotteryResults.Services;
+using AmesaBackend.LotteryResults.Services.Interfaces;
 using AmesaBackend.Shared.Events;
 using AmesaBackend.Shared.Rest;
 using AmesaBackend.Shared.Contracts;

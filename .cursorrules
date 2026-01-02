@@ -6,8 +6,8 @@
 
 | Item | Value |
 |------|-------|
-| **Context Version** | 2.7.0 |
-| **Last Updated** | 2025-01-25 (AWS cost optimization completed - $27.36/mo savings) |
+| **Context Version** | 2.8.0 |
+| **Last Updated** | 2025-12-17 (Codebase reorganization: Services/Interfaces/ and Services/Background/ folders organized) |
 | **Backend Framework** | .NET 8.0, ASP.NET Core |
 | **Database** | Aurora PostgreSQL Serverless v2 |
 | **Infrastructure** | AWS (ECS Fargate, ECR, ALB, Aurora) |
@@ -23,7 +23,7 @@
 ---
 
 ## Quick Status (2025-12-17)
-- **Context Version**: 2.7.0 (supersedes prior 2.6.0/2.5.x references)
+- **Context Version**: 2.8.0 (supersedes prior 2.7.0/2.6.0/2.5.x references)
 - **Staleness Warning**: Content last fully updated 2025-01-25; changes between 2025-01-25 and 2025-12-17 not captured. Verify deployment state, health checks, and "production-ready" claims before relying.
 - **Known Gap**: No log of work after multi-channel notifications/payment/favorites fixes. Add recent releases, incidents, and infra changes when known.
 - **Outdated Sections**: Rate limit table, background service lists, dependency versions, "Latest Session" - verify before relying.
@@ -481,7 +481,11 @@ Each microservice has its own set of configuration files:
 - Scoped/Singleton lifetime management
 - Async methods for I/O operations
 - Dependency injection
-- **Service Organization**: Each microservice has its own Services folder
+- **Service Organization**: Each microservice has its own Services folder with organized subfolders
+  - **Services/Interfaces/** - All service interface definitions (e.g., `IAuthService`, `ILotteryService`)
+  - **Services/Background/** - Background hosted services (IHostedService implementations)
+    - Note: Auth service uses `BackgroundServices/` folder (legacy structure)
+  - **Services/** - Service implementations (concrete classes)
   - Services implement interfaces (IServiceName pattern)
   - Services handle business logic
   - Services use DbContext for data access
@@ -772,6 +776,35 @@ git checkout main
 - Test changes with unit and integration tests
 - Ensure database migrations are properly created
 - **NEVER commit or push files listed in `.gitignore`** - Always verify `git status` before committing
+
+### 🔍 **Code Search Guidelines (CRITICAL)**
+**⚠️ ALWAYS use `grep` tool instead of PowerShell pipelines for searching code - PowerShell commands like `git show | Select-String` can crash agent chats**
+
+**MANDATORY RULE**: When searching for code patterns, service registrations, or text in files:
+- ✅ **ALWAYS use the `grep` tool** - Fast, reliable, designed for codebase search
+- ✅ **Use `read_file` tool** - For reading specific files or sections
+- ❌ **NEVER use PowerShell pipelines** like `git show HEAD:file | Select-String -Pattern "..." | Select-Object`
+- ❌ **NEVER use `git show` with pipes** - These commands can hang, cause encoding issues, or crash chats
+
+**Correct approach - Use grep:**
+```bash
+# Instead of: git show HEAD:BE/AmesaBackend.Lottery/Program.cs | Select-String -Pattern "ICircuitBreakerService"
+# Use the grep tool:
+grep -pattern "ICircuitBreakerService" -path "BE/AmesaBackend.Lottery/Program.cs" -C 3
+```
+
+**Examples of what to ask instead:**
+- ❌ Bad: "Run `git show HEAD:BE/AmesaBackend.Lottery/Program.cs | Select-String -Pattern 'ICircuitBreakerService'`"
+- ✅ Good: "Search for ICircuitBreakerService in BE/AmesaBackend.Lottery/Program.cs"
+- ✅ Good: "Find all service registrations in Program.cs files"
+- ✅ Good: "Show me where IRateLimitService is registered"
+
+**Why grep is better:**
+1. **Faster** - Direct file access, no git operations
+2. **More reliable** - No encoding issues, no hanging
+3. **Better output** - Clean, formatted results with context
+4. **Works in all modes** - Auto, Agent, Manual
+5. **Respects .gitignore** - Only searches tracked files
 
 ### ✅ **TASK COMPLETION PROTOCOL - MANDATORY**
 **CRITICAL**: For every task you start and complete, you MUST:
@@ -1142,431 +1175,16 @@ Pieces MCP provides access to Long-Term Memory (LTM-2.7) engine, allowing agents
 
 **Documentation**: See `MetaData/Documentation/Development/PIECES_MCP_INTEGRATION.md` for complete troubleshooting guide.
 
-## Architecture Overview
+## Architecture & Cross-Cutting Concerns
 
-### System Architecture
-```
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   Frontend      │───▶│     Backend      │───▶│    Database     │
-│                 │    │                  │    │                 │
-│ Angular 20.2.1  │    │ .NET 8.0         │    │ Aurora PostgreSQL│
-│ S3 + CloudFront │    │ ECS Fargate      │    │ Serverless v2   │
-└─────────────────┘    │ Docker + ALB     │    │ (8 Schemas)     │
-                       │ SignalR Hubs     │    └─────────────────┘
-                       │ 8 Microservices  │
-                       │ EventBridge      │
-                       └──────────────────┘
-```
+**📚 Detailed Documentation**: Large architecture and cross-cutting concerns sections have been extracted to separate files for performance optimization:
 
-### Microservices Architecture
-All 8 microservices are independently deployable:
-- Each service has its own Dockerfile and ECS task definition
-- Each service uses its own PostgreSQL schema
-- Services communicate via:
-  - HTTP/REST (via ALB path-based routing)
-  - EventBridge (event-driven architecture)
-  - Service-to-service authentication (API key)
-- Shared library (`AmesaBackend.Shared`) provides common functionality
-- Redis caching (where required) for performance
+- **Architecture Overview**: See MetaData/Documentation/CURSOR_ARCHITECTURE.md for system architecture, microservices architecture, request flow, and inter-service communication details.
+- **Cross-Cutting Concerns**: See MetaData/Documentation/CURSOR_CROSS_CUTTING.md for rate limiting, circuit breakers, health checks, error handling, caching, security headers, CORS, logging, retry policies, secrets management, database patterns, monitoring, validation, background services, service registration patterns, Swagger/OpenAPI, logging configuration, and application bootstrap patterns.
 
-### Request Flow
-```
-Client → CloudFront /api/* → ALB (path-based routing) → ECS Task (microservice) → .NET API → Aurora PostgreSQL (schema-specific)
-                                              → SignalR Hub → LongPolling Connection
-                                              → EventBridge → Other Services
-```
-
-### Inter-Service Communication
-- **HTTP/REST**: Services call each other via ALB using service-to-service authentication
-- **EventBridge**: Event-driven communication for async operations
-  - Event bus: `amesa-event-bus`
-  - Event publisher: `EventBridgePublisher` in Shared library
-  - Event schemas: Defined in `AmesaBackend.Shared/Events/EventSchemas.cs`
-- **Service-to-Service Auth**: API key authentication via `ServiceToServiceAuthMiddleware`
-  - API key stored in: `/amesa/prod/ServiceAuth/ApiKey` (SSM Parameter Store)
-
-## Cross-Cutting Concerns
-
-### Rate Limiting
-- **Service**: `RateLimitService` (Redis-backed, circuit breaker protected)
-- **Implementation**: Atomic increment-and-check pattern (prevents race conditions)
-- **Cache Key Pattern**: `ratelimit:{key}` (Redis keys)
-- **Fail-Open Behavior**: Default (allows requests if Redis fails), configurable to fail-closed
-- **Circuit Breaker**: Protected by `CircuitBreakerService` (5 failures in 30 seconds threshold)
-
-**Rate Limiting Rules**:
-
-| Endpoint | Limit | Window | Key Pattern | Scope |
-|----------|-------|--------|-------------|-------|
-| Registration | 5 attempts | 1 hour | `registration:{ip}` | Per IP |
-| Login | 5 attempts | 15 minutes | `login:{email}` | Per email |
-| Resend Verification | 3 attempts | 1 hour | `resend-verification:{email}` | Per email |
-| Forgot Password | 3 attempts | 1 hour | `password-reset:{email}` | Per email |
-| Reset Password (Token) | 5 attempts | 1 hour | `password-reset-attempt:{token}` | Per token |
-| Reset Password (IP) | 10 attempts | 1 hour | `password-reset-ip:{ip}` | Per IP |
-| OAuth Exchange | 10 attempts | 15 minutes | `oauth-exchange:{ip}` | Per IP |
-| Two-Factor Verify | 10 attempts | 1 minute | `2fa-verify:{userId}` | Per user |
-| Account Deletion | 3 attempts | 1 hour | `account-deletion:{userId}` | Per user |
-| Payment Processing | Variable | Variable | `payment:{userId}` | Service-specific |
-| Payment Method Creation | 5 per hour | 1 hour | `payment-method:{userId}` | Per user |
-| Transaction Queries | 100 per hour | 1 hour | `transaction-query:{userId}` | Per user |
-
-### Circuit Breaker Patterns
-- **Service**: `CircuitBreakerService` (Polly v8.4.2)
-- **Configuration**:
-  - Failure Threshold: 5 failures
-  - Duration of Break: 30 seconds
-  - Sampling Duration: 30 seconds
-- **Operations Protected**:
-  - `RateLimit_Redis` - Rate limiting Redis operations
-  - `AccountLockout_Redis` - Account lockout Redis operations
-- **Fail-Open Behavior**: Default (allows operations if circuit breaker opens)
-- **Fail-Closed Configuration**: Configurable via `SecuritySettings:{Service}FailClosed`
-- **Metrics**: Success/failure counters, periodic logging, high failure rate alerting
-
-### Health Check Implementations
-- **Generic Health Endpoint**: `/health` (all services)
-  - Returns: `{ "status": "Healthy|Degraded|Unhealthy" }`
-  - Used by: ALB target groups for health monitoring
-  - Checks: Basic service availability
-- **Service-Specific Health Checks**:
-  - `/health/notifications` - Notification service detailed health
-    - Checks: `basic`, `email`, `sms`, `webpush`, `telegram`
-    - Status Codes: 200 (Healthy/Degraded), 503 (Unhealthy)
-    - Dependencies: Database, Redis, AWS SES, SNS, external services
-- **Health Check Response Format**:
-  ```json
-  {
-    "status": "Healthy|Degraded|Unhealthy",
-    "checks": {
-      "basic": { "status": "Healthy", "description": "Service is running" },
-      "database": { "status": "Healthy", "description": "Database connection OK" },
-      "redis": { "status": "Healthy", "description": "Redis connection OK" }
-    }
-  }
-  ```
-
-### Error Handling Patterns
-- **Global Error Handler**: `ErrorHandlerMiddleware` (shared middleware)
-- **Error Response Format**: `StandardApiResponse<object>` with `StandardErrorResponse`
-  ```json
-  {
-    "success": false,
-    "error": {
-      "code": "ERROR_CODE",
-      "message": "Human-readable message",
-      "details": {}
-    }
-  }
-  ```
-- **Error Code Mapping**:
-  - `ApiException` (validation) → `VALIDATION_ERROR`
-  - `ApiException` (other) → `API_ERROR` or `ReferenceErrorCode`
-  - `CustomFaultException` → Status code string
-  - `UnauthorizedAccessException` → `AUTHENTICATION_ERROR`
-  - `KeyNotFoundException` → `NOT_FOUND`
-  - `DbException` → `DATABASE_ERROR`
-  - Default → `INTERNAL_ERROR`
-- **Error Logging**: All errors logged with context (sessionId, request body, stack trace)
-- **Exception Details**: Configurable via `RestExceptionDetails:showExceptionDetails` (default: false)
-
-### Caching Strategies
-- **Redis Cache**: Distributed cache via `ICache` interface (StackExchange.Redis)
-- **Cache Key Patterns**:
-  - Houses: `houses_*` (pattern-based invalidation)
-  - Translations: `translation_{language}_{key}`
-  - User preferences: `user_prefs_{userId}`
-  - Email verification: `email_verified:{userId}` (5 min TTL)
-  - Rate limiting: `ratelimit:{key}`
-  - Account lockout: `account_locked:{email}` (15 min TTL)
-- **Cache TTL Values**:
-  - Houses list: 5 minutes (in-memory), 30 minutes (localStorage frontend)
-  - Individual houses: 5 minutes (in-memory), 1 hour (localStorage frontend)
-  - Translations: 1 hour
-  - Email verification status: 5 minutes
-  - Rate limiting: Variable (matches rate limit window)
-- **Cache Invalidation**:
-  - Time-based: TTL expiration
-  - Event-based: EventBridge events trigger cache invalidation
-  - Manual: Service-specific cache invalidation methods
-- **Fail-Open Strategy**: Services continue with database fallback if Redis fails
-- **Services Using Redis**: Auth, Lottery, Content, Payment (required in production)
-
-### Security Headers
-- **Middleware**: `SecurityHeadersMiddleware` (shared middleware)
-- **Headers Set**:
-  - `X-Frame-Options: DENY` - Prevents clickjacking
-  - `X-Content-Type-Options: nosniff` - Prevents MIME type sniffing
-  - `X-XSS-Protection: 1; mode=block` - XSS protection
-  - `Referrer-Policy: strict-origin-when-cross-origin` - Referrer policy
-  - `Permissions-Policy: geolocation=(), microphone=(), camera=()` - Feature permissions
-  - `Content-Security-Policy` - CSP policy (configured for SignalR WebSocket support)
-  - `Strict-Transport-Security` - HSTS (HTTPS only, production)
-- **Applied To**: All microservices via shared middleware
-
-### CORS Configuration
-- **Configuration**: Per-service CORS configuration in `Program.cs`
-- **Allowed Origins**: Environment-specific (production CloudFront URL, localhost for dev)
-- **Allowed Methods**: GET, POST, PUT, DELETE, OPTIONS, PATCH
-- **Allowed Headers**: Content-Type, Authorization, X-Requested-With
-- **Credentials**: Supported (cookies, authorization headers)
-
-### Request/Response Logging
-- **Middleware**: 
-  - `RequestResponseLoggingMiddleware` - Basic request/response logging
-  - `AMESASerilogScopedLoggingMiddleware` - Structured logging with Serilog
-- **What Gets Logged**:
-  - Request: Method, path, query params, headers (sanitized), body (sanitized)
-  - Response: Status code, headers, body (sanitized)
-  - Context: User ID, session ID, IP address, timestamp
-- **PII Sanitization**: Passwords, tokens, sensitive data removed from logs
-- **Log Levels**: Debug, Information, Warning, Error, Fatal
-- **Log Retention**: CloudWatch logs (configurable retention period)
-
-### Retry Policies
-- **HTTP Client Retries**: Polly-based retry policies for inter-service communication
-- **Retry Configuration**:
-  - Max Retries: 3 (configurable)
-  - Backoff Strategy: Exponential backoff (1s, 2s, 4s)
-  - Retryable Errors: Transient network errors, timeout errors, 5xx server errors
-  - Non-Retryable Errors: 4xx client errors (except 429 rate limit)
-- **EventBridge Retries**: 
-  - Max Retries: 3 (configurable via `EventBridge:MaxRetries`)
-  - Retry tracking in Redis cache
-  - Prevents infinite retries
-- **Frontend Retry**: Automatic retry with exponential backoff for network errors (via `RetryService`)
-
-### Secrets Management
-- **AWS Secrets Manager**: Used for sensitive credentials in production
-  - **OAuth Secrets** (Auth Service):
-    - Google OAuth: `amesa-google_people_API` (contains `ClientId`, `ClientSecret`, `RecaptchaSiteKey`, `RecaptchaProjectId`, `RecaptchaMinScore`)
-    - Meta OAuth: `amesa-meta-oauth` (contains `AppId`, `AppSecret`)
-    - Loading method: `LoadOAuthSecretsFromAws()` extension method in `AwsSecretsConfiguration.cs`
-    - Format: JSON objects with property names matching configuration keys
-    - Region: Configurable via `Aws:Region` config or `AWS_REGION` env var (default: `eu-north-1`)
-  - **Notification Secrets** (Notification Service):
-    - Loading method: `LoadNotificationSecretsFromAws()` extension method
-    - Location: `BE/AmesaBackend.Notification/Configuration/AwsSecretsConfiguration.cs`
-  - **Payment Secrets** (Payment Service):
-    - Loading method: `LoadPaymentSecretsFromAws()` extension method
-    - Location: `BE/AmesaBackend.Payment/Configuration/PaymentSecretsConfiguration.cs`
-  - **Error Handling**: Graceful degradation - logs warnings if secrets not found, continues with local config
-  - **Production Only**: Secrets loading only occurs in production environment (`IsProduction()` check)
-- **AWS SSM Parameter Store**: Used for service-to-service authentication
-  - **Service Auth API Key**: `/amesa/prod/ServiceAuth/ApiKey`
-  - **Usage**: Injected via ECS task definition secrets (e.g., `lottery-task-def.json`, `payment-task-def.json`)
-  - **JWT Secret Key**: Also loaded from SSM Parameter Store via ECS task definition
-- **Secret Formats**:
-  - JSON format for complex secrets (OAuth credentials)
-  - Plain text for simple secrets (API keys, JWT secrets)
-- **Loading Pattern**: Extension methods on `IConfigurationBuilder` that add secrets to in-memory configuration collection
-
-### Database Connection Patterns
-- **Connection Pooling** (PostgreSQL/Npgsql):
-  - **MaxPoolSize**: 100 connections
-  - **MinPoolSize**: 10 connections
-  - **ConnectionLifetime**: 300 seconds (5 minutes)
-  - **CommandTimeout**: 30 seconds
-  - **ConnectionTimeout**: 15 seconds
-  - Configuration: Set via `NpgsqlConnectionStringBuilder` in `Program.cs` (e.g., `BE/AmesaBackend.Notification/Program.cs`)
-- **EF Core Retry Policies**:
-  - **Max Retries**: 3 attempts
-  - **Max Retry Delay**: 30 seconds
-  - **Error Codes**: All transient errors (null `errorCodesToAdd` means all)
-  - Configuration: `EnableRetryOnFailure()` in `UseNpgsql()` options
-  - Location: Configured per service in `Program.cs` database setup
-- **Transaction Management**:
-  - **Default Isolation Level**: READ COMMITTED (PostgreSQL default)
-  - **Explicit Transactions**: Used for multi-step operations (e.g., ticket purchases, payment processing)
-  - **Transaction Scope**: Typically scoped to service method execution
-- **Connection String Sourcing**:
-  - Primary: Environment variable `ConnectionStrings__DefaultConnection` or `ConnectionStrings:DefaultConnection` in config
-  - Fallback: `appsettings.json` `ConnectionStrings:DefaultConnection`
-  - Schema-Specific: Each service uses its own schema (e.g., `amesa_auth`, `amesa_lottery`, `amesa_notification`)
-- **Development vs Production**:
-  - Development: SQLite with file-based database (`appsettings.Development.json`)
-  - Production: Aurora PostgreSQL Serverless v2 with connection pooling
-
-### Monitoring & Observability
-- **CloudWatch Logs**:
-  - **Log Groups**: `/ecs/{service-name}` (e.g., `/ecs/amesa-auth-service`, `/ecs/amesa-lottery-service`)
-  - **Logging Framework**: Serilog with CloudWatch sink
-  - **Log Levels**: Information, Warning, Error, Critical
-  - **Retention**: Configurable per log group (typically 30 days)
-  - **Structured Logging**: JSON format with context (request ID, user ID, session ID)
-- **CloudWatch Metrics**:
-  - **Service**: `CloudWatchMetricsService` (e.g., in Notification service)
-  - **Custom Metrics**: Application-specific metrics (e.g., notification send counts, error rates)
-  - **Auto Metrics**: ECS service metrics (CPU, memory, network) and ALB metrics (request count, latency, error rates)
-  - **Namespace**: Service-specific namespaces (e.g., `Amesa/Notification`)
-  - **CloudWatch Client**: `IAmazonCloudWatch` singleton registered per service
-- **AWS X-Ray** (Distributed Tracing):
-  - **Status**: Currently commented out/removed in microservices (see `Program.cs` files)
-  - **Previous Implementation**: `XRayExtensions` class for distributed tracing setup
-  - **Note**: Tracing may be re-enabled in future for production observability
-- **Health Checks**:
-  - **Generic Endpoint**: `/health` (standard ASP.NET Core health checks)
-  - **Service-Specific**: `/health/notifications`, `/health/captcha`, etc.
-  - **Checks**: Database connectivity, external service availability (SNS, SES, etc.)
-  - **Response Format**: JSON with status (`Healthy`, `Degraded`, `Unhealthy`) and details
-- **SNS Alerts**:
-  - **Topic**: `AmesaAlerts` (configured in AWS infrastructure)
-  - **Usage**: Critical error notifications, system alerts
-  - **Integration**: Via AWS SDK `IAmazonSimpleNotificationService`
-
-### Validation Patterns
-- **Data Annotations**: Primary validation method on DTOs
-  - `[Required]` - Field is required
-  - `[EmailAddress]` - Email format validation
-  - `[StringLength(min, max)]` - String length validation
-  - `[Range(min, max)]` - Numeric range validation
-  - `[RegularExpression]` - Pattern matching
-- **Custom Validators**:
-  - `PasswordValidatorService` - Password strength validation
-    - Minimum 8 characters
-    - At least one uppercase letter
-    - At least one lowercase letter
-    - At least one digit
-    - At least one special character
-    - Not in common passwords list (100+ weak passwords)
-    - Password history check (last 5 passwords, configurable)
-    - Breach checking (optional, via `IPasswordBreachService`)
-- **Model State Validation**: Automatic validation via `[ApiController]` attribute
-- **Business Rule Validation**: Custom validation in services (e.g., participant cap checks)
-
-### Background Services
-- **SessionCleanupService** (Auth Service):
-  - Purpose: Clean up expired user sessions
-  - Schedule: Periodic cleanup (configurable interval)
-  - Location: `BE/AmesaBackend.Auth/Services/SessionCleanupService.cs`
-  
-- **PasswordHistoryCleanupService** (Auth Service):
-  - Purpose: Clean up old password history records
-  - Schedule: Periodic cleanup (configurable interval)
-  - Location: `BE/AmesaBackend.Auth/BackgroundServices/PasswordHistoryCleanupService.cs`
-  
-- **NotificationQueueProcessor** (Notification Service):
-  - Purpose: Process queued notifications from database
-  - Schedule: Continuous processing with configurable delay
-  - Location: `BE/AmesaBackend.Notification/Services/NotificationQueueProcessor.cs`
-  
-- **NotificationArchiveBackgroundService** (Notification Service):
-  - Purpose: Archive old notifications
-  - Schedule: Periodic archiving (configurable interval)
-  - Location: `BE/AmesaBackend.Notification/Services/NotificationArchiveBackgroundService.cs`
-  
-- **EventBridgeEventHandler** (Notification Service):
-  - Purpose: Handle EventBridge events for notifications
-  - Schedule: Event-driven (triggers on EventBridge events)
-  - Location: `BE/AmesaBackend.Notification/Handlers/EventBridgeEventHandler.cs`
-  
-- **LotteryCountdownService** (Lottery Service):
-  - Purpose: Calculate and broadcast lottery countdown updates
-  - Schedule: Updates every 1 second for active lotteries
-  - Location: `BE/AmesaBackend.Lottery/Services/LotteryCountdownService.cs`
-  - Broadcasts: `CountdownUpdated` events via SignalR
-  
-- **ReservationCleanupService** (Lottery Service):
-  - Purpose: Clean up expired ticket reservations
-  - Schedule: Periodic cleanup (configurable interval)
-  - Location: `BE/AmesaBackend.Lottery/Services/ReservationCleanupService.cs`
-  
-- **TicketQueueProcessorService** (Lottery Service):
-  - Purpose: Process queued ticket creation requests
-  - Schedule: Continuous processing with configurable delay
-  - Location: `BE/AmesaBackend.Lottery/Services/TicketQueueProcessorService.cs`
-  
-- **InventorySyncService** (Lottery Service):
-  - Purpose: Synchronize inventory data between services
-  - Schedule: Periodic sync (configurable interval)
-  - Location: `BE/AmesaBackend.Lottery/Services/InventorySyncService.cs`
-
-### Service Registration Patterns
-- **Extension Method Pattern**: All service registration is organized via extension methods in `Configuration/` folders
-  - **Naming Convention**: `Add{ServiceName}{Feature}()` (e.g., `AddAuthServices()`, `AddAuthSwagger()`, `AddAuthControllers()`)
-  - **Purpose**: Encapsulates service registration logic, keeps `Program.cs` clean and readable
-  - **Location**: Each microservice has its own `Configuration/` folder with extension methods
-- **Service Registration Methods**:
-  - `AddAuthControllers()` - Configures controllers with camelCase JSON serialization and custom ModelState validation
-  - `AddAuthSwagger()` - Configures Swagger/OpenAPI documentation
-  - `AddAuthDatabase()` - Configures Entity Framework with PostgreSQL connection pooling
-  - `AddAuthCors()` - Configures CORS policy for frontend
-  - `AddAuthServices()` - Registers all application services (security, auth, AWS, infrastructure)
-  - `AddAuthForwardedHeaders()` - Configures forwarded headers for load balancer/proxy
-  - `AddJwtAuthentication()` - Configures JWT authentication
-  - `AddAuthAuthorization()` - Configures authorization policies
-  - `UseAuthSerilog()` - Configures Serilog logging
-  - `UseAuthKestrel()` - Configures Kestrel HTTPS (development only)
-  - `UseAuthMiddleware()` - Configures middleware pipeline
-- **Service Lifetime Patterns**:
-  - **Singleton**: AWS service clients (`IAmazonRekognition`, `IAmazonSES`, `IAmazonSNS`), `ICircuitBreakerService`
-  - **Scoped**: Application services (repositories, business logic), `IRateLimitService`, `IAccountLockoutService`
-  - **Transient**: Not commonly used (default for most services)
-- **Dependency Resolution**:
-  - Circular dependencies handled with `Lazy<T>` pattern (e.g., `AccountRecoveryService` and `PasswordResetService`)
-  - Shared library services registered via `AddAmesaBackendShared()` extension method
-  - HttpClient registration with configuration (e.g., `NotificationPreferencesSyncService`)
-
-### Swagger/OpenAPI Configuration
-- **Setup**: Configured via `AddAuthSwagger()` extension method in `Configuration/SwaggerConfiguration.cs`
-- **OpenAPI Info**:
-  - Title: Service-specific (e.g., "Amesa Auth API")
-  - Version: "v1"
-  - Description: Service description
-  - Contact: Support email and name
-- **Security Scheme**:
-  - **Bearer Token Authentication**: JWT token via Authorization header
-  - Scheme: "Bearer"
-  - Description: "JWT Authorization header using the Bearer scheme. Example: \"Authorization: Bearer {token}\""
-  - Location: Header
-- **Security Requirements**: All endpoints require Bearer token authentication
-- **Endpoints**:
-  - Swagger UI: `/swagger` (development) or `/swagger/index.html`
-  - OpenAPI JSON: `/swagger/v1/swagger.json`
-- **Configuration Location**: `BE/AmesaBackend.{Service}/Configuration/SwaggerConfiguration.cs`
-- **Usage**: Enabled in development, can be conditionally enabled in production
-
-### Logging Configuration Patterns
-- **Framework**: Serilog with structured logging
-- **Configuration Method**: `UseAuthSerilog()` extension method in `Configuration/LoggingConfiguration.cs`
-- **Configuration Sources**:
-  - Primary: `appsettings.json` (via `ReadFrom.Configuration()`)
-  - Environment-specific: `appsettings.{Environment}.json`
-- **Sinks**:
-  - **Console**: Development and production (via `WriteTo.Console()`)
-  - **File**: Development only (`logs/auth-.txt` with daily rolling)
-  - **CloudWatch**: Production (configured via `appsettings.json` Serilog settings)
-- **Log Context Enrichment**: `Enrich.FromLogContext()` for request/user context
-- **Log Levels**: Configured via `appsettings.json` (Information, Warning, Error, Critical)
-- **Structured Logging**: JSON format with properties (e.g., `Log.Information("User logged in: {UserId}", userId)`)
-- **Graceful Shutdown**: `ConfigureGracefulShutdown()` ensures logs are flushed on application shutdown
-- **Log Location**: `BE/AmesaBackend.{Service}/Configuration/LoggingConfiguration.cs`
-- **Best Practices**:
-  - Use structured logging with properties, not string interpolation
-  - Include context (request ID, user ID, session ID) via log context
-  - Sanitize PII in logs (middleware handles this)
-
-### Application Bootstrap Patterns
-- **Program.cs Structure** (Top-to-bottom execution order):
-  1. **Configuration Setup**: Google credentials, Serilog logging
-  2. **Forwarded Headers**: Load balancer/proxy configuration
-  3. **Controllers**: JSON serialization (camelCase), ModelState validation
-  4. **Swagger/OpenAPI**: API documentation setup
-  5. **Database**: Entity Framework with connection pooling
-  6. **Secrets Loading**: AWS Secrets Manager (production only)
-  7. **Authentication**: JWT configuration
-  8. **OAuth**: Google and Meta OAuth (if configured)
-  9. **Authorization**: Policy configuration
-  10. **CORS**: Frontend origin configuration
-  11. **Services**: All application services registration
-  12. **Kestrel**: HTTPS configuration (development only)
-  13. **Middleware Pipeline**: Forwarded headers, HTTPS, Swagger, CORS, shared middleware, security, routing, auth, health checks
-  14. **Database Creation**: Development only (ensures database exists)
-  15. **Graceful Shutdown**: Log flushing on shutdown
-- **Error Handling**: Try-catch-finally block with Serilog fatal logging
-- **Partial Program Class**: `public partial class Program { }` for test project access
-- **Pattern**: Extension methods keep `Program.cs` clean and maintainable
-- **Location**: `BE/AmesaBackend.{Service}/Program.cs`
+**Quick Reference**:
+- **Architecture**: 8 microservices, ECS Fargate, Aurora PostgreSQL, EventBridge, SignalR
+- **Cross-Cutting**: Redis caching (Auth, Lottery, Content, Payment), rate limiting, circuit breakers, health checks, structured logging (Serilog), AWS Secrets Manager
 
 ## Business Context
 - **4Wins Model**: Property lottery platform
@@ -1682,6 +1300,7 @@ Client → CloudFront /api/* → ALB (path-based routing) → ECS Task (microser
 
 | Change | Status | Date | Key Points |
 |--------|--------|------|------------|
+| **Codebase Reorganization** | ✅ Complete | 2025-12-17 | Services folders organized: Interfaces/ and Background/ subfolders created, all services reorganized, duplicate interface definitions removed, Configuration/ folders standardized |
 | **AWS Cost Optimization** | ✅ Complete | 2025-01-25 | Performance Insights disabled ($14.40/mo), unused Redis cluster deleted ($12.96/mo), total savings $27.36/mo ($328/year) |
 | **Repository Cleanup** | ✅ Complete | 2025-01-25 | Removed 50+ duplicate SQL files, cleaned up junk files |
 | **Pieces MCP Integration** | ✅ Integrated | 2025-01-25 | LTM engine for agent context, workflow history access |
@@ -1732,8 +1351,27 @@ Client → CloudFront /api/* → ALB (path-based routing) → ECS Task (microser
 
 **Recommendation**: ✅ **APPROVED FOR PRODUCTION**
 
----
-**Last Updated**: 2025-01-25
-**Context Version**: 2.9.0 (AWS cost optimization and repository cleanup added)
-**Note**: Update this file immediately after API, schema, infra, or deployment changes; add dated "Recent Changes" entries for any 2025 work not yet captured.
+## Skills Reference
 
+For comprehensive guides and patterns, see the following skills available in `.cursor/skills/`:
+
+### Development & Architecture
+- **.NET Microservice Patterns**: `.cursor/skills/dotnet-microservice-patterns.md` - Service structure, configuration, dependency injection, patterns
+- **API Design Patterns**: `.cursor/skills/api-design-patterns.md` - RESTful API design, endpoint patterns, error handling, versioning
+- **SignalR Hub Patterns**: `.cursor/skills/signalr-hub-patterns.md` - Hub implementation, group management, broadcasting, client integration
+
+### Infrastructure & Database
+- **AWS ECS Deployment**: `.cursor/skills/aws-ecs-deployment.md` - Docker builds, ECR, ECS task definitions, ALB routing, deployment workflows
+- **Aurora PostgreSQL Schema**: `.cursor/skills/aurora-postgresql-schema.md` - Schema management, EF Core migrations, connection patterns, best practices
+
+### Testing
+- **Web App Testing**: `.cursor/skills/webapp-testing.md` - Playwright testing patterns for Angular frontend and API endpoints
+
+**Usage**: Reference skills in Cursor chat using `@.cursor/skills/{skill-name}.md` syntax, or refer to them for comprehensive patterns and examples.
+
+**Integration**: Skills are adapted from the Anthropics Skills repository and integrated into the AmesaBase development workflow. See `MetaData/Documentation/Development/CURSOR_SKILLS_INTEGRATION_GUIDE.md` for complete integration details.
+
+---
+**Last Updated**: 2025-01-27
+**Context Version**: 2.8.1 (Skills integration added)
+**Note**: Update this file immediately after API, schema, infra, or deployment changes; add dated "Recent Changes" entries for any 2025 work not yet captured.

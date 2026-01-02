@@ -2,6 +2,7 @@ using AmesaBackend.Notification.Data;
 using AmesaBackend.Notification.Models;
 using AmesaBackend.Notification.DTOs;
 using AmesaBackend.Notification.Constants;
+using AmesaBackend.Notification.Services.Interfaces;
 using AmesaBackend.Shared.Rest;
 using Microsoft.Extensions.DependencyInjection;
 using System.Text.Json;

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using AmesaBackend.Notification.Data;
 using AmesaBackend.Notification.Models;
+using AmesaBackend.Notification.Services.Interfaces;
 using Microsoft.Extensions.Logging;
 
 namespace AmesaBackend.Notification.Services
@@ -128,6 +129,7 @@ namespace AmesaBackend.Notification.Services
         }
     }
 }
+
 
 
 

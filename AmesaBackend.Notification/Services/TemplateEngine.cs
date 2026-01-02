@@ -1,5 +1,6 @@
 using AmesaBackend.Notification.Data;
 using AmesaBackend.Notification.Constants;
+using AmesaBackend.Notification.Services.Interfaces;
 using AmesaBackend.Shared.Caching;
 using AmesaBackend.Shared.Rest;
 using Microsoft.EntityFrameworkCore;

@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using AmesaBackend.Lottery.Data;
 using AmesaBackend.Lottery.DTOs;
 using AmesaBackend.Lottery.Services;
+using AmesaBackend.Lottery.Services.Interfaces;
 using System.Security.Claims;
 
 namespace AmesaBackend.Lottery.Controllers

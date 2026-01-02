@@ -4,6 +4,7 @@ using System.Data;
 using AmesaBackend.Lottery.Data;
 using AmesaBackend.Models;
 using AmesaBackend.Lottery.DTOs;
+using AmesaBackend.Lottery.Services.Interfaces;
 using AmesaBackend.Shared.Events;
 using AmesaBackend.Shared.Caching;
 using Microsoft.Extensions.Logging;

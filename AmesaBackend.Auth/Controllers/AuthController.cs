@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using AmesaBackend.Auth.DTOs;
 using AmesaBackend.Auth.Services;
+using AmesaBackend.Auth.Services.Interfaces;
 using AmesaBackend.Auth.Data;
 using AmesaBackend.Auth.Models;
 using System.Security.Claims;
@@ -1432,8 +1433,8 @@ namespace AmesaBackend.Auth.Controllers
 
                 var method = request.Method.ToLower() switch
                 {
-                    "email" => Services.RecoveryMethod.Email,
-                    "phone" => Services.RecoveryMethod.Phone,
+                    "email" => Services.Interfaces.RecoveryMethod.Email,
+                    "phone" => Services.Interfaces.RecoveryMethod.Phone,
                     _ => throw new ArgumentException("Invalid recovery method")
                 };
 
@@ -1523,7 +1524,7 @@ namespace AmesaBackend.Auth.Controllers
                 }
 
                 // Convert DTOs to service requests
-                var questions = request.Questions.Select((q, index) => new Services.SecurityQuestionRequest
+                var questions = request.Questions.Select((q, index) => new Services.Interfaces.SecurityQuestionRequest
                 {
                     Question = q.Question,
                     Answer = q.Answer,

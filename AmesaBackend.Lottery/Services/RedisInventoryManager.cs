@@ -1,6 +1,7 @@
 using StackExchange.Redis;
 using AmesaBackend.Lottery.Data;
 using AmesaBackend.Lottery.DTOs;
+using AmesaBackend.Lottery.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 

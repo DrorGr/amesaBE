@@ -4,6 +4,7 @@ using AmesaBackend.Notification.Constants;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using AmesaBackend.Auth.Services;
+using AmesaBackend.Auth.Services.Interfaces;
 
 namespace AmesaBackend.Notification.Services
 {

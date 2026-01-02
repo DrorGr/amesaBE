@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using AmesaBackend.Analytics.Data;
 using AmesaBackend.Analytics.Models;
 using AmesaBackend.Analytics.DTOs;
+using AmesaBackend.Analytics.Services.Interfaces;
 using System.Text.Json;
 
 namespace AmesaBackend.Analytics.Services

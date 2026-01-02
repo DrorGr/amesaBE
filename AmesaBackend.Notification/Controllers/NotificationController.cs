@@ -5,6 +5,7 @@ using AmesaBackend.Notification.Data;
 using AmesaBackend.Notification.DTOs;
 using AmesaBackend.Notification.Models;
 using AmesaBackend.Notification.Services;
+using AmesaBackend.Notification.Services.Interfaces;
 using AmesaBackend.Shared.Events;
 using AmesaBackend.Shared.Caching;
 using System.Security.Claims;

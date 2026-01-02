@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using AmesaBackend.Auth.DTOs;
 using AmesaBackend.Auth.Services;
+using AmesaBackend.Auth.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 

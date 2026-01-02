@@ -89,6 +89,35 @@ namespace AmesaBackend.Lottery.Hubs
             await hubContext.Clients.Group($"user_{userId}")
                 .SendAsync("FavoriteUpdate", update, cancellationToken);
         }
+
+        public static async Task BroadcastDrawStarted(
+            this IHubContext<LotteryHub> hubContext,
+            Guid houseId,
+            AmesaBackend.Models.LotteryDraw draw)
+        {
+            await hubContext.Clients.Group($"lottery_{houseId}")
+                .SendAsync("LotteryDrawStarted", new { 
+                    HouseId = houseId, 
+                    DrawId = draw.Id, 
+                    DrawDate = draw.DrawDate 
+                });
+        }
+
+        public static async Task BroadcastDrawCompleted(
+            this IHubContext<LotteryHub> hubContext,
+            Guid houseId,
+            AmesaBackend.Models.LotteryDraw draw,
+            AmesaBackend.Models.LotteryTicket? winningTicket)
+        {
+            await hubContext.Clients.Group($"lottery_{houseId}")
+                .SendAsync("LotteryDrawCompleted", new { 
+                    HouseId = houseId, 
+                    DrawId = draw.Id, 
+                    WinningTicketNumber = draw.WinningTicketNumber,
+                    WinnerUserId = draw.WinnerUserId,
+                    DrawDate = draw.DrawDate
+                });
+        }
     }
 }
 

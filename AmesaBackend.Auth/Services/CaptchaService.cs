@@ -1,5 +1,6 @@
 using Google.Api.Gax.ResourceNames;
 using Google.Cloud.RecaptchaEnterprise.V1;
+using AmesaBackend.Auth.Services.Interfaces;
 using Microsoft.AspNetCore.Hosting;
 
 namespace AmesaBackend.Auth.Services

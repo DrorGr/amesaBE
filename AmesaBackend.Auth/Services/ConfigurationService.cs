@@ -1,12 +1,13 @@
 using System.Text.Json;
 using AmesaBackend.Auth.Data;
 using AmesaBackend.Auth.Models;
+using AmesaBackend.Auth.Services.Interfaces;
 using AmesaBackend.Shared.Configuration;
 using Microsoft.EntityFrameworkCore;
 
 namespace AmesaBackend.Auth.Services
 {
-    public class ConfigurationService : IConfigurationService
+    public class ConfigurationService : Services.Interfaces.IConfigurationService
     {
         private readonly AuthDbContext _context;
         private readonly ILogger<ConfigurationService> _logger;

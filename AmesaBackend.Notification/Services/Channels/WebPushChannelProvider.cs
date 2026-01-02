@@ -2,6 +2,7 @@ using WebPush;
 using AmesaBackend.Notification.DTOs;
 using AmesaBackend.Notification.Data;
 using AmesaBackend.Notification.Constants;
+using AmesaBackend.Notification.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;

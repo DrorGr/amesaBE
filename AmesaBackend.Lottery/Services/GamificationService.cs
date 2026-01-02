@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using AmesaBackend.Lottery.Data;
 using AmesaBackend.Lottery.DTOs;
 using AmesaBackend.Lottery.Models;
+using AmesaBackend.Lottery.Services.Interfaces;
 using Microsoft.Extensions.Logging;
 
 namespace AmesaBackend.Lottery.Services

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using AmesaBackend.Payment.Data;
 using AmesaBackend.Payment.DTOs;
 using AmesaBackend.Payment.Models;
+using AmesaBackend.Payment.Services.Interfaces;
 using AmesaBackend.Payment.Services.ProductHandlers;
 using AmesaBackend.Shared.Events;
 using System.Net.Http.Json;

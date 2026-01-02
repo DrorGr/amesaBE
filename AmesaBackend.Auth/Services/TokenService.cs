@@ -1,5 +1,6 @@
 using AmesaBackend.Auth.Data;
 using AmesaBackend.Auth.Models;
+using AmesaBackend.Auth.Services.Interfaces;
 using AmesaBackend.Shared.Authentication;
 using User = AmesaBackend.Auth.Models.User;
 using Microsoft.AspNetCore.Http;
