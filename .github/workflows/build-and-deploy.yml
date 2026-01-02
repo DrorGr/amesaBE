@@ -68,6 +68,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          submodules: false  # Skip submodules to avoid FE submodule warning
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -117,6 +119,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          submodules: false  # Skip submodules to avoid FE submodule warning
         with:
           repository: ${{ github.repository }}
           ref: ${{ github.ref }}
