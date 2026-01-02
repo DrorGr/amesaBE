@@ -74,19 +74,11 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Restore and build dependencies
-        run: |
-          cd BE
-          dotnet restore AmesaBackend.Auth/AmesaBackend.Auth.csproj
-          dotnet build --no-restore AmesaBackend.Auth/AmesaBackend.Auth.csproj
-
-      - name: Restore test project
-        run: dotnet restore AmesaBackend.Tests/AmesaBackend.Tests.csproj
-        working-directory: BE
+      - name: Restore test project and dependencies
+        run: dotnet restore BE/AmesaBackend.Tests/AmesaBackend.Tests.csproj
 
       - name: Build test project
-        run: dotnet build --no-restore AmesaBackend.Tests/AmesaBackend.Tests.csproj
-        working-directory: BE
+        run: dotnet build --no-restore BE/AmesaBackend.Tests/AmesaBackend.Tests.csproj
 
       - name: Run unit tests with coverage
         continue-on-error: true  # Don't fail build on test failures
