@@ -31,7 +31,7 @@
     <PackageReference Include="AWSSDK.S3" Version="3.7.400" />
     <PackageReference Include="AWSSDK.SecretsManager" Version="3.7.400" />
     <PackageReference Include="AWSSDK.Rekognition" Version="3.7.400" />
-    <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="8.0.11" />
     <PackageReference Include="Google.Cloud.RecaptchaEnterprise.V1" Version="2.2.0" />
     <PackageReference Include="Polly" Version="8.4.2" />
     <PackageReference Include="Polly.Extensions.Http" Version="3.0.0" />

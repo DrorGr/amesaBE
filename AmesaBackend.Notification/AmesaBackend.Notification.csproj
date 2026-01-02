@@ -14,7 +14,7 @@
     <PackageReference Include="Serilog.AspNetCore" Version="8.0.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
     <PackageReference Include="MailKit" Version="4.3.0" />
-    <PackageReference Include="MimeKit" Version="4.3.0" />
+    <PackageReference Include="MimeKit" Version="4.14.0" />
     <PackageReference Include="AWSSDK.SimpleEmail" Version="3.7.400.0" />
     <PackageReference Include="AWSSDK.SimpleNotificationService" Version="3.7.400.0" />
     <PackageReference Include="AWSSDK.SQS" Version="3.7.400.0" />
@@ -33,12 +33,8 @@
 
   <Target Name="ExcludeReferencedAppSettings" BeforeTargets="ComputeFilesToPublish">
     <ItemGroup>
-      <_AppSettingsFiles Include="@(ResolvedFileToPublish)" 
-        Condition="'%(ResolvedFileToPublish.RelativePath)' == 'appsettings.json' OR 
-                   '%(ResolvedFileToPublish.RelativePath)' == 'appsettings.Development.json' OR 
-                   '%(ResolvedFileToPublish.RelativePath)' == 'appsettings.Production.json'" />
-      <ResolvedFileToPublish Remove="@(_AppSettingsFiles)" 
-        Condition="!$([System.String]::Copy('%(Identity)').Contains('AmesaBackend.Notification'))" />
+      <_AppSettingsFiles Include="@(ResolvedFileToPublish)" Condition="'%(ResolvedFileToPublish.RelativePath)' == 'appsettings.json' OR &#xA;                   '%(ResolvedFileToPublish.RelativePath)' == 'appsettings.Development.json' OR &#xA;                   '%(ResolvedFileToPublish.RelativePath)' == 'appsettings.Production.json'" />
+      <ResolvedFileToPublish Remove="@(_AppSettingsFiles)" Condition="!$([System.String]::Copy('%(Identity)').Contains('AmesaBackend.Notification'))" />
     </ItemGroup>
   </Target>
 
