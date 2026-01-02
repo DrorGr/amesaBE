@@ -6,6 +6,7 @@ using AmesaBackend.Admin.Data;
 using AmesaBackend.Admin.Models;
 using BCrypt.Net;
 using AmesaBackend.Auth.Services;
+using AmesaBackend.Auth.Services.Interfaces;
 using System.Collections.Concurrent;
 
 namespace AmesaBackend.Admin.Services

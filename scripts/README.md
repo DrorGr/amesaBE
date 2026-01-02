@@ -4,15 +4,6 @@ This directory contains deployment-related scripts and configurations.
 
 ## Local Development
 
-### Using Docker Compose
-```bash
-# Start the application with dependencies
-docker-compose -f docker-compose.dev.yml up
-
-# Build and start in production mode
-docker-compose up --build
-```
-
 ### Manual Database Setup
 ```bash
 # Create database (adjust connection string as needed)
@@ -59,8 +50,6 @@ AWS_REGION=us-east-1
 
 - `deploy-template.sh` - Template deployment script
 - `setup-database.sql` - Database setup scripts
-- `docker-compose.yml` - Production Docker configuration
-- `docker-compose.dev.yml` - Development Docker configuration
 
 ## Infrastructure
 

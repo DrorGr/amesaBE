@@ -179,7 +179,7 @@ namespace AmesaBackend.Shared.Middleware.ErrorHandling
         
         private string GetApiVersion()
         {
-            //Extract Environment Variable from docker compose file (or docker file)
+            //Extract Environment Variable from configuration (AWS ECS environment variables)
             //BUILD_VERSION example: "4.0.0-92"
             string buildVersion = Environment.GetEnvironmentVariable("BUILD_VERSION") ?? string.Empty;
             if (string.IsNullOrEmpty(buildVersion))
@@ -199,7 +199,7 @@ namespace AmesaBackend.Shared.Middleware.ErrorHandling
                 //return value for example: BUILD_VERSION="4.0.0"
                 return String.IsNullOrEmpty(buildVersionTruncated) ? buildVersion : buildVersionTruncated;
             }
-            return _configuration.GetSection("Version:Key").Get<string>() ?? "1.0.0"; // READ FROM DOCKER COMPOSE FILE
+            return _configuration.GetSection("Version:Key").Get<string>() ?? "1.0.0"; // READ FROM CONFIGURATION
         }
 
         private JsonSerializerSettings JSONSettings()

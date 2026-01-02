@@ -28,6 +28,10 @@ public class LotteryDbContext : DbContext
         // Configure schema
         modelBuilder.HasDefaultSchema("amesa_lottery");
 
+        // Ignore User entity - it belongs to AuthDbContext, not LotteryDbContext
+        // This prevents EF Core from trying to configure User.IdentityDocuments and other Auth schema relationships
+        modelBuilder.Ignore<AmesaBackend.Models.User>();
+
         // Configure House entity
         // Note: houses table uses PascalCase column names (Id, Name, Description, etc.)
         // EF Core will use property names as column names by default, which should match

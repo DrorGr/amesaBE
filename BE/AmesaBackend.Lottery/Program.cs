@@ -16,6 +16,7 @@ using AmesaBackend.Shared.Extensions;
 using AmesaBackend.Shared.Middleware.Extensions;
 using AmesaBackend.Auth.Data;
 using AmesaBackend.Auth.Services;
+using AmesaBackend.Auth.Services.Interfaces;
 using AmesaBackend.Data;
 using Amazon.SQS;
 using Serilog;
@@ -129,7 +130,7 @@ builder.Services.AddSingleton<AmesaBackend.Auth.Services.ICircuitBreakerService,
 builder.Services.AddAmesaBackendShared(builder.Configuration, builder.Environment, requireRedis: true);
 
 // Register RateLimitService AFTER AddAmesaBackendShared so Redis services are available
-builder.Services.AddScoped<AmesaBackend.Auth.Services.IRateLimitService, AmesaBackend.Auth.Services.RateLimitService>();
+builder.Services.AddScoped<IRateLimitService, RateLimitService>();
 
 // Configure Lottery settings
 // LotterySettings type not found - commenting out for now

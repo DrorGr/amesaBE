@@ -10,6 +10,10 @@ using Microsoft.Extensions.Logging;
 
 namespace AmesaBackend.Lottery.Services
 {
+    /// <summary>
+    /// Service for managing lottery promotions, discounts, and special offers.
+    /// Handles creation, validation, application, and analytics for promotions.
+    /// </summary>
     public class PromotionService : IPromotionService
     {
         private readonly LotteryDbContext _context;
@@ -17,6 +21,13 @@ namespace AmesaBackend.Lottery.Services
         private readonly ICache? _cache;
         private readonly ILogger<PromotionService> _logger;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="PromotionService"/> class.
+        /// </summary>
+        /// <param name="context">Database context for lottery data access.</param>
+        /// <param name="eventPublisher">Event publisher for publishing promotion-related events.</param>
+        /// <param name="logger">Logger instance for logging operations.</param>
+        /// <param name="cache">Optional cache service for caching promotion data.</param>
         public PromotionService(
             LotteryDbContext context,
             IEventPublisher eventPublisher,

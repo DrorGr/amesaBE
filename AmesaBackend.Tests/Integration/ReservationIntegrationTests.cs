@@ -27,6 +27,7 @@ namespace AmesaBackend.Tests.Integration
         {
             var options = new DbContextOptionsBuilder<LotteryDbContext>()
                 .UseInMemoryDatabase(databaseName: $"ReservationIntegrationTestDb_{Guid.NewGuid()}")
+                .ConfigureWarnings(warnings => warnings.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.InMemoryEventId.TransactionIgnoredWarning))
                 .Options;
 
             _context = new LotteryDbContext(options);

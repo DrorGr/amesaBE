@@ -268,7 +268,7 @@ namespace AmesaBackend.Auth.Services
                         {
                             Id = Guid.NewGuid(),
                             UserId = user.Id,
-                            PasswordHash = user.PasswordHash,
+                            PasswordHash = user.PasswordHash ?? throw new InvalidOperationException("User password hash cannot be null"),
                             CreatedAt = DateTime.UtcNow
                         };
                         _context.Set<UserPasswordHistory>().Add(passwordHistory);

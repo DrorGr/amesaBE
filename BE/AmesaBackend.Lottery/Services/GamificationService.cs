@@ -9,14 +9,19 @@ using Npgsql;
 namespace AmesaBackend.Lottery.Services
 {
     /// <summary>
-    /// Gamification service implementation
-    /// Handles points, levels, tiers, streaks, and achievements
+    /// Service implementation for managing gamification features in the lottery system.
+    /// Handles points, levels, tiers, streaks, and achievements for user engagement and rewards.
     /// </summary>
     public class GamificationService : IGamificationService
     {
         private readonly LotteryDbContext _context;
         private readonly ILogger<GamificationService> _logger;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="GamificationService"/> class.
+        /// </summary>
+        /// <param name="context">Database context for lottery data access.</param>
+        /// <param name="logger">Logger instance for logging operations.</param>
         public GamificationService(
             LotteryDbContext context,
             ILogger<GamificationService> logger)
@@ -25,6 +30,17 @@ namespace AmesaBackend.Lottery.Services
             _logger = logger;
         }
 
+        /// <summary>
+        /// Awards points to a user and updates their gamification data.
+        /// Creates a user gamification record if it doesn't exist, updates points, and recalculates level and tier.
+        /// Records the points change in history for audit purposes.
+        /// </summary>
+        /// <param name="userId">The unique identifier of the user to award points to.</param>
+        /// <param name="points">The number of points to award (can be negative for deductions).</param>
+        /// <param name="reason">The reason for the points change (e.g., "Ticket Purchase", "Lottery Win").</param>
+        /// <param name="referenceId">Optional reference ID linking to the source of points (ticket ID, draw ID, etc.).</param>
+        /// <returns>A task representing the asynchronous operation.</returns>
+        /// <exception cref="Exception">Thrown when database operations fail.</exception>
         public async Task AwardPointsAsync(Guid userId, int points, string reason, Guid? referenceId = null)
         {
             if (points == 0)

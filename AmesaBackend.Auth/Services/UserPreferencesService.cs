@@ -594,7 +594,11 @@ namespace AmesaBackend.Auth.Services
                 if (kvp.Value is JsonElement jsonElement)
                 {
                     // Convert JsonElement to proper object based on its type
-                    result[kvp.Key] = ConvertJsonElementToObject(jsonElement);
+                    var convertedValue = ConvertJsonElementToObject(jsonElement);
+                    if (convertedValue != null)
+                    {
+                        result[kvp.Key] = convertedValue;
+                    }
                 }
                 else if (kvp.Value is Dictionary<string, object> nestedDict)
                 {
@@ -613,7 +617,7 @@ namespace AmesaBackend.Auth.Services
         /// <summary>
         /// Converts a JsonElement to a proper object (Dictionary, List, or primitive)
         /// </summary>
-        private object ConvertJsonElementToObject(JsonElement element)
+        private object? ConvertJsonElementToObject(JsonElement element)
         {
             return element.ValueKind switch
             {

@@ -94,45 +94,33 @@ public class NotificationPreferencesSyncService : INotificationPreferencesSyncSe
             // Use internal sync endpoint (doesn't require user authentication)
             var requestUrl = $"{_notificationServiceUrl}/api/v1/notifications/preferences/channels/sync";
             
-            try
+            // Add service-to-service authentication if configured
+            var serviceApiKey = _configuration["ServiceAuth:ApiKey"] 
+                ?? Environment.GetEnvironmentVariable("SERVICE_AUTH_API_KEY");
+            
+            if (!string.IsNullOrEmpty(serviceApiKey))
             {
-                // Add service-to-service authentication if configured
-                var serviceApiKey = _configuration["ServiceAuth:ApiKey"] 
-                    ?? Environment.GetEnvironmentVariable("SERVICE_AUTH_API_KEY");
-                
-                if (!string.IsNullOrEmpty(serviceApiKey))
-                {
-                    _httpClient.DefaultRequestHeaders.Remove("X-Service-Api-Key");
-                    _httpClient.DefaultRequestHeaders.Add("X-Service-Api-Key", serviceApiKey);
-                }
-
-                var response = await _httpClient.PutAsync(requestUrl, content);
-                
-                if (response.IsSuccessStatusCode)
-                {
-                    _logger.LogInformation(
-                        "Successfully synced notification preferences for user {UserId}",
-                        userId);
-                    return true;
-                }
-                else
-                {
-                    var errorContent = await response.Content.ReadAsStringAsync();
-                    _logger.LogWarning(
-                        "Failed to sync notification preferences for user {UserId}. Status: {Status}, Error: {Error}",
-                        userId, response.StatusCode, errorContent);
-                    return false;
-                }
+                _httpClient.DefaultRequestHeaders.Remove("X-Service-Api-Key");
+                _httpClient.DefaultRequestHeaders.Add("X-Service-Api-Key", serviceApiKey);
             }
-            catch (Exception ex)
+
+            var response = await _httpClient.PutAsync(requestUrl, content);
+            
+            if (response.IsSuccessStatusCode)
             {
-                _logger.LogWarning(ex,
-                    "Error syncing notification preferences for user {UserId}",
+                _logger.LogInformation(
+                    "Successfully synced notification preferences for user {UserId}",
                     userId);
+                return true;
+            }
+            else
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                _logger.LogWarning(
+                    "Failed to sync notification preferences for user {UserId}. Status: {Status}, Error: {Error}",
+                    userId, response.StatusCode, errorContent);
                 return false;
             }
-
-            return true;
         }
         catch (Exception ex)
         {

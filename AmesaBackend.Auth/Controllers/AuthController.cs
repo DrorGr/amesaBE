@@ -179,7 +179,7 @@ namespace AmesaBackend.Auth.Controllers
                     Message = "Login successful"
                 });
             }
-            catch (UnauthorizedAccessException ex)
+            catch (UnauthorizedAccessException)
             {
                 // Use generic error message to prevent email enumeration
                 // Don't reveal if user exists or if password is wrong

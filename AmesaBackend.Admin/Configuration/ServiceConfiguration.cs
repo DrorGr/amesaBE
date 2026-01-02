@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using AmesaBackend.Admin.Services;
 using AmesaBackend.Admin.Services.Interfaces;
+using AmesaBackend.Auth.Services.Interfaces;
 using AmesaBackend.Shared.Extensions;
 using StackExchange.Redis;
 using Amazon.S3;

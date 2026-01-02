@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using AmesaBackend.Auth.Services;
+using AmesaBackend.Auth.Services.Interfaces;
 using AmesaBackend.Lottery.Data;
 using AmesaBackend.Models;
 using Microsoft.EntityFrameworkCore;
@@ -9,6 +9,10 @@ using System.Linq;
 
 namespace AmesaBackend.Lottery.Controllers;
 
+/// <summary>
+/// Controller for managing user favorite houses in the lottery system.
+/// Provides endpoints for retrieving and managing a user's list of favorite lottery houses.
+/// </summary>
 [ApiController]
 [Route("api/v1/houses")]
 [Authorize]
@@ -18,6 +22,12 @@ public class HousesFavoritesController : ControllerBase
     private readonly LotteryDbContext _context;
     private readonly ILogger<HousesFavoritesController> _logger;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="HousesFavoritesController"/> class.
+    /// </summary>
+    /// <param name="userPreferencesService">Service for managing user preferences including favorites.</param>
+    /// <param name="context">Database context for lottery data access.</param>
+    /// <param name="logger">Logger instance for logging operations.</param>
     public HousesFavoritesController(
         IUserPreferencesService userPreferencesService,
         LotteryDbContext context,
@@ -28,6 +38,11 @@ public class HousesFavoritesController : ControllerBase
         _logger = logger;
     }
 
+    /// <summary>
+    /// Extracts the user ID from the current authentication token.
+    /// </summary>
+    /// <returns>The user's unique identifier as a Guid.</returns>
+    /// <exception cref="UnauthorizedAccessException">Thrown when the user ID cannot be found in the authentication token.</exception>
     private Guid GetUserId()
     {
         var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value 
@@ -43,8 +58,22 @@ public class HousesFavoritesController : ControllerBase
     }
 
     /// <summary>
-    /// Get user's favorite houses
+    /// Retrieves a paginated list of the authenticated user's favorite houses.
     /// </summary>
+    /// <param name="page">Page number (1-based). Must be greater than 0. Default is 1.</param>
+    /// <param name="limit">Number of items per page. Must be between 1 and 100. Default is 20.</param>
+    /// <param name="sortBy">Field to sort by. Supported values: "dateadded", "price". Default is by creation date.</param>
+    /// <param name="sortOrder">Sort order. Supported values: "asc", "desc". Default is "asc".</param>
+    /// <returns>
+    /// A response containing:
+    /// - success: Boolean indicating operation success
+    /// - data: Object containing items (houses), totalCount, page, limit, totalPages
+    /// - message: Success message
+    /// </returns>
+    /// <response code="200">Successfully retrieved favorite houses.</response>
+    /// <response code="400">Invalid pagination parameters provided.</response>
+    /// <response code="401">User is not authenticated or token is invalid.</response>
+    /// <response code="500">An error occurred while processing the request.</response>
     [HttpGet("favorites")]
     public async Task<ActionResult> GetFavorites([FromQuery] int page = 1, [FromQuery] int limit = 20, [FromQuery] string? sortBy = null, [FromQuery] string? sortOrder = "asc")
     {
@@ -142,8 +171,17 @@ public class HousesFavoritesController : ControllerBase
     }
 
     /// <summary>
-    /// Get count of user's favorite houses
+    /// Retrieves the total count of favorite houses for the authenticated user.
     /// </summary>
+    /// <returns>
+    /// A response containing:
+    /// - success: Boolean indicating operation success
+    /// - data: Object containing count (number of favorite houses)
+    /// - message: Success message
+    /// </returns>
+    /// <response code="200">Successfully retrieved favorite houses count.</response>
+    /// <response code="401">User is not authenticated or token is invalid.</response>
+    /// <response code="500">An error occurred while processing the request.</response>
     [HttpGet("favorites/count")]
     public async Task<ActionResult> GetFavoritesCount()
     {
