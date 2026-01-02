@@ -517,6 +517,8 @@ override.tf.json
 # Allow README files
 !README.md
 !**/README.md
+# Allow agent instructions (any folder)
+!**/AGENTS.md
 # Allow documentation in MetaData
 !MetaData/**/*.md
 !MetaData/**/*.txt
