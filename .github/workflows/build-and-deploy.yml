@@ -32,6 +32,11 @@ on:
         required: false
         default: false
         type: boolean
+      tests_only:
+        description: 'Run only tests (skip build and deploy)'
+        required: false
+        default: false
+        type: boolean
 
 # Cancel previous workflow runs when a new one starts
 # Use shared group so test and build-deploy workflows cancel each other
@@ -56,7 +61,9 @@ jobs:
     name: Run Tests
     runs-on: ubuntu-latest
     continue-on-error: true  # Allow test failures without blocking deployment
-    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.skip_tests != 'true' }}
+    # Run tests by default, unless skip_tests is true
+    # Always run if tests_only is true
+    if: ${{ (github.event_name != 'workflow_dispatch' || github.event.inputs.skip_tests != 'true') && github.event.inputs.tests_only != 'true' }} || github.event.inputs.tests_only == 'true'
     
     steps:
       - name: Checkout code
@@ -69,31 +76,30 @@ jobs:
 
       - name: Restore and build dependencies
         run: |
+          cd BE
           dotnet restore AmesaBackend.Auth/AmesaBackend.Auth.csproj
           dotnet build --no-restore AmesaBackend.Auth/AmesaBackend.Auth.csproj
-        working-directory: .
 
       - name: Restore test project
         run: dotnet restore AmesaBackend.Tests/AmesaBackend.Tests.csproj
-        working-directory: .
+        working-directory: BE
 
       - name: Build test project
         run: dotnet build --no-restore AmesaBackend.Tests/AmesaBackend.Tests.csproj
-        working-directory: .
+        working-directory: BE
 
       - name: Run unit tests with coverage
         continue-on-error: true  # Don't fail build on test failures
         run: |
           dotnet test --no-build --verbosity normal \
             --collect:"XPlat Code Coverage" \
-            --results-directory:"${{ runner.temp }}/TestResults" \
-            --settings:coverlet.runsettings
-        working-directory: AmesaBackend.Tests
+            --results-directory:"${{ runner.temp }}/TestResults"
+        working-directory: BE/AmesaBackend.Tests
 
       - name: Run integration tests
         continue-on-error: true  # Don't fail build on test failures
         run: dotnet test --no-build --verbosity normal --filter "FullyQualifiedName~Integration"
-        working-directory: AmesaBackend.Tests
+        working-directory: BE/AmesaBackend.Tests
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
@@ -307,9 +313,10 @@ jobs:
     needs: [test, detect-changes]
     name: Build and Push Docker Images
     runs-on: ubuntu-latest
+    # Skip build/deploy if tests_only is true
     # Continue even if test job fails (test job has continue-on-error: true)
     # Also continue if test job was skipped
-    if: always() && (needs.test.result == 'success' || needs.test.result == 'failure' || needs.test.result == 'skipped')
+    if: ${{ github.event.inputs.tests_only != 'true' && (always() && (needs.test.result == 'success' || needs.test.result == 'failure' || needs.test.result == 'skipped')) }}
     strategy:
       matrix:
         include:
@@ -408,7 +415,9 @@ jobs:
     name: Deploy to ECS
     needs: [build-and-push, detect-changes]
     runs-on: ubuntu-latest
+    # Skip deploy if tests_only is true
     # Deploy if build succeeded (test failures won't block due to continue-on-error: true on test job)
+    if: ${{ github.event.inputs.tests_only != 'true' }}
     strategy:
       matrix:
         include:
