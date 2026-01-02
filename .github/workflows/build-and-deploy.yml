@@ -120,13 +120,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          submodules: false  # Skip submodules to avoid FE submodule warning
-        with:
           repository: ${{ github.repository }}
           ref: ${{ github.ref }}
           fetch-depth: 0
           lfs: false
-          submodules: false
+          submodules: false  # Skip submodules to avoid FE submodule warning
 
       - name: Detect changed files
         id: changes
