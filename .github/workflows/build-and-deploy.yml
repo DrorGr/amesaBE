@@ -61,9 +61,9 @@ jobs:
     name: Run Tests
     runs-on: ubuntu-latest
     continue-on-error: true  # Allow test failures without blocking deployment
-    # Run tests by default, unless skip_tests is true
-    # Always run if tests_only is true
-    if: ${{ (github.event_name != 'workflow_dispatch' || github.event.inputs.skip_tests != 'true') && github.event.inputs.tests_only != 'true' }} || github.event.inputs.tests_only == 'true'
+    # Run tests by default (on push/PR)
+    # For workflow_dispatch: run if tests_only is true OR skip_tests is not true
+    if: ${{ github.event.inputs.tests_only == 'true' || (github.event_name != 'workflow_dispatch' || github.event.inputs.skip_tests != 'true') }}
     
     steps:
       - name: Checkout code
