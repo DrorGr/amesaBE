@@ -6,8 +6,8 @@
 
 | Item | Value |
 |------|-------|
-| **Context Version** | 2.8.0 |
-| **Last Updated** | 2025-12-17 (Codebase reorganization: Services/Interfaces/ and Services/Background/ folders organized) |
+| **Context Version** | 2.8.1 |
+| **Last Updated** | 2026-01-03 (Custom domain amesa-group.net setup complete, API service hostname fix) |
 | **Backend Framework** | .NET 8.0, ASP.NET Core |
 | **Database** | Aurora PostgreSQL Serverless v2 |
 | **Infrastructure** | AWS (ECS Fargate, ECR, ALB, Aurora) |
@@ -179,10 +179,10 @@ All microservices use PostgreSQL schemas for data isolation:
 
 ## Environment Configuration
 
-| Environment | Backend | Database | Admin Panel | Config File |
-|------------|---------|----------|-------------|-------------|
-| **Local Dev** | http://localhost:5000 | SQLite (AmesaDB.db) or local PostgreSQL | http://localhost:5000/admin | `appsettings.Development.json` |
-| **Production** | amesa-backend-alb-509078867.eu-north-1.elb.amazonaws.com | amesadbmain (Aurora PostgreSQL Serverless v2) | http://amesa-backend-alb-509078867.eu-north-1.elb.amazonaws.com/admin ✅ | ECS task definition |
+| Environment | Backend | Database | Admin Panel | Frontend | Config File |
+|------------|---------|----------|-------------|----------|-------------|
+| **Local Dev** | http://localhost:5000 | SQLite (AmesaDB.db) or local PostgreSQL | http://localhost:5000/admin | http://localhost:4200 | `appsettings.Development.json` |
+| **Production** | amesa-backend-alb-509078867.eu-north-1.elb.amazonaws.com | amesadbmain (Aurora PostgreSQL Serverless v2) | http://amesa-backend-alb-509078867.eu-north-1.elb.amazonaws.com/admin ✅ | https://amesa-group.net ✅ (also https://dpqbvdgnenckf.cloudfront.net) | ECS task definition |
 | **ECS Cluster** | Amesa | - | - | - |
 | **ECR Tags** | prod-{sha}, latest, prod-latest | - | - | - |
 | **Deployment** | Auto on push to main | - | - | - |
@@ -1300,6 +1300,7 @@ Pieces MCP provides access to Long-Term Memory (LTM-2.7) engine, allowing agents
 
 | Change | Status | Date | Key Points |
 |--------|--------|------|------------|
+| **Custom Domain Setup** | ✅ Complete | 2026-01-03 | amesa-group.net configured: Route 53 DNS, CloudFront aliases, SSL certificate, CORS fixes, API service hostname fix - works on both CloudFront and custom domain |
 | **Codebase Reorganization** | ✅ Complete | 2025-12-17 | Services folders organized: Interfaces/ and Background/ subfolders created, all services reorganized, duplicate interface definitions removed, Configuration/ folders standardized |
 | **AWS Cost Optimization** | ✅ Complete | 2025-01-25 | Performance Insights disabled ($14.40/mo), unused Redis cluster deleted ($12.96/mo), total savings $27.36/mo ($328/year) |
 | **Repository Cleanup** | ✅ Complete | 2025-01-25 | Removed 50+ duplicate SQL files, cleaned up junk files |
@@ -1372,6 +1373,6 @@ For comprehensive guides and patterns, see the following skills available in `.c
 **Integration**: Skills are adapted from the Anthropics Skills repository and integrated into the AmesaBase development workflow. See `MetaData/Documentation/Development/CURSOR_SKILLS_INTEGRATION_GUIDE.md` for complete integration details.
 
 ---
-**Last Updated**: 2025-01-27
-**Context Version**: 2.8.1 (Skills integration added)
-**Note**: Update this file immediately after API, schema, infra, or deployment changes; add dated "Recent Changes" entries for any 2025 work not yet captured.
+**Last Updated**: 2026-01-03
+**Context Version**: 2.8.2 (Custom domain amesa-group.net setup complete)
+**Note**: Update this file immediately after API, schema, infra, or deployment changes; add dated "Recent Changes" entries for any work not yet captured.
