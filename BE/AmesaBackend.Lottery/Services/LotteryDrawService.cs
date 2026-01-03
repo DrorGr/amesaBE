@@ -10,6 +10,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AmesaBackend.Lottery.Services;
 
+/// <summary>
+/// Background service that periodically checks for scheduled lottery draws and executes them.
+/// Monitors houses with scheduled draw dates and automatically conducts draws when due.
+/// Broadcasts draw events via SignalR for real-time client updates.
+/// </summary>
 public class LotteryDrawService : BackgroundService
 {
     private readonly IHubContext<LotteryHub> _hubContext;
@@ -19,6 +24,13 @@ public class LotteryDrawService : BackgroundService
     private readonly TimeSpan _checkInterval;
     private readonly TimeSpan _drawExecutionTimeout;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="LotteryDrawService"/> class.
+    /// </summary>
+    /// <param name="hubContext">SignalR hub context for broadcasting draw events to connected clients.</param>
+    /// <param name="serviceProvider">Service provider for creating scoped services (database context, event publisher).</param>
+    /// <param name="logger">Logger instance for logging operations.</param>
+    /// <param name="configuration">Configuration for reading service settings (check interval, timeout).</param>
     public LotteryDrawService(
         IHubContext<LotteryHub> hubContext,
         IServiceProvider serviceProvider,
@@ -36,6 +48,12 @@ public class LotteryDrawService : BackgroundService
         _drawExecutionTimeout = TimeSpan.FromSeconds(timeoutSeconds);
     }
 
+    /// <summary>
+    /// Executes the background service main loop.
+    /// Periodically checks for houses with scheduled draws and executes them.
+    /// </summary>
+    /// <param name="stoppingToken">Cancellation token to stop the service gracefully.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var enabled = _configuration.GetValue<bool>("LotteryDraw:Enabled", true);

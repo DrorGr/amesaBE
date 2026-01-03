@@ -6,6 +6,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AmesaBackend.Lottery.Services;
 
+/// <summary>
+/// Background service that periodically cleans up expired ticket reservations.
+/// Updates expired pending reservations to 'expired' status and optionally deletes old expired reservations.
+/// </summary>
 public class ReservationCleanupService : BackgroundService
 {
     private readonly IServiceProvider _serviceProvider;
@@ -15,6 +19,12 @@ public class ReservationCleanupService : BackgroundService
     private readonly int _batchSize;
     private readonly int _retentionDays;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ReservationCleanupService"/> class.
+    /// </summary>
+    /// <param name="serviceProvider">Service provider for creating scoped services (database context).</param>
+    /// <param name="logger">Logger instance for logging operations.</param>
+    /// <param name="configuration">Configuration for reading service settings (cleanup interval, batch size, retention days).</param>
     public ReservationCleanupService(
         IServiceProvider serviceProvider,
         ILogger<ReservationCleanupService> logger,
@@ -30,6 +40,12 @@ public class ReservationCleanupService : BackgroundService
         _retentionDays = _configuration.GetValue<int>("ReservationCleanup:RetentionDays", 30);
     }
 
+    /// <summary>
+    /// Executes the background service main loop.
+    /// Periodically cleans up expired ticket reservations.
+    /// </summary>
+    /// <param name="stoppingToken">Cancellation token to stop the service gracefully.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var enabled = _configuration.GetValue<bool>("ReservationCleanup:Enabled", true);
@@ -65,6 +81,12 @@ public class ReservationCleanupService : BackgroundService
         _logger.LogInformation("ReservationCleanupService stopped");
     }
 
+    /// <summary>
+    /// Cleans up expired ticket reservations.
+    /// Updates expired pending reservations to 'expired' status and optionally deletes old expired reservations.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     private async Task CleanupExpiredReservationsAsync(CancellationToken cancellationToken)
     {
         using var scope = _serviceProvider.CreateScope();

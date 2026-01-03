@@ -4,23 +4,73 @@ using AmesaBackend.Lottery.Models;
 
 namespace AmesaBackend.Lottery.Data;
 
+/// <summary>
+/// Entity Framework Core database context for the Lottery microservice.
+/// Manages database access for lottery-related entities including houses, tickets, draws, promotions, and gamification.
+/// Uses the amesa_lottery schema for data isolation.
+/// </summary>
 public class LotteryDbContext : DbContext
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="LotteryDbContext"/> class.
+    /// </summary>
+    /// <param name="options">The options for configuring the database context.</param>
     public LotteryDbContext(DbContextOptions<LotteryDbContext> options)
         : base(options)
     {
     }
 
+    /// <summary>
+    /// Gets or sets the database set for lottery houses (properties available for lottery).
+    /// </summary>
     public DbSet<House> Houses { get; set; }
+    
+    /// <summary>
+    /// Gets or sets the database set for lottery tickets purchased by users.
+    /// </summary>
     public DbSet<LotteryTicket> LotteryTickets { get; set; }
+    
+    /// <summary>
+    /// Gets or sets the database set for lottery draws (scheduled and completed draws).
+    /// </summary>
     public DbSet<LotteryDraw> LotteryDraws { get; set; }
+    
+    /// <summary>
+    /// Gets or sets the database set for ticket reservations (pending ticket purchases).
+    /// </summary>
     public DbSet<TicketReservation> TicketReservations { get; set; }
+    
+    /// <summary>
+    /// Gets or sets the database set for promotions and discount codes.
+    /// </summary>
     public DbSet<Promotion> Promotions { get; set; }
+    
+    /// <summary>
+    /// Gets or sets the database set for user promotion usage records.
+    /// Tracks when and how users have applied promotions.
+    /// </summary>
     public DbSet<UserPromotion> UserPromotions { get; set; }
+    
+    /// <summary>
+    /// Gets or sets the database set for user gamification data (points, levels, tiers, streaks).
+    /// </summary>
     public DbSet<UserGamification> UserGamification { get; set; }
+    
+    /// <summary>
+    /// Gets or sets the database set for user achievements (unlocked achievements).
+    /// </summary>
     public DbSet<UserAchievement> UserAchievements { get; set; }
+    
+    /// <summary>
+    /// Gets or sets the database set for points history (audit trail of all point changes).
+    /// </summary>
     public DbSet<PointsHistory> PointsHistory { get; set; }
 
+    /// <summary>
+    /// Configures the model that was discovered by convention from the entity types exposed in <see cref="DbSet{TEntity}"/> properties.
+    /// Applies schema configuration, table mappings, and entity relationships.
+    /// </summary>
+    /// <param name="modelBuilder">The builder being used to construct the model for this context.</param>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);

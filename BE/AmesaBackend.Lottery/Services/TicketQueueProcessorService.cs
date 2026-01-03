@@ -10,6 +10,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AmesaBackend.Lottery.Services;
 
+/// <summary>
+/// Background service that processes pending ticket reservations from the queue.
+/// Converts pending reservations to confirmed tickets by calling the payment service.
+/// Handles retries, circuit breaking, and error recovery for failed reservations.
+/// </summary>
 public class TicketQueueProcessorService : BackgroundService
 {
     private readonly IServiceProvider _serviceProvider;
@@ -20,6 +25,12 @@ public class TicketQueueProcessorService : BackgroundService
     private readonly int _maxRetries;
     private readonly TimeSpan _retryDelay;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TicketQueueProcessorService"/> class.
+    /// </summary>
+    /// <param name="serviceProvider">Service provider for creating scoped services (database context, HTTP client, circuit breaker).</param>
+    /// <param name="logger">Logger instance for logging operations.</param>
+    /// <param name="configuration">Configuration for reading service settings (processing delay, batch size, retry settings).</param>
     public TicketQueueProcessorService(
         IServiceProvider serviceProvider,
         ILogger<TicketQueueProcessorService> logger,
@@ -37,6 +48,12 @@ public class TicketQueueProcessorService : BackgroundService
         _retryDelay = TimeSpan.FromSeconds(retryDelaySeconds);
     }
 
+    /// <summary>
+    /// Executes the background service main loop.
+    /// Periodically processes pending ticket reservations from the queue.
+    /// </summary>
+    /// <param name="stoppingToken">Cancellation token to stop the service gracefully.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var enabled = _configuration.GetValue<bool>("TicketQueue:Enabled", true);

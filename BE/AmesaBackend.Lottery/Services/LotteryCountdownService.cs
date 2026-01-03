@@ -10,6 +10,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AmesaBackend.Lottery.Services;
 
+/// <summary>
+/// Background service that periodically broadcasts lottery countdown updates to connected clients via SignalR.
+/// Provides real-time countdown information for active lotteries showing time remaining until draws.
+/// </summary>
 public class LotteryCountdownService : BackgroundService
 {
     private readonly IHubContext<LotteryHub> _hubContext;
@@ -18,6 +22,13 @@ public class LotteryCountdownService : BackgroundService
     private readonly IConfiguration _configuration;
     private readonly TimeSpan _updateInterval;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="LotteryCountdownService"/> class.
+    /// </summary>
+    /// <param name="hubContext">SignalR hub context for broadcasting countdown updates to connected clients.</param>
+    /// <param name="serviceProvider">Service provider for creating scoped services (database context).</param>
+    /// <param name="logger">Logger instance for logging operations.</param>
+    /// <param name="configuration">Configuration for reading service settings (update interval).</param>
     public LotteryCountdownService(
         IHubContext<LotteryHub> hubContext,
         IServiceProvider serviceProvider,
@@ -33,6 +44,12 @@ public class LotteryCountdownService : BackgroundService
         _updateInterval = TimeSpan.FromSeconds(intervalSeconds);
     }
 
+    /// <summary>
+    /// Executes the background service main loop.
+    /// Periodically processes and broadcasts countdown updates for active lotteries.
+    /// </summary>
+    /// <param name="stoppingToken">Cancellation token to stop the service gracefully.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var enabled = _configuration.GetValue<bool>("LotteryCountdown:Enabled", true);
@@ -67,6 +84,12 @@ public class LotteryCountdownService : BackgroundService
         _logger.LogInformation("LotteryCountdownService stopped");
     }
 
+    /// <summary>
+    /// Processes countdown updates for all active lotteries.
+    /// Queries active houses with upcoming draws and broadcasts countdown updates.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     private async Task ProcessCountdownsAsync(CancellationToken cancellationToken)
     {
         using var scope = _serviceProvider.CreateScope();
@@ -95,6 +118,12 @@ public class LotteryCountdownService : BackgroundService
         }
     }
 
+    /// <summary>
+    /// Broadcasts a countdown update for a specific house to all connected clients.
+    /// </summary>
+    /// <param name="house">The house for which to broadcast the countdown.</param>
+    /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     private async Task BroadcastCountdownForHouse(House house, CancellationToken cancellationToken)
     {
         try

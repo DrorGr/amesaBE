@@ -12,6 +12,11 @@ using System;
 
 namespace AmesaBackend.Admin.Services
 {
+    /// <summary>
+    /// Service for managing admin authentication and authorization.
+    /// Handles admin user authentication, session management, rate limiting, and token-based security.
+    /// Supports both database-backed authentication and legacy configuration-based authentication.
+    /// </summary>
     public class AdminAuthService : IAdminAuthService
     {
         private readonly IHttpContextAccessor _httpContextAccessor;
@@ -35,19 +40,50 @@ namespace AmesaBackend.Admin.Services
         private const string AuthTokenCookieName = "AdminAuthToken";
         private const string AuthTokenHeaderName = "X-Admin-Auth-Token";
         
+        /// <summary>
+        /// Represents a failed login attempt record for rate limiting.
+        /// </summary>
         private class FailedLoginAttempt
         {
+            /// <summary>
+            /// Gets or sets the count of failed attempts.
+            /// </summary>
             public int Count { get; set; }
+            
+            /// <summary>
+            /// Gets or sets the date and time when the account lockout expires.
+            /// </summary>
             public DateTime? LockedUntil { get; set; }
         }
         
+        /// <summary>
+        /// Represents authentication token information stored in memory cache.
+        /// </summary>
         private class AuthTokenInfo
         {
+            /// <summary>
+            /// Gets or sets the email address of the authenticated admin user.
+            /// </summary>
             public string Email { get; set; } = string.Empty;
+            
+            /// <summary>
+            /// Gets or sets the date and time when the token expires.
+            /// </summary>
             public DateTime ExpiresAt { get; set; }
+            
+            /// <summary>
+            /// Gets or sets the date and time when the token was created.
+            /// </summary>
             public DateTime CreatedAt { get; set; }
         }
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="AdminAuthService"/> class.
+        /// </summary>
+        /// <param name="httpContextAccessor">HTTP context accessor for accessing request/response and session.</param>
+        /// <param name="configuration">Configuration for reading admin settings and connection strings.</param>
+        /// <param name="logger">Logger instance for logging operations.</param>
+        /// <param name="serviceProvider">Service provider for resolving AdminDbContext (may be null if not configured).</param>
         public AdminAuthService(
             IHttpContextAccessor httpContextAccessor, 
             IConfiguration configuration, 
@@ -78,6 +114,22 @@ namespace AmesaBackend.Admin.Services
             }
         }
 
+        /// <summary>
+        /// Authenticates an admin user with email and password credentials.
+        /// Implements rate limiting, account lockout, and supports both database and legacy configuration-based authentication.
+        /// </summary>
+        /// <param name="email">The email address of the admin user.</param>
+        /// <param name="password">The password of the admin user.</param>
+        /// <returns>True if authentication is successful; otherwise, false.</returns>
+        /// <remarks>
+        /// This method:
+        /// - Checks for account lockout due to failed attempts
+        /// - Validates credentials against the admin_users table in the amesa_admin schema
+        /// - Falls back to legacy configuration-based auth if database user not found
+        /// - Uses BCrypt for password verification
+        /// - Implements rate limiting (5 attempts, 30-minute lockout)
+        /// - Creates authentication tokens and stores them in memory cache, session, and cookies
+        /// </remarks>
         public async Task<bool> AuthenticateAsync(string email, string password)
         {
             try
@@ -752,6 +804,17 @@ namespace AmesaBackend.Admin.Services
             _failedAttempts.TryRemove(normalizedEmail, out _);
         }
 
+        /// <summary>
+        /// Checks if the current user is authenticated as an admin.
+        /// Checks multiple authentication sources: token cache, session, and cookies.
+        /// </summary>
+        /// <returns>True if the current user is authenticated; otherwise, false.</returns>
+        /// <remarks>
+        /// Authentication check order:
+        /// 1. Token cache (from cookie/header/session/sessionId/email mapping)
+        /// 2. Session storage
+        /// 3. Legacy cookie (for backward compatibility)
+        /// </remarks>
         public bool IsAuthenticated()
         {
             // SECURITY: Check authentication token cache first (works even when response started)
@@ -849,6 +912,17 @@ namespace AmesaBackend.Admin.Services
             return false;
         }
 
+        /// <summary>
+        /// Gets the email address of the currently authenticated admin user.
+        /// Retrieves email from token cache, session, or cookies.
+        /// </summary>
+        /// <returns>The email address of the authenticated admin user, or null if no user is authenticated.</returns>
+        /// <remarks>
+        /// Email retrieval order:
+        /// 1. Token cache (from cookie/header/session/sessionId/email mapping)
+        /// 2. Session storage
+        /// 3. Legacy cookie (for backward compatibility)
+        /// </remarks>
         public string? GetCurrentAdminEmail()
         {
             // Get email from token cache first, then session, then cookies
@@ -908,6 +982,11 @@ namespace AmesaBackend.Admin.Services
             return null;
         }
 
+        /// <summary>
+        /// Signs out the current admin user and invalidates their session.
+        /// Removes authentication tokens from cache, clears session data, and deletes cookies.
+        /// </summary>
+        /// <returns>A task representing the asynchronous operation.</returns>
         public async Task SignOutAsync()
         {
             // Clear authentication token, session data, and cookies

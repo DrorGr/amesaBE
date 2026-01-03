@@ -9,6 +9,11 @@ using System.Text.Json;
 
 namespace AmesaBackend.Lottery.Services;
 
+/// <summary>
+/// Background service that periodically synchronizes lottery ticket inventory data to Redis cache.
+/// Keeps cached inventory information up-to-date for fast access and real-time updates.
+/// Broadcasts inventory updates via SignalR for real-time client notifications.
+/// </summary>
 public class InventorySyncService : BackgroundService
 {
     private readonly IConnectionMultiplexer? _redis;
@@ -18,6 +23,13 @@ public class InventorySyncService : BackgroundService
     private readonly TimeSpan _syncInterval;
     private readonly TimeSpan _cacheTTL;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="InventorySyncService"/> class.
+    /// </summary>
+    /// <param name="serviceProvider">Service provider for creating scoped services (database context).</param>
+    /// <param name="logger">Logger instance for logging operations.</param>
+    /// <param name="configuration">Configuration for reading service settings (sync interval, cache TTL).</param>
+    /// <param name="redis">Optional Redis connection multiplexer. If not provided, will attempt to resolve from service provider.</param>
     public InventorySyncService(
         IServiceProvider serviceProvider,
         ILogger<InventorySyncService> logger,
@@ -35,6 +47,12 @@ public class InventorySyncService : BackgroundService
         _cacheTTL = TimeSpan.FromMinutes(cacheTTLMinutes);
     }
 
+    /// <summary>
+    /// Executes the background service main loop.
+    /// Periodically synchronizes inventory data from the database to Redis cache.
+    /// </summary>
+    /// <param name="stoppingToken">Cancellation token to stop the service gracefully.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var enabled = _configuration.GetValue<bool>("InventorySync:Enabled", true);

@@ -635,8 +635,12 @@ namespace AmesaBackend.Lottery.Services
         }
 
         /// <summary>
-        /// Calculate discount amount based on promotion type and value
+        /// Calculates the discount amount based on promotion type and value.
+        /// Handles percentage-based, fixed amount, and special promotion types.
         /// </summary>
+        /// <param name="promotion">The promotion entity containing discount rules.</param>
+        /// <param name="purchaseAmount">The purchase amount before discount.</param>
+        /// <returns>The calculated discount amount. Returns 0 if minimum purchase amount is not met.</returns>
         private decimal CalculateDiscount(Promotion promotion, decimal purchaseAmount)
         {
             // Check minimum purchase amount
@@ -683,8 +687,11 @@ namespace AmesaBackend.Lottery.Services
         }
 
         /// <summary>
-        /// Calculate discount amount for event publishing (simplified version)
+        /// Calculates a representative discount amount for event publishing.
+        /// Uses a simplified calculation for event notifications.
         /// </summary>
+        /// <param name="promotion">The promotion entity.</param>
+        /// <returns>A representative discount amount for the event.</returns>
         private decimal CalculateDiscountAmountForEvent(Promotion promotion)
         {
             // For event, we use a representative discount amount
@@ -702,8 +709,11 @@ namespace AmesaBackend.Lottery.Services
         }
 
         /// <summary>
-        /// Map Promotion entity to PromotionDto (Title → Name mapping)
+        /// Maps a Promotion entity to a PromotionDto.
+        /// Handles property name mappings (e.g., Title → Name, MinPurchaseAmount → MinAmount).
         /// </summary>
+        /// <param name="promotion">The promotion entity to map.</param>
+        /// <returns>A PromotionDto containing the mapped promotion data.</returns>
         private PromotionDto MapToDto(Promotion promotion)
         {
             return new PromotionDto
