@@ -312,7 +312,19 @@ builder.Services.AddHostedService<LotteryCountdownService>();
 builder.Services.AddSignalR();
 
 // Add CORS policy for frontend access
-builder.Services.AddAmesaCors(builder.Configuration);
+var allowedOrigins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>() 
+    ?? new[] { "https://dpqbvdgnenckf.cloudfront.net", "http://localhost:4200" };
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowFrontend", policy =>
+    {
+        policy.WithOrigins(allowedOrigins)
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials();
+    });
+});
 
 builder.Services.AddHealthChecks();
 
