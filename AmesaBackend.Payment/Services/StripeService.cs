@@ -21,8 +21,9 @@ public class StripeService : IStripeService
     private readonly ILogger<StripeService> _logger;
     private readonly IPaymentAuditService? _auditService;
     private readonly IProductHandlerRegistry _productHandlerRegistry;
-    private readonly string _apiKey;
-    private readonly string _webhookSecret;
+    private readonly IConfiguration _configuration;
+    private readonly Lazy<string> _apiKeyLazy;
+    private readonly Lazy<string> _webhookSecretLazy;
 
     public StripeService(
         PaymentDbContext context,
@@ -36,29 +37,45 @@ public class StripeService : IStripeService
         _logger = logger;
         _auditService = serviceProvider.GetService<IPaymentAuditService>();
         _productHandlerRegistry = serviceProvider.GetRequiredService<IProductHandlerRegistry>();
+        _configuration = configuration;
 
-        // Load from configuration (ECS environment variables or AWS Secrets Manager)
-        // ECS environment variables use double underscores (Stripe__ApiKey) which .NET Core maps to Stripe:ApiKey
-        var apiKeyFromConfig = configuration["Stripe:ApiKey"];
-        var apiKeyFromEnv = Environment.GetEnvironmentVariable("STRIPE_API_KEY") 
-            ?? Environment.GetEnvironmentVariable("Stripe__ApiKey"); // ECS format
-        
-        _apiKey = apiKeyFromConfig 
+        // Defer validation until first Stripe API / webhook use so public endpoints
+        // (e.g. publishable-key) can run without secret key or webhook secret in DI.
+        _apiKeyLazy = new Lazy<string>(ResolveApiKey, LazyThreadSafetyMode.ExecutionAndPublication);
+        _webhookSecretLazy = new Lazy<string>(ResolveWebhookSecret, LazyThreadSafetyMode.ExecutionAndPublication);
+    }
+
+    private string ResolveApiKey()
+    {
+        var apiKeyFromConfig = _configuration["Stripe:ApiKey"];
+        var apiKeyFromEnv = Environment.GetEnvironmentVariable("STRIPE_API_KEY")
+            ?? Environment.GetEnvironmentVariable("Stripe__ApiKey");
+
+        return apiKeyFromConfig
             ?? apiKeyFromEnv
-            ?? throw new InvalidOperationException($"Stripe API key not configured. Config value: {(string.IsNullOrEmpty(apiKeyFromConfig) ? "EMPTY" : "SET")}, Env value: {(string.IsNullOrEmpty(apiKeyFromEnv) ? "EMPTY" : "SET")}");
+            ?? throw new InvalidOperationException(
+                $"Stripe API key not configured. Config value: {(string.IsNullOrEmpty(apiKeyFromConfig) ? "EMPTY" : "SET")}, Env value: {(string.IsNullOrEmpty(apiKeyFromEnv) ? "EMPTY" : "SET")}");
+    }
 
-        _webhookSecret = configuration["Stripe:WebhookSecret"] 
+    private string ResolveWebhookSecret()
+    {
+        return _configuration["Stripe:WebhookSecret"]
             ?? Environment.GetEnvironmentVariable("STRIPE_WEBHOOK_SECRET")
-            ?? Environment.GetEnvironmentVariable("Stripe__WebhookSecret") // ECS format
+            ?? Environment.GetEnvironmentVariable("Stripe__WebhookSecret")
             ?? throw new InvalidOperationException("Stripe webhook secret not configured");
+    }
 
-        StripeConfiguration.ApiKey = _apiKey;
+    private void EnsureStripeApiKeyConfigured()
+    {
+        StripeConfiguration.ApiKey = _apiKeyLazy.Value;
     }
 
     public async Task<PaymentIntentResponse> CreatePaymentIntentAsync(CreatePaymentIntentRequest request, Guid userId)
     {
         try
         {
+            EnsureStripeApiKeyConfigured();
+
             // Validate payment method ownership if provided
             if (request.PaymentMethodId.HasValue)
             {
@@ -230,6 +247,8 @@ public class StripeService : IStripeService
     {
         try
         {
+            EnsureStripeApiKeyConfigured();
+
             var service = new PaymentIntentService();
             var paymentIntent = await service.GetAsync(request.PaymentIntentId);
 
@@ -289,6 +308,8 @@ public class StripeService : IStripeService
     {
         try
         {
+            EnsureStripeApiKeyConfigured();
+
             var options = new SetupIntentCreateOptions
             {
                 PaymentMethodTypes = new List<string> { "card" },
@@ -319,7 +340,7 @@ public class StripeService : IStripeService
     {
         try
         {
-            var secretBytes = Encoding.UTF8.GetBytes(_webhookSecret);
+            var secretBytes = Encoding.UTF8.GetBytes(_webhookSecretLazy.Value);
             var payloadBytes = Encoding.UTF8.GetBytes(timestamp + "." + payload);
 
             using var hmac = new HMACSHA256(secretBytes);
@@ -631,6 +652,8 @@ public class StripeService : IStripeService
     {
         try
         {
+            EnsureStripeApiKeyConfigured();
+
             var service = new PaymentIntentService();
             var paymentIntent = await service.GetAsync(paymentIntentId);
 
