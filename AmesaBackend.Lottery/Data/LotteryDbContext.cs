@@ -33,6 +33,9 @@ namespace AmesaBackend.Lottery.Data
         {
             base.OnModelCreating(modelBuilder);
 
+            // Must match migrations (InitialCreate uses schema amesa_lottery). Promotions use explicit amesa_admin ToTable.
+            modelBuilder.HasDefaultSchema("amesa_lottery");
+
             modelBuilder.Entity<House>(entity =>
             {
                 entity.HasKey(e => e.Id);

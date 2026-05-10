@@ -19,6 +19,9 @@ namespace AmesaBackend.Content.Data
         {
             base.OnModelCreating(modelBuilder);
 
+            // Must match migrations (ContentDbContextModelSnapshot); otherwise EF targets public.* and Postgres returns 42P01.
+            modelBuilder.HasDefaultSchema("amesa_content");
+
             modelBuilder.Entity<Translation>(entity =>
             {
                 entity.HasKey(e => e.Id);
