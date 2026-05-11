@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
-using AmesaBackend.Payment.Services;
 using AmesaBackend.Payment.Services.Interfaces;
 using AmesaBackend.Payment.DTOs;
 using AmesaBackend.Payment.Helpers;
@@ -14,7 +13,7 @@ public class StripePaymentController : ControllerBase
 {
     private readonly IStripeService _stripeService;
     private readonly ILogger<StripePaymentController> _logger;
-    private readonly IPaymentRateLimitService? _rateLimitService;
+    private readonly IServiceProvider _serviceProvider;
     private readonly IConfiguration _configuration;
     private const int MAX_REQUEST_SIZE = 1024 * 1024; // 1MB
 
@@ -26,8 +25,22 @@ public class StripePaymentController : ControllerBase
     {
         _stripeService = stripeService;
         _logger = logger;
-        _rateLimitService = serviceProvider.GetService<IPaymentRateLimitService>();
+        _serviceProvider = serviceProvider;
         _configuration = configuration;
+    }
+
+    /// <summary>Lazy-resolve rate limits so read-only endpoints do not build the payment rate limit stack.</summary>
+    private IPaymentRateLimitService? TryResolvePaymentRateLimit()
+    {
+        try
+        {
+            return _serviceProvider.GetService<IPaymentRateLimitService>();
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Payment rate limit service unavailable; continuing without per-request rate limits.");
+            return null;
+        }
     }
 
     [HttpPost("create-payment-intent")]
@@ -42,10 +55,12 @@ public class StripePaymentController : ControllerBase
                 return ControllerHelpers.UnauthorizedResponse<PaymentIntentResponse>();
             }
 
+            var rateLimit = TryResolvePaymentRateLimit();
+
             // Rate limiting
-            if (_rateLimitService != null)
+            if (rateLimit != null)
             {
-                var canProcess = await _rateLimitService.CheckPaymentProcessingLimitAsync(userId);
+                var canProcess = await rateLimit.CheckPaymentProcessingLimitAsync(userId);
                 if (!canProcess)
                 {
                     return StatusCode(429, new ApiResponse<PaymentIntentResponse> 
@@ -63,9 +78,9 @@ public class StripePaymentController : ControllerBase
             var paymentIntent = await _stripeService.CreatePaymentIntentAsync(request, userId);
 
             // Increment rate limit counter
-            if (_rateLimitService != null)
+            if (rateLimit != null)
             {
-                await _rateLimitService.IncrementPaymentProcessingAsync(userId);
+                await rateLimit.IncrementPaymentProcessingAsync(userId);
             }
 
             return Ok(new ApiResponse<PaymentIntentResponse> { Success = true, Data = paymentIntent });
