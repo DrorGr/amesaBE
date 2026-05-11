@@ -5,6 +5,7 @@ using AmesaBackend.Payment.Services;
 using AmesaBackend.Payment.Services.Interfaces;
 using AmesaBackend.Payment.Services.ProductHandlers;
 using AmesaBackend.Auth.Services;
+using AmesaBackend.Auth.Services.Interfaces;
 using AmesaBackend.Shared.Extensions;
 
 namespace AmesaBackend.Payment.Configuration;
@@ -38,8 +39,8 @@ public static class ServiceConfiguration
         // Add Circuit Breaker Service (required by RateLimitService)
         services.AddSingleton<ICircuitBreakerService, CircuitBreakerService>();
 
-        // Add Rate Limit Service (required by PaymentRateLimitService)
-            services.AddScoped<IPaymentRateLimitService, PaymentRateLimitService>();
+        // Rate limiting (same stack as Notification/Lottery; required by PaymentRateLimitService)
+        services.AddScoped<IRateLimitService, RateLimitService>();
 
         // Payment Services
         services.AddScoped<IPaymentService, PaymentService>();
