@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Authorization;
 using AmesaBackend.Payment.Services.Interfaces;
 using AmesaBackend.Payment.DTOs;
 using AmesaBackend.Payment.Helpers;
-using Microsoft.Extensions.Configuration;
 
 namespace AmesaBackend.Payment.Controllers;
 
@@ -14,19 +13,16 @@ public class StripePaymentController : ControllerBase
     private readonly IStripeService _stripeService;
     private readonly ILogger<StripePaymentController> _logger;
     private readonly IServiceProvider _serviceProvider;
-    private readonly IConfiguration _configuration;
     private const int MAX_REQUEST_SIZE = 1024 * 1024; // 1MB
 
     public StripePaymentController(
         IStripeService stripeService,
         ILogger<StripePaymentController> logger,
-        IServiceProvider serviceProvider,
-        IConfiguration configuration)
+        IServiceProvider serviceProvider)
     {
         _stripeService = stripeService;
         _logger = logger;
         _serviceProvider = serviceProvider;
-        _configuration = configuration;
     }
 
     /// <summary>Lazy-resolve rate limits so read-only endpoints do not build the payment rate limit stack.</summary>
@@ -208,54 +204,6 @@ public class StripePaymentController : ControllerBase
                 { 
                     Code = "INTERNAL_ERROR", 
                     Message = "An error occurred retrieving payment intent" 
-                } 
-            });
-        }
-    }
-
-    [HttpGet("publishable-key")]
-    public ActionResult<ApiResponse<StripeConfigResponse>> GetPublishableKey()
-    {
-        try
-        {
-            // Check configuration first (ECS environment variables map Stripe__PublishableKey to Stripe:PublishableKey)
-            var publishableKey = _configuration["Stripe:PublishableKey"] 
-                ?? Environment.GetEnvironmentVariable("STRIPE_PUBLISHABLE_KEY")
-                ?? Environment.GetEnvironmentVariable("Stripe__PublishableKey"); // ECS format
-
-            if (string.IsNullOrWhiteSpace(publishableKey))
-            {
-                _logger.LogError("GetPublishableKey: publishable key not found in config or environment variables");
-                return StatusCode(500, new ApiResponse<StripeConfigResponse> 
-                { 
-                    Success = false, 
-                    Error = new ErrorResponse 
-                    { 
-                        Code = "CONFIGURATION_ERROR", 
-                        Message = "Stripe publishable key not configured" 
-                    } 
-                });
-            }
-
-            return Ok(new ApiResponse<StripeConfigResponse> 
-            { 
-                Success = true, 
-                Data = new StripeConfigResponse 
-                { 
-                    PublishableKey = publishableKey 
-                } 
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting Stripe publishable key");
-            return StatusCode(500, new ApiResponse<StripeConfigResponse> 
-            { 
-                Success = false, 
-                Error = new ErrorResponse 
-                { 
-                    Code = "INTERNAL_ERROR", 
-                    Message = "An error occurred retrieving Stripe configuration" 
                 } 
             });
         }
