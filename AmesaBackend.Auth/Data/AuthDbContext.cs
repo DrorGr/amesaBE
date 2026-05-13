@@ -41,6 +41,7 @@ namespace AmesaBackend.Auth.Data
             // Configure User entity
             modelBuilder.Entity<User>(entity =>
             {
+                entity.ToTable("users", "amesa_auth");
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => e.Email).IsUnique();
                 entity.HasIndex(e => e.Username).IsUnique();
