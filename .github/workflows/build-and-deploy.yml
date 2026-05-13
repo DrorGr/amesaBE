@@ -77,10 +77,10 @@ jobs:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
       - name: Restore test project and dependencies
-        run: dotnet restore BE/AmesaBackend.Tests/AmesaBackend.Tests.csproj
+        run: dotnet restore AmesaBackend.Tests/AmesaBackend.Tests.csproj
 
       - name: Build test project
-        run: dotnet build --no-restore BE/AmesaBackend.Tests/AmesaBackend.Tests.csproj
+        run: dotnet build --no-restore AmesaBackend.Tests/AmesaBackend.Tests.csproj
 
       - name: Run unit tests with coverage
         continue-on-error: true  # Don't fail build on test failures
@@ -88,12 +88,12 @@ jobs:
           dotnet test --no-build --verbosity normal \
             --collect:"XPlat Code Coverage" \
             --results-directory:"${{ runner.temp }}/TestResults"
-        working-directory: BE/AmesaBackend.Tests
+        working-directory: AmesaBackend.Tests
 
       - name: Run integration tests
         continue-on-error: true  # Don't fail build on test failures
         run: dotnet test --no-build --verbosity normal --filter "FullyQualifiedName~Integration"
-        working-directory: BE/AmesaBackend.Tests
+        working-directory: AmesaBackend.Tests
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3

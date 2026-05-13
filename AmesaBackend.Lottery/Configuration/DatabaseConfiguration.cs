@@ -47,7 +47,12 @@ public static class DatabaseConfiguration
         {
             if (!string.IsNullOrEmpty(connectionString))
             {
-                options.UseNpgsql(connectionString, npgsqlOptions =>
+                var authConnectionStringBuilder = new NpgsqlConnectionStringBuilder(connectionString)
+                {
+                    SearchPath = "amesa_auth"
+                };
+
+                options.UseNpgsql(authConnectionStringBuilder.ConnectionString, npgsqlOptions =>
                 {
                     npgsqlOptions.EnableRetryOnFailure(
                         maxRetryCount: 3,
