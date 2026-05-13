@@ -1351,6 +1351,193 @@ namespace AmesaBackend.Lottery.Controllers
                 });
             }
         }
+
+        /// <summary>
+        /// Demo/sandbox ticket purchase: performs the lottery-side checks and ticket creation,
+        /// but intentionally skips the Payment service dependency.
+        /// POST /api/v1/houses/{id}/tickets/sandbox-purchase
+        /// </summary>
+        [HttpPost("{id}/tickets/sandbox-purchase")]
+        [Authorize]
+        public async Task<ActionResult<AmesaBackend.Lottery.DTOs.ApiResponse<PurchaseTicketsResponse>>> SandboxPurchaseTickets(
+            Guid id,
+            [FromBody] PurchaseTicketsRequest request)
+        {
+            string? reservationToken = null;
+
+            try
+            {
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (userIdClaim == null || !Guid.TryParse(userIdClaim, out var userId))
+                {
+                    return Unauthorized(new AmesaBackend.Lottery.DTOs.ApiResponse<PurchaseTicketsResponse>
+                    {
+                        Success = false,
+                        Message = "User not authenticated"
+                    });
+                }
+
+                await _lotteryService.CheckVerificationRequirementAsync(userId);
+
+                var house = await _context.Houses
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(h => h.Id == id);
+                if (house == null)
+                {
+                    return NotFound(new AmesaBackend.Lottery.DTOs.ApiResponse<PurchaseTicketsResponse>
+                    {
+                        Success = false,
+                        Message = "House not found"
+                    });
+                }
+
+                var canEnter = await _lotteryService.CanUserEnterLotteryAsync(userId, id);
+                if (!canEnter)
+                {
+                    return BadRequest(new AmesaBackend.Lottery.DTOs.ApiResponse<PurchaseTicketsResponse>
+                    {
+                        Success = false,
+                        Message = "Participant cap reached. Cannot enter this lottery.",
+                        Error = new ErrorResponse
+                        {
+                            Code = "PARTICIPANT_CAP_REACHED",
+                            Message = "The maximum number of participants for this lottery has been reached."
+                        }
+                    });
+                }
+
+                if (_inventoryManager != null)
+                {
+                    var inventory = await _inventoryManager.GetInventoryStatusAsync(id);
+                    if (inventory.AvailableTickets < request.Quantity)
+                    {
+                        return BadRequest(new AmesaBackend.Lottery.DTOs.ApiResponse<PurchaseTicketsResponse>
+                        {
+                            Success = false,
+                            Message = $"Insufficient tickets available. Only {inventory.AvailableTickets} tickets remaining.",
+                            Error = new ErrorResponse
+                            {
+                                Code = "INSUFFICIENT_TICKETS",
+                                Message = $"Only {inventory.AvailableTickets} tickets available, but {request.Quantity} requested."
+                            }
+                        });
+                    }
+
+                    reservationToken = Guid.NewGuid().ToString();
+                    var reserved = await _inventoryManager.ReserveInventoryAsync(id, request.Quantity, reservationToken);
+                    if (!reserved)
+                    {
+                        return BadRequest(new AmesaBackend.Lottery.DTOs.ApiResponse<PurchaseTicketsResponse>
+                        {
+                            Success = false,
+                            Message = "Failed to reserve tickets. Please try again.",
+                            Error = new ErrorResponse
+                            {
+                                Code = "RESERVATION_FAILED",
+                                Message = "Could not reserve tickets. They may have been purchased by another user."
+                            }
+                        });
+                    }
+                }
+
+                var totalCost = house.TicketPrice * request.Quantity;
+                var sandboxPaymentId = Guid.NewGuid();
+
+                var ticketsResult = await _lotteryService.CreateTicketsFromPaymentAsync(new CreateTicketsFromPaymentRequest
+                {
+                    HouseId = id,
+                    Quantity = request.Quantity,
+                    PaymentId = sandboxPaymentId,
+                    UserId = userId,
+                    ReservationToken = reservationToken
+                });
+
+                if (reservationToken != null && _inventoryManager != null)
+                {
+                    try
+                    {
+                        await _inventoryManager.ReleaseInventoryAsync(id, request.Quantity);
+                    }
+                    catch (Exception releaseEx)
+                    {
+                        _logger.LogWarning(releaseEx,
+                            "Failed to release sandbox reservation {ReservationToken} for house {HouseId} after ticket creation",
+                            reservationToken, id);
+                    }
+                }
+
+                await _eventPublisher.PublishAsync(new TicketPurchasedEvent
+                {
+                    UserId = userId,
+                    HouseId = id,
+                    TicketCount = ticketsResult.TicketsPurchased,
+                    TicketNumbers = ticketsResult.TicketNumbers
+                });
+
+                try
+                {
+                    await _cache.RemoveRecordAsync($"house_{id}");
+                    await _cache.RemoveRecordAsync("houses_list");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to invalidate cache for sandbox purchase on house {HouseId}", id);
+                }
+
+                return Ok(new AmesaBackend.Lottery.DTOs.ApiResponse<PurchaseTicketsResponse>
+                {
+                    Success = true,
+                    Data = new PurchaseTicketsResponse
+                    {
+                        TicketsPurchased = ticketsResult.TicketsPurchased,
+                        TotalCost = totalCost,
+                        OriginalCost = totalCost,
+                        DiscountAmount = 0,
+                        TicketNumbers = ticketsResult.TicketNumbers,
+                        TransactionId = sandboxPaymentId.ToString(),
+                        PaymentId = sandboxPaymentId
+                    },
+                    Message = "Sandbox tickets purchased successfully"
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                _logger.LogWarning(ex, "Verification check failed for sandbox ticket purchase");
+                return Unauthorized(new AmesaBackend.Lottery.DTOs.ApiResponse<PurchaseTicketsResponse>
+                {
+                    Success = false,
+                    Message = ex.Message,
+                    Error = new ErrorResponse { Code = "ID_VERIFICATION_REQUIRED", Message = ex.Message }
+                });
+            }
+            catch (Exception ex)
+            {
+                if (reservationToken != null && _inventoryManager != null)
+                {
+                    try
+                    {
+                        await _inventoryManager.ReleaseInventoryAsync(id, request.Quantity);
+                    }
+                    catch (Exception releaseEx)
+                    {
+                        _logger.LogError(releaseEx,
+                            "Failed to release sandbox reservation {ReservationToken} for house {HouseId} after exception",
+                            reservationToken, id);
+                    }
+                }
+
+                _logger.LogError(ex, "Error sandbox-purchasing tickets for house {HouseId}", id);
+                return StatusCode(500, new AmesaBackend.Lottery.DTOs.ApiResponse<PurchaseTicketsResponse>
+                {
+                    Success = false,
+                    Error = new ErrorResponse
+                    {
+                        Code = "INTERNAL_ERROR",
+                        Message = ex.Message
+                    }
+                });
+            }
+        }
     }
 }
 
