@@ -55,8 +55,11 @@ public static class MiddlewareConfiguration
         app.MapBlazorHub();
         app.MapHub<AdminHub>("/hub"); // Changed from /admin/hub since UsePathBase handles /admin prefix
 
-        // Map API controllers (for diagnostics endpoints)
-        app.MapControllers();
+        // Development-only diagnostics controllers; never expose debug APIs in production.
+        if (environment.IsDevelopment())
+        {
+            app.MapControllers().RequireAuthorization("AdminOnly");
+        }
 
         app.MapFallbackToPage("/_Host");
 

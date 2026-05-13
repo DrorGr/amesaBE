@@ -1,4 +1,5 @@
 @page "/users"
+@attribute [Authorize(Policy = AdminPermissionNames.UsersRead)]
 @inherits AuthorizedPageBase
 @using AmesaBackend.Admin.Services
 @using AmesaBackend.Admin.DTOs
@@ -109,21 +110,29 @@
                                             <button class="btn btn-outline-primary" @onclick="() => ViewUser(user.Id)" title="View">
                                                 <i class="fas fa-eye"></i>
                                             </button>
-                                            <button class="btn btn-outline-secondary" @onclick="() => EditUser(user.Id)" title="Edit">
-                                                <i class="fas fa-edit"></i>
-                                            </button>
-                                            @if (user.Status == "Active")
-                                            {
-                                                <button class="btn btn-outline-warning" @onclick="() => SuspendUser(user.Id)" title="Suspend">
-                                                    <i class="fas fa-ban"></i>
-                                                </button>
-                                            }
-                                            else if (user.Status == "Suspended")
-                                            {
-                                                <button class="btn btn-outline-success" @onclick="() => ActivateUser(user.Id)" title="Activate">
-                                                    <i class="fas fa-check"></i>
-                                                </button>
-                                            }
+                                            <AuthorizeView Policy="@AdminPermissionNames.UsersWrite">
+                                                <Authorized>
+                                                    <button class="btn btn-outline-secondary" @onclick="() => EditUser(user.Id)" title="Edit">
+                                                        <i class="fas fa-edit"></i>
+                                                    </button>
+                                                </Authorized>
+                                            </AuthorizeView>
+                                            <AuthorizeView Policy="@AdminPermissionNames.UsersSuspend">
+                                                <Authorized>
+                                                    @if (user.Status == "Active")
+                                                    {
+                                                        <button class="btn btn-outline-warning" @onclick="() => SuspendUser(user.Id)" title="Suspend">
+                                                            <i class="fas fa-ban"></i>
+                                                        </button>
+                                                    }
+                                                    else if (user.Status == "Suspended")
+                                                    {
+                                                        <button class="btn btn-outline-success" @onclick="() => ActivateUser(user.Id)" title="Activate">
+                                                            <i class="fas fa-check"></i>
+                                                        </button>
+                                                    }
+                                                </Authorized>
+                                            </AuthorizeView>
                                         </div>
                                     </td>
                                 </tr>

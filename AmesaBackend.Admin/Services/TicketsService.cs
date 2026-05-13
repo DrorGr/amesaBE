@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using AmesaBackend.Lottery.Data;
 using AmesaBackend.Admin.DTOs;
+using AmesaBackend.Admin.Security;
 
 namespace AmesaBackend.Admin.Services
 {
@@ -14,17 +15,22 @@ namespace AmesaBackend.Admin.Services
     {
         private readonly LotteryDbContext _context;
         private readonly ILogger<TicketsService> _logger;
+        private readonly IAdminPermissionService _permissions;
 
         public TicketsService(
             LotteryDbContext context,
-            ILogger<TicketsService> logger)
+            ILogger<TicketsService> logger,
+            IAdminPermissionService permissions)
         {
             _context = context;
             _logger = logger;
+            _permissions = permissions;
         }
 
         public async Task<PagedResult<TicketDto>> GetTicketsAsync(int page = 1, int pageSize = 20, Guid? houseId = null, Guid? userId = null, string? status = null)
         {
+            await _permissions.RequirePermissionAsync(AdminPermissionNames.TicketsRead);
+
             var query = _context.LotteryTickets
                 .Include(t => t.House)
                 .AsQueryable();
@@ -70,6 +76,8 @@ namespace AmesaBackend.Admin.Services
 
         public async Task<TicketDto?> GetTicketByIdAsync(Guid id)
         {
+            await _permissions.RequirePermissionAsync(AdminPermissionNames.TicketsRead);
+
             var ticket = await _context.LotteryTickets
                 .Include(t => t.House)
                 .FirstOrDefaultAsync(t => t.Id == id);

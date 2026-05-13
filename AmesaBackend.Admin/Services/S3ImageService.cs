@@ -1,5 +1,6 @@
 using Amazon.S3;
 using Amazon.S3.Model;
+using AmesaBackend.Admin.Security;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -18,23 +19,28 @@ namespace AmesaBackend.Admin.Services
         private readonly IAmazonS3 _s3Client;
         private readonly IConfiguration _configuration;
         private readonly ILogger<S3ImageService> _logger;
+        private readonly IAdminPermissionService _permissions;
         private readonly string _bucketName;
         private readonly string _region;
 
         public S3ImageService(
             IAmazonS3 s3Client,
             IConfiguration configuration,
-            ILogger<S3ImageService> logger)
+            ILogger<S3ImageService> logger,
+            IAdminPermissionService permissions)
         {
             _s3Client = s3Client;
             _configuration = configuration;
             _logger = logger;
+            _permissions = permissions;
             _bucketName = _configuration["AWS:S3:ImageBucket"] ?? "amesa-house-images";
             _region = _configuration["AWS:Region"] ?? "eu-north-1";
         }
 
         public async Task<string> UploadImageAsync(Stream imageStream, string fileName, string contentType, Guid houseId)
         {
+            await _permissions.RequirePermissionAsync(AdminPermissionNames.HousesWrite);
+
             try
             {
                 // Generate unique file name: houses/{houseId}/{timestamp}-{originalFileName}
@@ -75,6 +81,8 @@ namespace AmesaBackend.Admin.Services
 
         public async Task<bool> DeleteImageAsync(string imageUrl)
         {
+            await _permissions.RequirePermissionAsync(AdminPermissionNames.HousesWrite);
+
             try
             {
                 // Extract key from URL
@@ -105,6 +113,8 @@ namespace AmesaBackend.Admin.Services
 
         public async Task<List<string>> GetHouseImagesAsync(Guid houseId)
         {
+            await _permissions.RequirePermissionAsync(AdminPermissionNames.HousesRead);
+
             try
             {
                 var prefix = $"houses/{houseId}/";
@@ -130,6 +140,8 @@ namespace AmesaBackend.Admin.Services
 
         public async Task<string> GeneratePresignedUrlAsync(string imageUrl, int expirationMinutes = 60)
         {
+            await _permissions.RequirePermissionAsync(AdminPermissionNames.HousesRead);
+
             try
             {
                 var key = ExtractKeyFromUrl(imageUrl);

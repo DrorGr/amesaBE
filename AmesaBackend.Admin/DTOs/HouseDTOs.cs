@@ -42,6 +42,8 @@ namespace AmesaBackend.Admin.DTOs
 
     public class CreateHouseRequest
     {
+        public Guid? Id { get; set; }
+
         [Required(ErrorMessage = "Title is required")]
         [MaxLength(255, ErrorMessage = "Title cannot exceed 255 characters")]
         public string Title { get; set; } = string.Empty;
@@ -70,6 +72,7 @@ namespace AmesaBackend.Admin.DTOs
         public DateTime? DrawDate { get; set; }
         public decimal? MinimumParticipationPercentage { get; set; }
         public int? MaxParticipants { get; set; }
+        public List<ImageInfo> Images { get; set; } = new();
     }
 
     public class UpdateHouseRequest
@@ -95,6 +98,7 @@ namespace AmesaBackend.Admin.DTOs
         public DateTime? DrawDate { get; set; }
         public decimal? MinimumParticipationPercentage { get; set; }
         public int? MaxParticipants { get; set; }
+        public List<ImageInfo> Images { get; set; } = new();
     }
 
     public class PagedResult<T>

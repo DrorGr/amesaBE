@@ -1,9 +1,11 @@
 @page "/draws"
+@attribute [Authorize(Policy = AdminPermissionNames.DrawsRead)]
 @inherits AuthorizedPageBase
 @using AmesaBackend.Admin.Services
 @using AmesaBackend.Admin.DTOs
 @inject IDrawsService DrawsService
 @inject IHousesService HousesService
+@inject IAdminPermissionService PermissionService
 @inject IJSRuntime JSRuntime
 
 <PageTitle>Draws - Amesa Admin</PageTitle>
@@ -133,9 +135,13 @@
                                     <td>
                                         @if (draw.DrawStatus == "Pending")
                                         {
-                                            <button class="btn btn-sm btn-primary" @onclick="() => ShowConductDrawModal(draw.Id, draw.HouseTitle)" title="Conduct Draw">
-                                                <i class="fas fa-dice"></i> Conduct
-                                            </button>
+                                            <AuthorizeView Policy="@AdminPermissionNames.DrawsConduct">
+                                                <Authorized>
+                                                    <button class="btn btn-sm btn-primary" @onclick="() => ShowConductDrawModal(draw.Id, draw.HouseTitle)" title="Conduct Draw">
+                                                        <i class="fas fa-dice"></i> Conduct
+                                                    </button>
+                                                </Authorized>
+                                            </AuthorizeView>
                                         }
                                         else
                                         {
@@ -302,9 +308,7 @@
         isConducting = true;
         try
         {
-            // TODO: Get actual admin user ID from authentication service
-            // For now, using Guid.Empty as placeholder
-            var conductedBy = Guid.Empty;
+            var conductedBy = await PermissionService.GetCurrentAdminUserIdAsync() ?? Guid.Empty;
             
             await DrawsService.ConductDrawAsync(selectedDrawId.Value, conductedBy);
             await JSRuntime.InvokeVoidAsync("alert", "Draw conducted successfully!");

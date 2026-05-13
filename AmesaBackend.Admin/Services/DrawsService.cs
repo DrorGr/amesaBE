@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using AmesaBackend.Lottery.Data;
 using AmesaBackend.Admin.DTOs;
+using AmesaBackend.Admin.Security;
+using System.Security.Cryptography;
 
 namespace AmesaBackend.Admin.Services
 {
@@ -15,17 +17,25 @@ namespace AmesaBackend.Admin.Services
     {
         private readonly LotteryDbContext _context;
         private readonly ILogger<DrawsService> _logger;
+        private readonly IAdminPermissionService _permissions;
+        private readonly IAdminAuditService _audit;
 
         public DrawsService(
             LotteryDbContext context,
-            ILogger<DrawsService> logger)
+            ILogger<DrawsService> logger,
+            IAdminPermissionService permissions,
+            IAdminAuditService audit)
         {
             _context = context;
             _logger = logger;
+            _permissions = permissions;
+            _audit = audit;
         }
 
         public async Task<PagedResult<DrawDto>> GetDrawsAsync(int page = 1, int pageSize = 20, Guid? houseId = null, string? status = null)
         {
+            await _permissions.RequirePermissionAsync(AdminPermissionNames.DrawsRead);
+
             var query = _context.LotteryDraws
                 .Include(d => d.House)
                 .AsQueryable();
@@ -72,6 +82,8 @@ namespace AmesaBackend.Admin.Services
 
         public async Task<DrawDto?> GetDrawByIdAsync(Guid id)
         {
+            await _permissions.RequirePermissionAsync(AdminPermissionNames.DrawsRead);
+
             var draw = await _context.LotteryDraws
                 .Include(d => d.House)
                 .FirstOrDefaultAsync(d => d.Id == id);
@@ -99,6 +111,8 @@ namespace AmesaBackend.Admin.Services
 
         public async Task<DrawDto> ConductDrawAsync(Guid drawId, Guid conductedBy)
         {
+            await _permissions.RequirePermissionAsync(AdminPermissionNames.DrawsConduct);
+
             var draw = await _context.LotteryDraws
                 .Include(d => d.House)
                 .FirstOrDefaultAsync(d => d.Id == drawId);
@@ -109,6 +123,12 @@ namespace AmesaBackend.Admin.Services
             if (draw.DrawStatus != "Pending")
                 throw new InvalidOperationException($"Draw is already {draw.DrawStatus}");
 
+            if (draw.DrawDate > DateTime.UtcNow)
+                throw new InvalidOperationException("Draw cannot be conducted before its scheduled draw date");
+
+            if (draw.TotalParticipationPercentage < draw.House.MinimumParticipationPercentage)
+                throw new InvalidOperationException("Draw cannot be conducted before the minimum participation threshold is met");
+
             // Get all tickets for this house
             var tickets = await _context.LotteryTickets
                 .Where(t => t.HouseId == draw.HouseId && t.Status == "Active")
@@ -117,9 +137,7 @@ namespace AmesaBackend.Admin.Services
             if (!tickets.Any())
                 throw new InvalidOperationException("No active tickets found for this draw");
 
-            // Random selection
-            var random = new Random();
-            var winningTicket = tickets[random.Next(tickets.Count)];
+            var winningTicket = tickets[RandomNumberGenerator.GetInt32(tickets.Count)];
 
             draw.WinningTicketId = winningTicket.Id;
             draw.WinningTicketNumber = winningTicket.TicketNumber;
@@ -137,6 +155,16 @@ namespace AmesaBackend.Admin.Services
             await _context.SaveChangesAsync();
 
             _logger.LogInformation("Draw conducted: {DrawId} - Winner: {TicketNumber}", drawId, winningTicket.TicketNumber);
+            await _audit.LogAsync("draw.conducted", "draw", drawId, new
+            {
+                draw.HouseId,
+                winningTicket.Id,
+                winningTicket.TicketNumber,
+                winningTicket.UserId,
+                conductedBy,
+                draw.TotalTicketsSold,
+                draw.TotalParticipationPercentage
+            });
 
             return await GetDrawByIdAsync(drawId) ?? throw new InvalidOperationException("Failed to retrieve conducted draw");
         }

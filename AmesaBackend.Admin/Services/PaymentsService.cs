@@ -1,6 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using AmesaBackend.Payment.Data;
 using AmesaBackend.Admin.DTOs;
+using AmesaBackend.Admin.Security;
+using Stripe;
+using System.Text.Json;
 
 namespace AmesaBackend.Admin.Services
 {
@@ -15,17 +18,28 @@ namespace AmesaBackend.Admin.Services
     {
         private readonly PaymentDbContext _context;
         private readonly ILogger<PaymentsService> _logger;
+        private readonly IAdminPermissionService _permissions;
+        private readonly IAdminAuditService _audit;
+        private readonly IConfiguration _configuration;
 
         public PaymentsService(
             PaymentDbContext context,
-            ILogger<PaymentsService> logger)
+            ILogger<PaymentsService> logger,
+            IAdminPermissionService permissions,
+            IAdminAuditService audit,
+            IConfiguration configuration)
         {
             _context = context;
             _logger = logger;
+            _permissions = permissions;
+            _audit = audit;
+            _configuration = configuration;
         }
 
         public async Task<PagedResult<TransactionDto>> GetTransactionsAsync(int page = 1, int pageSize = 20, Guid? userId = null, string? status = null, string? type = null)
         {
+            await _permissions.RequirePermissionAsync(AdminPermissionNames.PaymentsRead);
+
             var query = _context.Transactions.AsQueryable();
 
             if (userId.HasValue)
@@ -72,6 +86,8 @@ namespace AmesaBackend.Admin.Services
 
         public async Task<TransactionDto?> GetTransactionByIdAsync(Guid id)
         {
+            await _permissions.RequirePermissionAsync(AdminPermissionNames.PaymentsRead);
+
             var transaction = await _context.Transactions.FindAsync(id);
             if (transaction == null) return null;
 
@@ -95,6 +111,8 @@ namespace AmesaBackend.Admin.Services
 
         public async Task<bool> RefundTransactionAsync(Guid transactionId, decimal? amount = null)
         {
+            await _permissions.RequirePermissionAsync(AdminPermissionNames.PaymentsRefund);
+
             var transaction = await _context.Transactions.FindAsync(transactionId);
             if (transaction == null) return false;
 
@@ -102,6 +120,27 @@ namespace AmesaBackend.Admin.Services
                 throw new InvalidOperationException("Only completed transactions can be refunded");
 
             var refundAmount = amount ?? transaction.Amount;
+            if (refundAmount <= 0 || refundAmount > transaction.Amount)
+            {
+                throw new ArgumentOutOfRangeException(nameof(amount), $"Refund amount must be between 0.01 and {transaction.Amount}");
+            }
+
+            var alreadyRefunded = await _context.Transactions
+                .Where(t => t.ReferenceId == transaction.Id.ToString() && t.Type == "Refund" && t.Status != "Failed")
+                .SumAsync(t => (decimal?)t.Amount) ?? 0m;
+
+            if (alreadyRefunded + refundAmount > transaction.Amount)
+            {
+                throw new InvalidOperationException("Refund amount exceeds the remaining refundable transaction amount");
+            }
+
+            if (string.IsNullOrWhiteSpace(transaction.ProviderTransactionId) ||
+                !transaction.ProviderTransactionId.StartsWith("pi_", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Only Stripe payment-intent transactions can be refunded by the admin service");
+            }
+
+            var providerRefund = await CreateStripeRefundAsync(transaction.ProviderTransactionId, refundAmount, transaction.Currency);
 
             // Create refund transaction
             var refund = new AmesaBackend.Payment.Models.Transaction
@@ -111,23 +150,59 @@ namespace AmesaBackend.Admin.Services
                 Type = "Refund",
                 Amount = refundAmount,
                 Currency = transaction.Currency,
-                Status = "Pending",
+                Status = providerRefund.Status.Equals("succeeded", StringComparison.OrdinalIgnoreCase) ? "Completed" : "Pending",
                 Description = $"Refund for transaction {transaction.Id}",
                 ReferenceId = transaction.Id.ToString(),
                 PaymentMethodId = transaction.PaymentMethodId,
+                ProviderTransactionId = providerRefund.Id,
                 ProductId = transaction.ProductId,
+                ProviderResponse = JsonSerializer.Serialize(providerRefund),
+                ProcessedAt = DateTime.UtcNow,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };
 
             _context.Transactions.Add(refund);
-            transaction.Status = "Refunded";
+            transaction.Status = alreadyRefunded + refundAmount == transaction.Amount ? "Refunded" : "PartiallyRefunded";
             transaction.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
 
             _logger.LogInformation("Transaction refunded: {TransactionId} - Amount: {Amount}", transactionId, refundAmount);
+            await _audit.LogAsync("payment.refund.created", "transaction", transactionId, new
+            {
+                RefundTransactionId = refund.Id,
+                refundAmount,
+                transaction.UserId,
+                transaction.ProviderTransactionId,
+                ProviderRefundId = providerRefund.Id,
+                ProviderRefundStatus = providerRefund.Status
+            });
             return true;
+        }
+
+        private async Task<Refund> CreateStripeRefundAsync(string paymentIntentId, decimal amount, string currency)
+        {
+            var apiKey = _configuration["Stripe:ApiKey"]
+                ?? Environment.GetEnvironmentVariable("STRIPE_API_KEY")
+                ?? Environment.GetEnvironmentVariable("Stripe__ApiKey")
+                ?? throw new InvalidOperationException("Stripe API key is not configured");
+
+            StripeConfiguration.ApiKey = apiKey;
+
+            var options = new RefundCreateOptions
+            {
+                PaymentIntent = paymentIntentId,
+                Amount = (long)Math.Round(amount * 100, MidpointRounding.AwayFromZero),
+                Metadata = new Dictionary<string, string>
+                {
+                    ["Source"] = "AmesaAdmin",
+                    ["Currency"] = currency
+                }
+            };
+
+            var service = new RefundService();
+            return await service.CreateAsync(options);
         }
     }
 }

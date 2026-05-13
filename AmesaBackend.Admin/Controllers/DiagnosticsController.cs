@@ -3,28 +3,38 @@ using AmesaBackend.Admin.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 namespace AmesaBackend.Admin.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
-    [AllowAnonymous] // Allow anonymous access for diagnostics
+    [Route("api/v1/admin/diagnostics")]
+    [Authorize(Policy = "AdminOnly")]
+    [ApiExplorerSettings(IgnoreApi = true)]
     public class DiagnosticsController : ControllerBase
     {
         private readonly IServiceProvider _serviceProvider;
         private readonly ILogger<DiagnosticsController> _logger;
+        private readonly IHostEnvironment _environment;
 
         public DiagnosticsController(
             IServiceProvider serviceProvider,
-            ILogger<DiagnosticsController> logger)
+            ILogger<DiagnosticsController> logger,
+            IHostEnvironment environment)
         {
             _serviceProvider = serviceProvider;
             _logger = logger;
+            _environment = environment;
         }
 
         [HttpGet("admin-users")]
         public async Task<IActionResult> GetAdminUsers()
         {
+            if (!_environment.IsDevelopment())
+            {
+                return NotFound();
+            }
+
             try
             {
                 // Try to get AdminDbContext from service provider (may be null if not configured)
@@ -40,18 +50,13 @@ namespace AmesaBackend.Admin.Controllers
                     });
                 }
 
-                // Get all admin users (safe - no sensitive data)
+                // Return limited diagnostics only; do not expose password hash metadata.
                 var users = await adminDbContext.AdminUsers
                     .Select(u => new
                     {
                         email = u.Email,
                         username = u.Username,
-                        isActive = u.IsActive,
-                        hasPasswordHash = !string.IsNullOrEmpty(u.PasswordHash),
-                        hashLength = u.PasswordHash != null ? u.PasswordHash.Length : 0,
-                        hashPrefix = u.PasswordHash != null && u.PasswordHash.Length > 10 
-                            ? u.PasswordHash.Substring(0, 10) 
-                            : null
+                        isActive = u.IsActive
                     })
                     .ToListAsync();
 
@@ -68,8 +73,7 @@ namespace AmesaBackend.Admin.Controllers
                 return StatusCode(500, new
                 {
                     success = false,
-                    error = ex.Message,
-                    errorType = ex.GetType().Name
+                    error = "Diagnostics query failed"
                 });
             }
         }

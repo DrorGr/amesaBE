@@ -1,6 +1,7 @@
 @inherits LayoutComponentBase
 @using AmesaBackend.Admin.Components
 @inject IAdminAuthService AuthService
+@inject IAdminPermissionService PermissionService
 @inject NavigationManager Navigation
 
 @{
@@ -8,26 +9,27 @@
     var isLoginPage = currentPath.Equals("login", StringComparison.OrdinalIgnoreCase) || 
                       currentPath.Equals("admin/login", StringComparison.OrdinalIgnoreCase);
     
-    // TEMPORARILY DISABLED: Authentication check disabled for debugging
-    // TODO: Re-enable authentication check after debugging login issues
-    bool isAuthenticated = true; // Force to true for debugging
-    
-    /*
     // Safely check authentication - never throw exceptions during render
     bool isAuthenticated = false;
-    try
+    if (!isLoginPage)
     {
-        isAuthenticated = AuthService.IsAuthenticated();
+        try
+        {
+            isAuthenticated = AuthService.IsAuthenticated();
+        }
+        catch
+        {
+            // If authentication check fails, assume not authenticated
+            isAuthenticated = false;
+        }
     }
-    catch
-    {
-        // If authentication check fails, assume not authenticated
-        isAuthenticated = false;
-    }
-    */
 }
 
-@if (!isAuthenticated && !isLoginPage)
+@if (isLoginPage)
+{
+    @Body
+}
+else if (!isAuthenticated)
 {
     <div class="container mt-5">
         <div class="row justify-content-center">
@@ -78,47 +80,76 @@ else
                     </div>
                     <hr />
                     <ul class="nav flex-column">
-                        <li class="nav-item">
-                            <a class="nav-link" href="">
-                                <i class="fas fa-tachometer-alt me-2"></i> Dashboard
-                            </a>
-                        </li>
+                        @if (Can(AdminPermissionNames.DashboardRead))
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link" href="">
+                                    <i class="fas fa-tachometer-alt me-2"></i> Dashboard
+                                </a>
+                            </li>
+                        }
                     </ul>
                     <hr />
                     <h6 class="sidebar-heading px-3 mt-4 mb-1 text-muted">
                         <span>Management</span>
                     </h6>
                     <ul class="nav flex-column">
-                        <li class="nav-item">
-                            <a class="nav-link" href="houses">
-                                <i class="fas fa-home me-2"></i> Houses
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="users">
-                                <i class="fas fa-users me-2"></i> Users
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="tickets">
-                                <i class="fas fa-ticket-alt me-2"></i> Tickets
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="draws">
-                                <i class="fas fa-dice me-2"></i> Draws
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="payments">
-                                <i class="fas fa-euro-sign me-2"></i> Payments
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="translations">
-                                <i class="fas fa-language me-2"></i> Translations
-                            </a>
-                        </li>
+                        @if (Can(AdminPermissionNames.HousesRead))
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link" href="houses">
+                                    <i class="fas fa-home me-2"></i> Houses
+                                </a>
+                            </li>
+                        }
+                        @if (Can(AdminPermissionNames.UsersRead))
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link" href="users">
+                                    <i class="fas fa-users me-2"></i> Users
+                                </a>
+                            </li>
+                        }
+                        @if (Can(AdminPermissionNames.TicketsRead))
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link" href="tickets">
+                                    <i class="fas fa-ticket-alt me-2"></i> Tickets
+                                </a>
+                            </li>
+                        }
+                        @if (Can(AdminPermissionNames.DrawsRead))
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link" href="draws">
+                                    <i class="fas fa-dice me-2"></i> Draws
+                                </a>
+                            </li>
+                        }
+                        @if (Can(AdminPermissionNames.PaymentsRead))
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link" href="payments">
+                                    <i class="fas fa-euro-sign me-2"></i> Payments
+                                </a>
+                            </li>
+                        }
+                        @if (Can(AdminPermissionNames.TranslationsRead))
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link" href="translations">
+                                    <i class="fas fa-language me-2"></i> Translations
+                                </a>
+                            </li>
+                        }
+                        @if (Can(AdminPermissionNames.AuditRead))
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link" href="audit">
+                                    <i class="fas fa-clipboard-list me-2"></i> Audit Logs
+                                </a>
+                            </li>
+                        }
                     </ul>
                     <hr />
                     <ul class="nav flex-column">
@@ -135,4 +166,26 @@ else
             </main>
         </div>
     </div>
+}
+
+@code {
+    private HashSet<string> permissions = new(StringComparer.OrdinalIgnoreCase);
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            if (AuthService.IsAuthenticated())
+            {
+                permissions = (await PermissionService.GetCurrentPermissionsAsync())
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            }
+        }
+        catch
+        {
+            permissions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
+    private bool Can(string permission) => permissions.Contains(permission);
 }

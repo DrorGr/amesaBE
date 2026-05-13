@@ -1,5 +1,6 @@
 @page "/"
 @page "/dashboard"
+@attribute [Authorize(Policy = AdminPermissionNames.DashboardRead)]
 @inherits AuthorizedPageBase
 @using AmesaBackend.Admin.Models
 @inject IAdminDatabaseService DatabaseService

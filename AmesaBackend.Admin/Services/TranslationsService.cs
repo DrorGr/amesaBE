@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using AmesaBackend.Content.Data;
 using AmesaBackend.Admin.DTOs;
+using AmesaBackend.Admin.Security;
 
 namespace AmesaBackend.Admin.Services
 {
@@ -19,17 +20,25 @@ namespace AmesaBackend.Admin.Services
     {
         private readonly ContentDbContext _context;
         private readonly ILogger<TranslationsService> _logger;
+        private readonly IAdminPermissionService _permissions;
+        private readonly IAdminAuditService _audit;
 
         public TranslationsService(
             ContentDbContext context,
-            ILogger<TranslationsService> logger)
+            ILogger<TranslationsService> logger,
+            IAdminPermissionService permissions,
+            IAdminAuditService audit)
         {
             _context = context;
             _logger = logger;
+            _permissions = permissions;
+            _audit = audit;
         }
 
         public async Task<PagedResult<TranslationDto>> GetTranslationsAsync(int page = 1, int pageSize = 50, string? languageCode = null, string? category = null, string? search = null)
         {
+            await _permissions.RequirePermissionAsync(AdminPermissionNames.TranslationsRead);
+
             var query = _context.Translations.AsQueryable();
 
             if (!string.IsNullOrWhiteSpace(languageCode))
@@ -78,6 +87,8 @@ namespace AmesaBackend.Admin.Services
 
         public async Task<TranslationDto?> GetTranslationAsync(string key, string languageCode)
         {
+            await _permissions.RequirePermissionAsync(AdminPermissionNames.TranslationsRead);
+
             var translation = await _context.Translations
                 .FirstOrDefaultAsync(t => t.Key == key && t.LanguageCode == languageCode);
 
@@ -96,6 +107,8 @@ namespace AmesaBackend.Admin.Services
 
         public async Task<TranslationDto> CreateTranslationAsync(CreateTranslationRequest request)
         {
+            await _permissions.RequirePermissionAsync(AdminPermissionNames.TranslationsWrite);
+
             var translation = new AmesaBackend.Content.Models.Translation
             {
                 Id = Guid.NewGuid(),
@@ -111,6 +124,7 @@ namespace AmesaBackend.Admin.Services
             await _context.SaveChangesAsync();
 
             _logger.LogInformation("Translation created: {Key} - {LanguageCode}", translation.Key, translation.LanguageCode);
+            await _audit.LogAsync("translation.created", "translation", translation.Id, new { translation.Key, translation.LanguageCode, translation.Category });
 
             return await GetTranslationAsync(translation.Key, translation.LanguageCode) 
                 ?? throw new InvalidOperationException("Failed to retrieve created translation");
@@ -118,6 +132,8 @@ namespace AmesaBackend.Admin.Services
 
         public async Task<TranslationDto> UpdateTranslationAsync(string key, string languageCode, UpdateTranslationRequest request)
         {
+            await _permissions.RequirePermissionAsync(AdminPermissionNames.TranslationsWrite);
+
             var translation = await _context.Translations
                 .FirstOrDefaultAsync(t => t.Key == key && t.LanguageCode == languageCode);
 
@@ -133,6 +149,7 @@ namespace AmesaBackend.Admin.Services
             await _context.SaveChangesAsync();
 
             _logger.LogInformation("Translation updated: {Key} - {LanguageCode}", translation.Key, translation.LanguageCode);
+            await _audit.LogAsync("translation.updated", "translation", translation.Id, new { translation.Key, translation.LanguageCode, translation.Category });
 
             return await GetTranslationAsync(translation.Key, translation.LanguageCode) 
                 ?? throw new InvalidOperationException("Failed to retrieve updated translation");
@@ -140,6 +157,8 @@ namespace AmesaBackend.Admin.Services
 
         public async Task<bool> DeleteTranslationAsync(string key, string languageCode)
         {
+            await _permissions.RequirePermissionAsync(AdminPermissionNames.TranslationsWrite);
+
             var translation = await _context.Translations
                 .FirstOrDefaultAsync(t => t.Key == key && t.LanguageCode == languageCode);
 
@@ -149,11 +168,14 @@ namespace AmesaBackend.Admin.Services
             await _context.SaveChangesAsync();
 
             _logger.LogInformation("Translation deleted: {Key} - {LanguageCode}", key, languageCode);
+            await _audit.LogAsync("translation.deleted", "translation", translation.Id, new { key, languageCode, translation.Category });
             return true;
         }
 
         public async Task<List<string>> GetLanguagesAsync()
         {
+            await _permissions.RequirePermissionAsync(AdminPermissionNames.TranslationsRead);
+
             return await _context.Translations
                 .Select(t => t.LanguageCode)
                 .Distinct()
@@ -163,6 +185,8 @@ namespace AmesaBackend.Admin.Services
 
         public async Task<List<string>> GetCategoriesAsync()
         {
+            await _permissions.RequirePermissionAsync(AdminPermissionNames.TranslationsRead);
+
             return await _context.Translations
                 .Select(t => t.Category ?? string.Empty)
                 .Where(c => !string.IsNullOrEmpty(c))

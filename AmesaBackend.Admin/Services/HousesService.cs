@@ -3,6 +3,7 @@ using AmesaBackend.Lottery.Data;
 using AmesaBackend.Lottery.Models;
 using AmesaBackend.Admin.Models;
 using AmesaBackend.Admin.DTOs;
+using AmesaBackend.Admin.Security;
 
 namespace AmesaBackend.Admin.Services
 {
@@ -22,19 +23,27 @@ namespace AmesaBackend.Admin.Services
         private readonly LotteryDbContext _context;
         private readonly ILogger<HousesService> _logger;
         private readonly IRealTimeNotificationService? _notificationService;
+        private readonly IAdminPermissionService _permissions;
+        private readonly IAdminAuditService _audit;
 
         public HousesService(
             LotteryDbContext context,
             ILogger<HousesService> logger,
+            IAdminPermissionService permissions,
+            IAdminAuditService audit,
             IRealTimeNotificationService? notificationService = null)
         {
             _context = context;
             _logger = logger;
+            _permissions = permissions;
+            _audit = audit;
             _notificationService = notificationService;
         }
 
         public async Task<PagedResult<HouseDto>> GetHousesAsync(int page = 1, int pageSize = 20, string? search = null, string? status = null)
         {
+            await _permissions.RequirePermissionAsync(AdminPermissionNames.HousesRead);
+
             var query = _context.Houses.AsQueryable();
 
             if (!string.IsNullOrWhiteSpace(search))
@@ -95,6 +104,8 @@ namespace AmesaBackend.Admin.Services
 
         public async Task<HouseDto?> GetHouseByIdAsync(Guid id)
         {
+            await _permissions.RequirePermissionAsync(AdminPermissionNames.HousesRead);
+
             var house = await _context.Houses
                 .Include(h => h.Images)
                 .FirstOrDefaultAsync(h => h.Id == id);
@@ -140,9 +151,11 @@ namespace AmesaBackend.Admin.Services
 
         public async Task<HouseDto> CreateHouseAsync(CreateHouseRequest request)
         {
+            await _permissions.RequirePermissionAsync(AdminPermissionNames.HousesWrite);
+
             var house = new House
             {
-                Id = Guid.NewGuid(),
+                Id = request.Id ?? Guid.NewGuid(),
                 Title = request.Title,
                 Description = request.Description,
                 Price = request.Price,
@@ -167,10 +180,13 @@ namespace AmesaBackend.Admin.Services
                 UpdatedAt = DateTime.UtcNow
             };
 
+            AddHouseImages(house, request.Images);
+
             _context.Houses.Add(house);
             await _context.SaveChangesAsync();
 
             _logger.LogInformation("House created: {HouseId} - {Title}", house.Id, house.Title);
+            await _audit.LogAsync("house.created", "house", house.Id, new { house.Title, house.Status });
 
             // Notify real-time clients
             if (_notificationService != null)
@@ -183,7 +199,11 @@ namespace AmesaBackend.Admin.Services
 
         public async Task<HouseDto> UpdateHouseAsync(Guid id, UpdateHouseRequest request)
         {
-            var house = await _context.Houses.FindAsync(id);
+            await _permissions.RequirePermissionAsync(AdminPermissionNames.HousesWrite);
+
+            var house = await _context.Houses
+                .Include(h => h.Images)
+                .FirstOrDefaultAsync(h => h.Id == id);
             if (house == null)
                 throw new KeyNotFoundException($"House with ID {id} not found");
 
@@ -209,9 +229,12 @@ namespace AmesaBackend.Admin.Services
             house.MaxParticipants = request.MaxParticipants ?? house.MaxParticipants;
             house.UpdatedAt = DateTime.UtcNow;
 
+            AddHouseImages(house, request.Images);
+
             await _context.SaveChangesAsync();
 
             _logger.LogInformation("House updated: {HouseId} - {Title}", house.Id, house.Title);
+            await _audit.LogAsync("house.updated", "house", house.Id, new { house.Title, house.Status });
 
             // Notify real-time clients
             if (_notificationService != null)
@@ -222,8 +245,46 @@ namespace AmesaBackend.Admin.Services
             return await GetHouseByIdAsync(house.Id) ?? throw new InvalidOperationException("Failed to retrieve updated house");
         }
 
+        private static void AddHouseImages(House house, IEnumerable<ImageInfo>? images)
+        {
+            if (images == null)
+            {
+                return;
+            }
+
+            var existingUrls = house.Images
+                .Select(i => i.ImageUrl)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            var nextDisplayOrder = house.Images.Any()
+                ? house.Images.Max(i => i.DisplayOrder) + 1
+                : 0;
+
+            foreach (var image in images.Where(i => !string.IsNullOrWhiteSpace(i.Url)))
+            {
+                if (!existingUrls.Add(image.Url))
+                {
+                    continue;
+                }
+
+                house.Images.Add(new HouseImage
+                {
+                    Id = Guid.NewGuid(),
+                    HouseId = house.Id,
+                    ImageUrl = image.Url,
+                    AltText = image.AltText,
+                    IsPrimary = image.IsPrimary && !house.Images.Any(i => i.IsPrimary),
+                    DisplayOrder = image.DisplayOrder >= 0 ? image.DisplayOrder : nextDisplayOrder++,
+                    MediaType = "Image",
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+        }
+
         public async Task<bool> DeleteHouseAsync(Guid id)
         {
+            await _permissions.RequirePermissionAsync(AdminPermissionNames.HousesDelete);
+
             var house = await _context.Houses.FindAsync(id);
             if (house == null) return false;
 
@@ -232,6 +293,7 @@ namespace AmesaBackend.Admin.Services
             await _context.SaveChangesAsync();
 
             _logger.LogInformation("House deleted: {HouseId} - {Title}", house.Id, house.Title);
+            await _audit.LogAsync("house.deleted", "house", house.Id, new { house.Title, house.Status });
             
             // Notify real-time clients
             if (_notificationService != null)
@@ -244,24 +306,30 @@ namespace AmesaBackend.Admin.Services
 
         public async Task<bool> ActivateHouseAsync(Guid id)
         {
+            await _permissions.RequirePermissionAsync(AdminPermissionNames.HousesPublish);
+
             var house = await _context.Houses.FindAsync(id);
             if (house == null) return false;
 
             house.Status = "Active";
             house.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
+            await _audit.LogAsync("house.activated", "house", house.Id, new { house.Title, house.Status });
 
             return true;
         }
 
         public async Task<bool> DeactivateHouseAsync(Guid id)
         {
+            await _permissions.RequirePermissionAsync(AdminPermissionNames.HousesPublish);
+
             var house = await _context.Houses.FindAsync(id);
             if (house == null) return false;
 
             house.Status = "Inactive";
             house.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
+            await _audit.LogAsync("house.deactivated", "house", house.Id, new { house.Title, house.Status });
 
             return true;
         }

@@ -444,12 +444,35 @@ namespace AmesaBackend.Admin.Services
                 try
                 {
                     var sessionEmail = httpContext.Session.GetString("AdminEmail");
+                    var sessionToken = httpContext.Session.GetString("AdminSessionToken");
                     if (!string.IsNullOrEmpty(sessionEmail))
                     {
                         ClearFailedAttempts(sessionEmail.ToLower());
                     }
+                    if (!string.IsNullOrWhiteSpace(sessionToken) && _adminDbContext != null)
+                    {
+                        try
+                        {
+                            var session = await _adminDbContext.AdminSessions
+                                .FirstOrDefaultAsync(s => s.SessionToken == sessionToken && s.RevokedAt == null);
+                            if (session != null)
+                            {
+                                session.RevokedAt = DateTime.UtcNow;
+                                session.LastSeenAt = DateTime.UtcNow;
+                                await _adminDbContext.SaveChangesAsync();
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to revoke admin session during sign out");
+                        }
+                    }
                     httpContext.Session.Remove("AdminEmail");
                     httpContext.Session.Remove("AdminLoginTime");
+                    httpContext.Session.Remove("AdminSessionToken");
+                    httpContext.Session.Remove("PendingAdminEmail");
+                    httpContext.Session.Remove("PendingAdminUserId");
+                    httpContext.Session.Remove("PendingAdminLoginTime");
                     await httpContext.Session.CommitAsync();
                 }
                 catch (Exception ex)

@@ -1,5 +1,6 @@
 using AmesaBackend.Auth.Services;
 using AmesaBackend.Auth.Services.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Components;
 using System;
 
@@ -9,6 +10,7 @@ namespace AmesaBackend.Admin.Pages
     /// Base class for pages that require authentication.
     /// Redirects to login page if user is not authenticated.
     /// </summary>
+    [Authorize(Policy = "AdminOnly")]
     public class AuthorizedPageBase : ComponentBase
     {
         [Inject]
@@ -19,27 +21,21 @@ namespace AmesaBackend.Admin.Pages
 
         protected override void OnInitialized()
         {
-            // TEMPORARILY DISABLED: Route guard disabled for debugging
-            // TODO: Re-enable authentication check after debugging login issues
-            /*
             // SECURITY: Check authentication before rendering any protected content
-            // CRITICAL: Use regular navigation (not forceLoad) to maintain SignalR connection
-            // forceLoad: true creates new HTTP request, breaking authentication state
             try
             {
                 if (!AuthService.IsAuthenticated())
                 {
-                    Navigation.NavigateTo("/login");
+                    Navigation.NavigateTo("login");
                     return;
                 }
             }
             catch (Exception)
             {
                 // If authentication check fails, redirect to login
-                Navigation.NavigateTo("/login");
+                Navigation.NavigateTo("login");
                 return;
             }
-            */
 
             base.OnInitialized();
         }

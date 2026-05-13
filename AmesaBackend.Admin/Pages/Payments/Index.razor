@@ -1,4 +1,5 @@
 @page "/payments"
+@attribute [Authorize(Policy = AdminPermissionNames.PaymentsRead)]
 @inherits AuthorizedPageBase
 @using AmesaBackend.Admin.Services
 @using AmesaBackend.Admin.DTOs
@@ -120,9 +121,13 @@
                                     <td>
                                         @if (transaction.Status == "Completed" && transaction.Type == "Payment")
                                         {
-                                            <button class="btn btn-sm btn-warning" @onclick="() => ShowRefundModal(transaction)" title="Refund">
-                                                <i class="fas fa-undo"></i> Refund
-                                            </button>
+                                            <AuthorizeView Policy="@AdminPermissionNames.PaymentsRefund">
+                                                <Authorized>
+                                                    <button class="btn btn-sm btn-warning" @onclick="() => ShowRefundModal(transaction)" title="Refund">
+                                                        <i class="fas fa-undo"></i> Refund
+                                                    </button>
+                                                </Authorized>
+                                            </AuthorizeView>
                                         }
                                         else
                                         {

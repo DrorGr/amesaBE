@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using AmesaBackend.Admin.Authentication;
+using AmesaBackend.Admin.Security;
 using AmesaBackend.Admin.Services;
 using AmesaBackend.Admin.Services.Interfaces;
 using AmesaBackend.Auth.Services.Interfaces;
@@ -10,6 +12,8 @@ using Amazon.S3;
 using Amazon.CloudWatchLogs;
 using Amazon.CloudWatch;
 using Serilog;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Http;
 
 namespace AmesaBackend.Admin.Configuration;
@@ -25,6 +29,29 @@ public static class ServiceConfiguration
         services.AddRazorPages();
         services.AddServerSideBlazor();
         services.AddControllers(); // For API endpoints (diagnostics)
+        services.AddCascadingAuthenticationState();
+        services.AddAuthorizationCore();
+
+        services.AddAuthentication(options =>
+        {
+            options.DefaultAuthenticateScheme = AdminSessionAuthenticationHandler.SchemeName;
+            options.DefaultChallengeScheme = AdminSessionAuthenticationHandler.SchemeName;
+        })
+        .AddScheme<AuthenticationSchemeOptions, AdminSessionAuthenticationHandler>(
+            AdminSessionAuthenticationHandler.SchemeName,
+            _ => { });
+
+        services.AddAuthorization(options =>
+        {
+            options.AddPolicy("AdminOnly", policy =>
+            {
+                policy.AuthenticationSchemes.Add(AdminSessionAuthenticationHandler.SchemeName);
+                policy.RequireAuthenticatedUser();
+                policy.RequireRole("Admin");
+            });
+
+            AdminAuthorizationPolicies.AddPermissionPolicies(options);
+        });
 
         // Add HttpContextAccessor for session access in services
         services.AddHttpContextAccessor();
@@ -122,6 +149,11 @@ public static class ServiceConfiguration
 
         // Add Admin Services
         services.AddScoped<IAdminAuthService, AdminAuthService>();
+        services.AddScoped<IAdminPermissionService, AdminPermissionService>();
+        services.AddScoped<IAdminAuditService, AdminAuditService>();
+        services.AddScoped<IAdminAuditQueryService, AdminAuditQueryService>();
+        services.AddScoped<IAdminSignInService, AdminSignInService>();
+        services.AddScoped<AuthenticationStateProvider, AdminAuthenticationStateProvider>();
         services.AddScoped<IAdminDatabaseService, AdminDatabaseService>();
         services.AddScoped<IDashboardService, DashboardService>();
         services.AddScoped<IHousesService, HousesService>();

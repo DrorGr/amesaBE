@@ -7,6 +7,10 @@
     const maxRetries = 10; // Maximum 10 retries (1 second total)
 
     function initializeSignalR() {
+        if (window.location.pathname.toLowerCase().endsWith('/login')) {
+            return;
+        }
+
         // Prevent multiple simultaneous initializations
         if (isInitializing || isInitialized) {
             return;

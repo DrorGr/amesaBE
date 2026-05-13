@@ -2,25 +2,38 @@ using AmesaBackend.Auth.Services;
 using AmesaBackend.Auth.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Hosting;
 
 namespace AmesaBackend.Admin.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("api/v1/admin/test-auth")]
+    [Authorize(Policy = "AdminOnly")]
+    [ApiExplorerSettings(IgnoreApi = true)]
     public class TestAuthController : ControllerBase
     {
         private readonly IAdminAuthService _authService;
         private readonly ILogger<TestAuthController> _logger;
+        private readonly IHostEnvironment _environment;
 
-        public TestAuthController(IAdminAuthService authService, ILogger<TestAuthController> logger)
+        public TestAuthController(
+            IAdminAuthService authService,
+            ILogger<TestAuthController> logger,
+            IHostEnvironment environment)
         {
             _authService = authService;
             _logger = logger;
+            _environment = environment;
         }
 
         [HttpPost("login")]
         public async Task<IActionResult> TestLogin([FromBody] LoginRequest request)
         {
+            if (!_environment.IsDevelopment())
+            {
+                return NotFound();
+            }
+
             try
             {
                 _logger.LogWarning("TestAuthController: Login attempt for email: {Email}", request.Email);
@@ -59,8 +72,7 @@ namespace AmesaBackend.Admin.Controllers
                 return StatusCode(500, new
                 {
                     success = false,
-                    message = "Internal server error",
-                    error = ex.Message
+                    message = "Internal server error"
                 });
             }
         }
@@ -68,6 +80,11 @@ namespace AmesaBackend.Admin.Controllers
         [HttpGet("check")]
         public IActionResult CheckAuth()
         {
+            if (!_environment.IsDevelopment())
+            {
+                return NotFound();
+            }
+
             try
             {
                 var isAuthenticated = _authService.IsAuthenticated();
@@ -85,8 +102,7 @@ namespace AmesaBackend.Admin.Controllers
                 return StatusCode(500, new
                 {
                     success = false,
-                    message = "Internal server error",
-                    error = ex.Message
+                    message = "Internal server error"
                 });
             }
         }

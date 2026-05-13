@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using AmesaBackend.Auth.Data;
 using AmesaBackend.Auth.Models;
 using AmesaBackend.Admin.DTOs;
+using AmesaBackend.Admin.Security;
 
 namespace AmesaBackend.Admin.Services
 {
@@ -19,19 +20,27 @@ namespace AmesaBackend.Admin.Services
         private readonly AuthDbContext _context;
         private readonly ILogger<UsersService> _logger;
         private readonly IRealTimeNotificationService? _notificationService;
+        private readonly IAdminPermissionService _permissions;
+        private readonly IAdminAuditService _audit;
 
         public UsersService(
             AuthDbContext context,
             ILogger<UsersService> logger,
+            IAdminPermissionService permissions,
+            IAdminAuditService audit,
             IRealTimeNotificationService? notificationService = null)
         {
             _context = context;
             _logger = logger;
+            _permissions = permissions;
+            _audit = audit;
             _notificationService = notificationService;
         }
 
         public async Task<PagedResult<UserDto>> GetUsersAsync(int page = 1, int pageSize = 20, string? search = null, UserStatus? status = null)
         {
+            await _permissions.RequirePermissionAsync(AdminPermissionNames.UsersRead);
+
             var query = _context.Users.AsQueryable();
 
             if (!string.IsNullOrWhiteSpace(search))
@@ -84,6 +93,8 @@ namespace AmesaBackend.Admin.Services
 
         public async Task<UserDto?> GetUserByIdAsync(Guid id)
         {
+            await _permissions.RequirePermissionAsync(AdminPermissionNames.UsersRead);
+
             var user = await _context.Users.FindAsync(id);
             if (user == null) return null;
 
@@ -108,6 +119,8 @@ namespace AmesaBackend.Admin.Services
 
         public async Task<UserDto> UpdateUserAsync(Guid id, UpdateUserRequest request)
         {
+            await _permissions.RequirePermissionAsync(AdminPermissionNames.UsersWrite);
+
             var user = await _context.Users.FindAsync(id);
             if (user == null)
                 throw new KeyNotFoundException($"User with ID {id} not found");
@@ -125,6 +138,7 @@ namespace AmesaBackend.Admin.Services
             await _context.SaveChangesAsync();
 
             _logger.LogInformation("User updated: {UserId} - {Email}", user.Id, user.Email);
+            await _audit.LogAsync("user.updated", "user", user.Id, new { user.Email, user.Status });
 
             // Notify real-time clients
             if (_notificationService != null)
@@ -137,6 +151,8 @@ namespace AmesaBackend.Admin.Services
 
         public async Task<bool> SuspendUserAsync(Guid id)
         {
+            await _permissions.RequirePermissionAsync(AdminPermissionNames.UsersSuspend);
+
             var user = await _context.Users.FindAsync(id);
             if (user == null) return false;
 
@@ -145,11 +161,14 @@ namespace AmesaBackend.Admin.Services
             await _context.SaveChangesAsync();
 
             _logger.LogInformation("User suspended: {UserId} - {Email}", user.Id, user.Email);
+            await _audit.LogAsync("user.suspended", "user", user.Id, new { user.Email, user.Status });
             return true;
         }
 
         public async Task<bool> ActivateUserAsync(Guid id)
         {
+            await _permissions.RequirePermissionAsync(AdminPermissionNames.UsersSuspend);
+
             var user = await _context.Users.FindAsync(id);
             if (user == null) return false;
 
@@ -158,6 +177,7 @@ namespace AmesaBackend.Admin.Services
             await _context.SaveChangesAsync();
 
             _logger.LogInformation("User activated: {UserId} - {Email}", user.Id, user.Email);
+            await _audit.LogAsync("user.activated", "user", user.Id, new { user.Email, user.Status });
             return true;
         }
     }

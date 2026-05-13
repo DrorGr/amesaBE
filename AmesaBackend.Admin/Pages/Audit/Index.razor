@@ -1,0 +1,161 @@
+@page "/audit"
+@attribute [Authorize(Policy = AdminPermissionNames.AuditRead)]
+@inherits AuthorizedPageBase
+@using AmesaBackend.Admin.DTOs
+@inject IAdminAuditQueryService AuditQueryService
+
+<PageTitle>Audit Logs - Amesa Admin</PageTitle>
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h1 class="display-5">
+                <i class="fas fa-clipboard-list"></i> Audit Logs
+            </h1>
+            <p class="text-muted">Review admin sign-ins, permission-sensitive actions, and mutations.</p>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">Action</label>
+                    <input class="form-control" @bind="actionFilter" @bind:event="oninput" placeholder="payment.refund.created" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Entity Type</label>
+                    <input class="form-control" @bind="entityTypeFilter" @bind:event="oninput" placeholder="house, user, draw" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Page Size</label>
+                    <select class="form-select" @bind="pageSize">
+                        <option value="25">25</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button class="btn btn-secondary w-100" @onclick="LoadAuditLogs">
+                        <i class="fas fa-search"></i> Search
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+    else if (logs?.Items?.Any() == true)
+    {
+        <div class="card">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Action</th>
+                                <th>Entity</th>
+                                <th>Admin</th>
+                                <th>Details</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var log in logs.Items)
+                            {
+                                <tr>
+                                    <td>@log.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                                    <td><code>@log.Action</code></td>
+                                    <td>
+                                        <div>@log.EntityType</div>
+                                        <small class="text-muted">@log.EntityId</small>
+                                    </td>
+                                    <td>
+                                        @if (!string.IsNullOrWhiteSpace(log.AdminEmail))
+                                        {
+                                            <div>@log.AdminEmail</div>
+                                        }
+                                        <small class="text-muted">@log.AdminUserId</small>
+                                    </td>
+                                    <td>
+                                        <details>
+                                            <summary>View</summary>
+                                            <pre class="small bg-light p-2 rounded mt-2">@log.ActionDetails</pre>
+                                        </details>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                @if (logs.TotalPages > 1)
+                {
+                    <nav>
+                        <ul class="pagination justify-content-center">
+                            <li class="page-item @(currentPage == 1 ? "disabled" : "")">
+                                <button class="page-link" @onclick="() => ChangePage(currentPage - 1)">Previous</button>
+                            </li>
+                            <li class="page-item disabled">
+                                <span class="page-link">Page @currentPage of @logs.TotalPages</span>
+                            </li>
+                            <li class="page-item @(currentPage == logs.TotalPages ? "disabled" : "")">
+                                <button class="page-link" @onclick="() => ChangePage(currentPage + 1)">Next</button>
+                            </li>
+                        </ul>
+                    </nav>
+                }
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle"></i> No audit logs found.
+        </div>
+    }
+</div>
+
+@code {
+    private PagedResult<AuditLogDto>? logs;
+    private bool isLoading = true;
+    private int currentPage = 1;
+    private int pageSize = 50;
+    private string? actionFilter;
+    private string? entityTypeFilter;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAuditLogs();
+    }
+
+    private async Task LoadAuditLogs()
+    {
+        isLoading = true;
+        try
+        {
+            logs = await AuditQueryService.GetAuditLogsAsync(
+                currentPage,
+                pageSize,
+                actionFilter,
+                entityTypeFilter);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task ChangePage(int page)
+    {
+        currentPage = page;
+        await LoadAuditLogs();
+    }
+}

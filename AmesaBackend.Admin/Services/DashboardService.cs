@@ -3,6 +3,7 @@ using AmesaBackend.Auth.Data;
 using AmesaBackend.Lottery.Data;
 using AmesaBackend.Payment.Data;
 using AmesaBackend.Admin.Models;
+using AmesaBackend.Admin.Security;
 
 namespace AmesaBackend.Admin.Services
 {
@@ -17,23 +18,28 @@ namespace AmesaBackend.Admin.Services
         private readonly LotteryDbContext _lotteryContext;
         private readonly PaymentDbContext _paymentContext;
         private readonly ILogger<DashboardService> _logger;
+        private readonly IAdminPermissionService _permissions;
 
         public DashboardService(
             AuthDbContext authContext,
             LotteryDbContext lotteryContext,
             PaymentDbContext paymentContext,
-            ILogger<DashboardService> logger)
+            ILogger<DashboardService> logger,
+            IAdminPermissionService permissions)
         {
             _authContext = authContext;
             _lotteryContext = lotteryContext;
             _paymentContext = paymentContext;
             _logger = logger;
+            _permissions = permissions;
         }
 
         public async Task<DashboardStats> GetDashboardStatsAsync()
         {
             try
             {
+                await _permissions.RequirePermissionAsync(AdminPermissionNames.DashboardRead);
+
                 var stats = new DashboardStats();
 
                 // User statistics
