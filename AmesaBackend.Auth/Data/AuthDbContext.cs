@@ -33,6 +33,11 @@ namespace AmesaBackend.Auth.Data
         {
             base.OnModelCreating(modelBuilder);
 
+            // Auth tables live in the amesa_auth schema in production. Lottery also
+            // injects this context for purchase eligibility checks, so the schema must
+            // not depend on the connection's search_path.
+            modelBuilder.HasDefaultSchema("amesa_auth");
+
             // Configure User entity
             modelBuilder.Entity<User>(entity =>
             {

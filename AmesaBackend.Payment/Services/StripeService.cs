@@ -70,6 +70,189 @@ public class StripeService : IStripeService
         StripeConfiguration.ApiKey = _apiKeyLazy.Value;
     }
 
+    public async Task<CheckoutSessionResponse> CreateCheckoutSessionAsync(CreateCheckoutSessionRequest request, Guid userId)
+    {
+        try
+        {
+            EnsureStripeApiKeyConfigured();
+
+            // Validate payment method ownership if provided for saved-method flows.
+            if (request.PaymentMethodId.HasValue)
+            {
+                var paymentMethod = await _context.UserPaymentMethods
+                    .FirstOrDefaultAsync(pm => pm.Id == request.PaymentMethodId.Value && pm.UserId == userId && pm.IsActive);
+
+                if (paymentMethod == null)
+                {
+                    throw new UnauthorizedAccessException("Payment method not found or does not belong to user");
+                }
+
+                if (paymentMethod.CardExpYear.HasValue && paymentMethod.CardExpMonth.HasValue)
+                {
+                    var expirationDate = new DateTime(paymentMethod.CardExpYear.Value, paymentMethod.CardExpMonth.Value, 1);
+                    if (expirationDate < DateTime.UtcNow)
+                    {
+                        throw new InvalidOperationException("Payment method has expired");
+                    }
+                }
+            }
+
+            decimal validatedAmount = request.Amount;
+            AmesaBackend.Payment.Models.Product? product = null;
+            if (request.ProductId.HasValue)
+            {
+                product = await _context.Products.FindAsync(request.ProductId.Value);
+                if (product == null)
+                {
+                    throw new KeyNotFoundException("Product not found");
+                }
+
+                var calculatedPrice = product.BasePrice * (request.Quantity ?? 1);
+                if (Math.Abs(request.Amount - calculatedPrice) > 0.01m)
+                {
+                    throw new InvalidOperationException("Amount mismatch - server calculated price differs from client");
+                }
+
+                validatedAmount = calculatedPrice;
+            }
+
+            var minimumAmount = GetMinimumAmountForCurrency(request.Currency);
+            if (validatedAmount < minimumAmount || validatedAmount > 10000)
+            {
+                throw new ArgumentOutOfRangeException(nameof(request.Amount),
+                    $"Amount must be between {minimumAmount} and 10000 for currency {request.Currency.ToUpper()}");
+            }
+
+            var quantity = request.Quantity ?? 1;
+            var unitAmount = (long)Math.Round((validatedAmount / Math.Max(quantity, 1)) * 100m, MidpointRounding.AwayFromZero);
+            var metadata = new Dictionary<string, string>
+            {
+                ["UserId"] = userId.ToString(),
+                ["ProductId"] = request.ProductId?.ToString() ?? "",
+                ["Quantity"] = quantity.ToString()
+            };
+
+            if (request.Metadata != null)
+            {
+                foreach (var meta in request.Metadata)
+                {
+                    metadata[meta.Key] = meta.Value;
+                }
+            }
+
+            var options = new Stripe.Checkout.SessionCreateOptions
+            {
+                Mode = "payment",
+                UiMode = "elements",
+                ClientReferenceId = userId.ToString(),
+                ReturnUrl = request.ReturnUrl,
+                LineItems = new List<Stripe.Checkout.SessionLineItemOptions>
+                {
+                    new()
+                    {
+                        Quantity = quantity,
+                        PriceData = new Stripe.Checkout.SessionLineItemPriceDataOptions
+                        {
+                            Currency = request.Currency.ToLowerInvariant(),
+                            UnitAmount = unitAmount,
+                            ProductData = new Stripe.Checkout.SessionLineItemPriceDataProductDataOptions
+                            {
+                                Name = product?.Name ?? request.Description ?? "Lottery ticket purchase"
+                            }
+                        }
+                    }
+                },
+                Metadata = metadata,
+                PaymentIntentData = new Stripe.Checkout.SessionPaymentIntentDataOptions
+                {
+                    Metadata = metadata,
+                    Description = request.Description
+                }
+            };
+
+            var service = new Stripe.Checkout.SessionService();
+            Stripe.Checkout.Session session;
+            try
+            {
+                session = await service.CreateAsync(options);
+            }
+            catch (StripeException stripeEx)
+            {
+                _logger.LogError(stripeEx,
+                    "Stripe API error creating checkout session for user {UserId}. Error: {StripeErrorCode} - {StripeErrorMessage}",
+                    userId, stripeEx.StripeError?.Code, stripeEx.StripeError?.Message);
+                throw new InvalidOperationException(
+                    $"Stripe checkout session creation failed: {stripeEx.StripeError?.Message ?? stripeEx.Message}",
+                    stripeEx);
+            }
+
+            var transaction = new Transaction
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                Type = "StripeCheckoutSession",
+                Amount = validatedAmount,
+                Currency = request.Currency,
+                Status = "Pending",
+                Description = request.Description,
+                PaymentMethodId = request.PaymentMethodId,
+                ProductId = request.ProductId,
+                IdempotencyKey = request.IdempotencyKey,
+                ClientSecret = session.ClientSecret,
+                ProviderTransactionId = session.Id,
+                Metadata = JsonSerializer.Serialize(new Dictionary<string, object>
+                {
+                    ["CheckoutSessionId"] = session.Id,
+                    ["Status"] = session.Status,
+                    ["Quantity"] = quantity
+                }),
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+
+            _context.Transactions.Add(transaction);
+            await _context.SaveChangesAsync();
+
+            if (_auditService != null)
+            {
+                await _auditService.LogActionAsync(
+                    userId,
+                    "checkout_session_created",
+                    "transaction",
+                    transaction.Id,
+                    validatedAmount,
+                    request.Currency,
+                    null,
+                    null,
+                    new Dictionary<string, object> { ["CheckoutSessionId"] = session.Id });
+            }
+
+            await _eventPublisher.PublishAsync(new PaymentInitiatedEvent
+            {
+                PaymentId = transaction.Id,
+                UserId = userId,
+                Amount = validatedAmount,
+                Currency = request.Currency,
+                PaymentMethod = request.PaymentMethodId?.ToString() ?? "stripe_checkout"
+            });
+
+            return new CheckoutSessionResponse
+            {
+                ClientSecret = session.ClientSecret,
+                CheckoutSessionId = session.Id,
+                Status = session.Status,
+                Amount = validatedAmount,
+                Currency = request.Currency,
+                ExpiresAt = session.ExpiresAt
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating Stripe checkout session for user {UserId}", userId);
+            throw;
+        }
+    }
+
     public async Task<PaymentIntentResponse> CreatePaymentIntentAsync(CreatePaymentIntentRequest request, Guid userId)
     {
         try
@@ -367,6 +550,10 @@ public class StripeService : IStripeService
 
             switch (eventType)
             {
+                case "checkout.session.completed":
+                    await HandleCheckoutSessionCompleted(dataObj);
+                    break;
+
                 case "payment_intent.succeeded":
                     await HandlePaymentIntentSucceeded(dataObj);
                     break;
@@ -416,6 +603,40 @@ public class StripeService : IStripeService
             _logger.LogError(ex, "Error handling Stripe webhook event {EventType}", eventType);
             return new WebhookEventResult { Processed = false, Message = ex.Message };
         }
+    }
+
+    private async Task HandleCheckoutSessionCompleted(JsonElement dataObj)
+    {
+        var checkoutSessionId = dataObj.GetProperty("id").GetString();
+        if (string.IsNullOrEmpty(checkoutSessionId))
+            return;
+
+        var transaction = await _context.Transactions
+            .FirstOrDefaultAsync(t => t.ProviderTransactionId == checkoutSessionId);
+
+        if (transaction == null)
+        {
+            _logger.LogWarning("Transaction not found for checkout session {CheckoutSessionId}", checkoutSessionId);
+            return;
+        }
+
+        transaction.Status = "Completed";
+        transaction.ProcessedAt = DateTime.UtcNow;
+        transaction.UpdatedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+
+        await _eventPublisher.PublishAsync(new PaymentCompletedEvent
+        {
+            PaymentId = transaction.Id,
+            TransactionId = transaction.Id,
+            UserId = transaction.UserId,
+            Amount = transaction.Amount,
+            Currency = transaction.Currency,
+            PaymentMethod = transaction.PaymentMethodId?.ToString() ?? "stripe_checkout"
+        });
+
+        await ProcessTransactionProductsAsync(transaction);
     }
 
     private async Task HandlePaymentIntentSucceeded(JsonElement dataObj)

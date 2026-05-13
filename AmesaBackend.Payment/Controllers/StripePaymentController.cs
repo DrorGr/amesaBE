@@ -39,6 +39,76 @@ public class StripePaymentController : ControllerBase
         }
     }
 
+    [HttpPost("create-checkout-session")]
+    [Authorize]
+    [RequestSizeLimit(MAX_REQUEST_SIZE)]
+    public async Task<ActionResult<ApiResponse<CheckoutSessionResponse>>> CreateCheckoutSession([FromBody] CreateCheckoutSessionRequest request)
+    {
+        try
+        {
+            if (!ControllerHelpers.TryGetUserId(User, out var userId))
+            {
+                return ControllerHelpers.UnauthorizedResponse<CheckoutSessionResponse>();
+            }
+
+            var rateLimit = TryResolvePaymentRateLimit();
+            if (rateLimit != null)
+            {
+                var canProcess = await rateLimit.CheckPaymentProcessingLimitAsync(userId);
+                if (!canProcess)
+                {
+                    return StatusCode(429, new ApiResponse<CheckoutSessionResponse>
+                    {
+                        Success = false,
+                        Error = new ErrorResponse
+                        {
+                            Code = "RATE_LIMIT_EXCEEDED",
+                            Message = "Too many payment requests. Please try again later."
+                        }
+                    });
+                }
+            }
+
+            var session = await _stripeService.CreateCheckoutSessionAsync(request, userId);
+
+            if (rateLimit != null)
+            {
+                await rateLimit.IncrementPaymentProcessingAsync(userId);
+            }
+
+            return Ok(new ApiResponse<CheckoutSessionResponse> { Success = true, Data = session });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new ApiResponse<CheckoutSessionResponse> { Success = false, Message = ex.Message });
+        }
+        catch (ArgumentOutOfRangeException ex)
+        {
+            return BadRequest(new ApiResponse<CheckoutSessionResponse> { Success = false, Message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new ApiResponse<CheckoutSessionResponse> { Success = false, Message = ex.Message });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new ApiResponse<CheckoutSessionResponse> { Success = false, Message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating checkout session");
+            return StatusCode(500, new ApiResponse<CheckoutSessionResponse>
+            {
+                Success = false,
+                Error = new ErrorResponse
+                {
+                    Code = "CHECKOUT_SESSION_ERROR",
+                    Message = "An error occurred creating checkout session"
+                }
+            });
+        }
+    }
+
     [HttpPost("create-payment-intent")]
     [Authorize]
     [RequestSizeLimit(MAX_REQUEST_SIZE)]

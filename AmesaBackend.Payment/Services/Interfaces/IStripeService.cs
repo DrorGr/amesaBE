@@ -4,6 +4,7 @@ namespace AmesaBackend.Payment.Services.Interfaces;
 
 public interface IStripeService
 {
+    Task<CheckoutSessionResponse> CreateCheckoutSessionAsync(CreateCheckoutSessionRequest request, Guid userId);
     Task<PaymentIntentResponse> CreatePaymentIntentAsync(CreatePaymentIntentRequest request, Guid userId);
     Task<PaymentIntentResponse> ConfirmPaymentIntentAsync(ConfirmPaymentIntentRequest request, Guid userId);
     Task<SetupIntentResponse> CreateSetupIntentAsync(Guid userId);
