@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using AmesaBackend.Lottery.Data;
+using AmesaBackend.Lottery.Models;
 using AmesaBackend.Admin.DTOs;
 using AmesaBackend.Admin.Security;
 using System.Security.Cryptography;
@@ -35,6 +36,7 @@ namespace AmesaBackend.Admin.Services
         public async Task<PagedResult<DrawDto>> GetDrawsAsync(int page = 1, int pageSize = 20, Guid? houseId = null, string? status = null)
         {
             await _permissions.RequirePermissionAsync(AdminPermissionNames.DrawsRead);
+            await EnsureScheduledDrawsAsync();
 
             var query = _context.LotteryDraws
                 .Include(d => d.House)
@@ -83,6 +85,7 @@ namespace AmesaBackend.Admin.Services
         public async Task<DrawDto?> GetDrawByIdAsync(Guid id)
         {
             await _permissions.RequirePermissionAsync(AdminPermissionNames.DrawsRead);
+            await EnsureScheduledDrawsAsync();
 
             var draw = await _context.LotteryDraws
                 .Include(d => d.House)
@@ -167,6 +170,74 @@ namespace AmesaBackend.Admin.Services
             });
 
             return await GetDrawByIdAsync(drawId) ?? throw new InvalidOperationException("Failed to retrieve conducted draw");
+        }
+
+        private async Task EnsureScheduledDrawsAsync()
+        {
+            var houses = await _context.Houses
+                .Where(h => h.DrawDate.HasValue && h.DeletedAt == null)
+                .ToListAsync();
+
+            if (!houses.Any())
+            {
+                return;
+            }
+
+            var houseIds = houses.Select(h => h.Id).ToList();
+            var existingDraws = await _context.LotteryDraws
+                .Where(d => houseIds.Contains(d.HouseId))
+                .ToListAsync();
+
+            var ticketCounts = await _context.LotteryTickets
+                .Where(t => houseIds.Contains(t.HouseId) && t.Status == "Active")
+                .GroupBy(t => t.HouseId)
+                .Select(g => new { HouseId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.HouseId, x => x.Count);
+
+            var hasChanges = false;
+            foreach (var house in houses)
+            {
+                var ticketsSold = ticketCounts.GetValueOrDefault(house.Id);
+                var participation = house.TotalTickets > 0
+                    ? Math.Round((decimal)ticketsSold / house.TotalTickets * 100, 2)
+                    : 0;
+
+                var draw = existingDraws.FirstOrDefault(d => d.HouseId == house.Id);
+                if (draw == null)
+                {
+                    _context.LotteryDraws.Add(new LotteryDraw
+                    {
+                        Id = Guid.NewGuid(),
+                        HouseId = house.Id,
+                        DrawDate = house.DrawDate!.Value,
+                        TotalTicketsSold = ticketsSold,
+                        TotalParticipationPercentage = participation,
+                        DrawStatus = "Pending",
+                        DrawMethod = "random",
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow
+                    });
+                    hasChanges = true;
+                    continue;
+                }
+
+                if (draw.DrawStatus == "Pending" &&
+                    (draw.DrawDate != house.DrawDate.Value ||
+                     draw.TotalTicketsSold != ticketsSold ||
+                     draw.TotalParticipationPercentage != participation))
+                {
+                    draw.DrawDate = house.DrawDate.Value;
+                    draw.TotalTicketsSold = ticketsSold;
+                    draw.TotalParticipationPercentage = participation;
+                    draw.UpdatedAt = DateTime.UtcNow;
+                    hasChanges = true;
+                }
+            }
+
+            if (hasChanges)
+            {
+                await _context.SaveChangesAsync();
+            }
         }
     }
 }
