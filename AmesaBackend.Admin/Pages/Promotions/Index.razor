@@ -1,0 +1,349 @@
+@page "/promotions"
+@attribute [Authorize(Policy = AdminPermissionNames.SettingsManage)]
+@inherits AuthorizedPageBase
+@using AmesaBackend.Admin.DTOs
+@using AmesaBackend.Admin.Services
+@inject IPromotionsAdminService PromotionsService
+
+<PageTitle>Promotions - Amesa Admin</PageTitle>
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h1 class="display-5">
+                <i class="fas fa-tags"></i> Promotions
+            </h1>
+            <p class="text-muted">Create, disable, and monitor promotion codes used by checkout.</p>
+        </div>
+        <div class="col-auto d-flex align-items-end">
+            <button class="btn btn-primary" @onclick="ShowCreateForm">
+                <i class="fas fa-plus"></i> Create Promotion
+            </button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(message))
+    {
+        <div class="alert alert-@messageType">@message</div>
+    }
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Search</label>
+                    <input class="form-control" @bind="searchTerm" @bind:event="oninput" placeholder="Code, name, or description" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Status</label>
+                    <select class="form-select" @bind="statusFilter">
+                        <option value="">All</option>
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Page Size</label>
+                    <select class="form-select" @bind="pageSize">
+                        <option value="10">10</option>
+                        <option value="20">20</option>
+                        <option value="50">50</option>
+                    </select>
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                    <button class="btn btn-secondary w-100" @onclick="LoadPromotions">
+                        <i class="fas fa-search"></i> Search
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (showForm)
+    {
+        <div class="card mb-4 border-primary">
+            <div class="card-header">
+                <strong>@(editModel.Id.HasValue ? "Edit Promotion" : "Create Promotion")</strong>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label class="form-label">Code</label>
+                        <input class="form-control" @bind="editModel.Code" disabled="@editModel.Id.HasValue" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Name</label>
+                        <input class="form-control" @bind="editModel.Name" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Type</label>
+                        <select class="form-select" @bind="editModel.Type">
+                            <option value="discount">Discount</option>
+                            <option value="cashback">Cashback</option>
+                            <option value="bonus">Bonus</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Value Type</label>
+                        <select class="form-select" @bind="editModel.ValueType">
+                            <option value="percentage">Percentage</option>
+                            <option value="fixed">Fixed</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Active</label>
+                        <select class="form-select" @bind="editModel.IsActive">
+                            <option value="true">Yes</option>
+                            <option value="false">No</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Value</label>
+                        <input type="number" step="0.01" class="form-control" @bind="editModel.Value" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Min Amount</label>
+                        <input type="number" step="0.01" class="form-control" @bind="editModel.MinAmount" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Max Discount</label>
+                        <input type="number" step="0.01" class="form-control" @bind="editModel.MaxDiscount" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Usage Limit</label>
+                        <input type="number" class="form-control" @bind="editModel.UsageLimit" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Start</label>
+                        <input type="datetime-local" class="form-control" @bind="editModel.StartDate" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">End</label>
+                        <input type="datetime-local" class="form-control" @bind="editModel.EndDate" />
+                    </div>
+                    <div class="col-md-12">
+                        <label class="form-label">Applicable House IDs</label>
+                        <input class="form-control" @bind="editModel.ApplicableHouseIds" placeholder="Comma-separated house IDs, leave blank for all houses" />
+                    </div>
+                    <div class="col-md-12">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-control" rows="2" @bind="editModel.Description"></textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer text-end">
+                <button class="btn btn-secondary me-2" @onclick="CloseForm">Cancel</button>
+                <button class="btn btn-primary" @onclick="SavePromotion" disabled="@isSaving">
+                    @if (isSaving)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2"></span>
+                    }
+                    Save Promotion
+                </button>
+            </div>
+        </div>
+    }
+
+    @if (isLoading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status"></div>
+        </div>
+    }
+    else if (promotions?.Items.Any() == true)
+    {
+        <div class="card">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead>
+                            <tr>
+                                <th>Code</th>
+                                <th>Name</th>
+                                <th>Value</th>
+                                <th>Usage</th>
+                                <th>Total Discount</th>
+                                <th>Window</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var promotion in promotions.Items)
+                            {
+                                <tr>
+                                    <td><code>@promotion.Code</code></td>
+                                    <td>
+                                        <strong>@promotion.Name</strong>
+                                        <div class="small text-muted">@promotion.Description</div>
+                                    </td>
+                                    <td>@FormatPromotionValue(promotion)</td>
+                                    <td>@promotion.UsageCount / @(promotion.UsageLimit?.ToString() ?? "∞")</td>
+                                    <td>€@promotion.TotalDiscountGiven.ToString("F2")</td>
+                                    <td class="small">
+                                        @FormatDate(promotion.StartDate) - @FormatDate(promotion.EndDate)
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-@(promotion.IsActive ? "success" : "secondary")">
+                                            @(promotion.IsActive ? "Active" : "Inactive")
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            <button class="btn btn-outline-primary" @onclick="() => EditPromotion(promotion)">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            @if (promotion.IsActive)
+                                            {
+                                                <button class="btn btn-outline-danger" @onclick="() => DisablePromotion(promotion.Id)">
+                                                    <i class="fas fa-ban"></i>
+                                                </button>
+                                            }
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-info">No promotions found.</div>
+    }
+</div>
+
+@code {
+    private PagedResult<AdminPromotionDto>? promotions;
+    private SaveAdminPromotionRequest editModel = new();
+    private bool isLoading = true;
+    private bool isSaving;
+    private bool showForm;
+    private int pageSize = 20;
+    private string? searchTerm;
+    private string? statusFilter;
+    private string? message;
+    private string messageType = "success";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPromotions();
+    }
+
+    private async Task LoadPromotions()
+    {
+        isLoading = true;
+        try
+        {
+            bool? active = statusFilter switch
+            {
+                "active" => true,
+                "inactive" => false,
+                _ => null
+            };
+            promotions = await PromotionsService.GetPromotionsAsync(1, pageSize, searchTerm, active);
+        }
+        catch (Exception ex)
+        {
+            SetMessage(ex.Message, "danger");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void ShowCreateForm()
+    {
+        editModel = new SaveAdminPromotionRequest();
+        showForm = true;
+        message = null;
+    }
+
+    private void EditPromotion(AdminPromotionDto promotion)
+    {
+        editModel = new SaveAdminPromotionRequest
+        {
+            Id = promotion.Id,
+            Code = promotion.Code,
+            Name = promotion.Name,
+            Description = promotion.Description,
+            Type = promotion.Type,
+            Value = promotion.Value,
+            ValueType = promotion.ValueType,
+            MinAmount = promotion.MinAmount,
+            MaxDiscount = promotion.MaxDiscount,
+            UsageLimit = promotion.UsageLimit,
+            IsActive = promotion.IsActive,
+            StartDate = promotion.StartDate,
+            EndDate = promotion.EndDate,
+            ApplicableHouseIds = promotion.ApplicableHouses == null ? null : string.Join(", ", promotion.ApplicableHouses)
+        };
+        showForm = true;
+        message = null;
+    }
+
+    private void CloseForm()
+    {
+        showForm = false;
+    }
+
+    private async Task SavePromotion()
+    {
+        isSaving = true;
+        try
+        {
+            await PromotionsService.SavePromotionAsync(editModel);
+            SetMessage("Promotion saved.", "success");
+            showForm = false;
+            await LoadPromotions();
+        }
+        catch (Exception ex)
+        {
+            SetMessage(ex.Message, "danger");
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task DisablePromotion(Guid id)
+    {
+        try
+        {
+            await PromotionsService.DisablePromotionAsync(id);
+            SetMessage("Promotion disabled.", "success");
+            await LoadPromotions();
+        }
+        catch (Exception ex)
+        {
+            SetMessage(ex.Message, "danger");
+        }
+    }
+
+    private void SetMessage(string value, string type)
+    {
+        message = value;
+        messageType = type;
+    }
+
+    private static string FormatPromotionValue(AdminPromotionDto promotion)
+    {
+        if (!promotion.Value.HasValue)
+        {
+            return "-";
+        }
+
+        return string.Equals(promotion.ValueType, "percentage", StringComparison.OrdinalIgnoreCase)
+            ? $"{promotion.Value:F2}%"
+            : $"€{promotion.Value:F2}";
+    }
+
+    private static string FormatDate(DateTime? value)
+    {
+        return value.HasValue ? value.Value.ToString("yyyy-MM-dd") : "open";
+    }
+}

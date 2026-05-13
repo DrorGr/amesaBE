@@ -15,7 +15,7 @@
             <h1 class="display-5">
                 <i class="fas fa-ticket-alt"></i> Tickets Management
             </h1>
-            <p class="text-muted">View purchased lottery tickets. Available inventory is shown on houses.</p>
+            <p class="text-muted">Monitor per-house ticket inventory, buyer activity, and sell-out timing.</p>
         </div>
     </div>
 
@@ -65,6 +65,83 @@
             </div>
         </div>
     </div>
+
+    @if (houseStats?.Any() == true)
+    {
+        <div class="row g-3 mb-4">
+            @foreach (var stat in houseStats)
+            {
+                <div class="col-xl-6">
+                    <div class="card h-100 shadow-sm">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-3">
+                                <div>
+                                    <h5 class="card-title mb-1">@stat.HouseTitle</h5>
+                                    <span class="badge bg-@GetHouseStatusBadgeClass(stat.HouseStatus)">@stat.HouseStatus</span>
+                                </div>
+                                <div class="text-end">
+                                    <div class="h4 mb-0">@stat.AvailableTickets</div>
+                                    <small class="text-muted">available</small>
+                                </div>
+                            </div>
+
+                            <div class="progress mb-3" style="height: 10px;">
+                                <div class="progress-bar" role="progressbar" style="width: @GetProgressWidth(stat.SoldPercentage)"
+                                     aria-valuenow="@stat.SoldPercentage" aria-valuemin="0" aria-valuemax="100"></div>
+                            </div>
+
+                            <div class="row g-3">
+                                <div class="col-sm-4">
+                                    <div class="text-muted small">Bought</div>
+                                    <div class="fw-semibold">@stat.BoughtTickets / @stat.TotalTickets</div>
+                                    <small class="text-muted">@stat.SoldPercentage.ToString("F2")% sold</small>
+                                </div>
+                                <div class="col-sm-4">
+                                    <div class="text-muted small">Reserved</div>
+                                    <div class="fw-semibold">@stat.ReservedTickets</div>
+                                    <small class="text-muted">pending checkout</small>
+                                </div>
+                                <div class="col-sm-4">
+                                    <div class="text-muted small">Buyers</div>
+                                    <div class="fw-semibold">@stat.UniqueBuyers</div>
+                                    <small class="text-muted">@stat.AverageTicketsPerBuyer.ToString("F2") tickets/buyer</small>
+                                </div>
+                                <div class="col-sm-4">
+                                    <div class="text-muted small">Sales Velocity</div>
+                                    <div class="fw-semibold">@stat.TicketsPerHour.ToString("F2")/hour</div>
+                                    <small class="text-muted">since first ticket</small>
+                                </div>
+                                <div class="col-sm-4">
+                                    <div class="text-muted small">Clock Till Done</div>
+                                    <div class="fw-semibold">@FormatDuration(stat.HoursUntilLotteryEnd)</div>
+                                    <small class="text-muted">ends @stat.LotteryEndDate.ToString("yyyy-MM-dd HH:mm")</small>
+                                </div>
+                                <div class="col-sm-4">
+                                    <div class="text-muted small">Expected Sell-out</div>
+                                    <div class="fw-semibold">@FormatEstimatedSellOut(stat)</div>
+                                    <small class="text-muted">@FormatEstimatedSellOutDetail(stat)</small>
+                                </div>
+                            </div>
+
+                            <div class="border-top mt-3 pt-3 small text-muted">
+                                Last ticket: @FormatDateTime(stat.LastTicketPurchasedAt)
+                                @if (stat.DrawDate.HasValue)
+                                {
+                                    <span class="ms-3">Draw: @stat.DrawDate.Value.ToString("yyyy-MM-dd HH:mm")</span>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+    else if (!isLoading)
+    {
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle"></i> No house ticket statistics found.
+        </div>
+    }
 
     @if (isLoading)
     {
@@ -158,6 +235,7 @@
 
 @code {
     private PagedResult<TicketDto>? tickets;
+    private List<HouseTicketStatsDto>? houseStats;
     private List<HouseDto>? houses;
     private bool isLoading = true;
     private int currentPage = 1;
@@ -195,6 +273,8 @@
             {
                 userId = parsedUserId;
             }
+
+            houseStats = await TicketsService.GetHouseTicketStatsAsync(houseIdFilter);
             tickets = await TicketsService.GetTicketsAsync(currentPage, pageSize, houseIdFilter, userId, statusFilter);
         }
         catch (Exception ex)
@@ -222,5 +302,79 @@
             "Cancelled" => "danger",
             _ => "secondary"
         };
+    }
+
+    private string GetHouseStatusBadgeClass(string status)
+    {
+        return status switch
+        {
+            "Active" => "success",
+            "Upcoming" => "info",
+            "Pending" => "warning",
+            "Completed" => "secondary",
+            "Cancelled" => "danger",
+            _ => "secondary"
+        };
+    }
+
+    private static string GetProgressWidth(decimal percentage)
+    {
+        return $"{Math.Clamp(percentage, 0, 100):F2}%";
+    }
+
+    private static string FormatDuration(double? hours)
+    {
+        if (!hours.HasValue)
+        {
+            return "-";
+        }
+
+        if (hours.Value <= 0)
+        {
+            return "Ended";
+        }
+
+        var time = TimeSpan.FromHours(hours.Value);
+        if (time.TotalDays >= 1)
+        {
+            return $"{(int)time.TotalDays}d {time.Hours}h";
+        }
+
+        return $"{time.Hours}h {time.Minutes}m";
+    }
+
+    private static string FormatEstimatedSellOut(HouseTicketStatsDto stat)
+    {
+        if (stat.IsSoldOut)
+        {
+            return "Sold out";
+        }
+
+        if (!stat.EstimatedSoldOutAt.HasValue)
+        {
+            return "Not enough data";
+        }
+
+        return stat.EstimatedSoldOutAt.Value.ToString("yyyy-MM-dd HH:mm");
+    }
+
+    private static string FormatEstimatedSellOutDetail(HouseTicketStatsDto stat)
+    {
+        if (stat.IsSoldOut)
+        {
+            return "all tickets bought or reserved";
+        }
+
+        if (!stat.HoursToSellOut.HasValue)
+        {
+            return "waiting for first purchases";
+        }
+
+        return $"in {FormatDuration(stat.HoursToSellOut)}";
+    }
+
+    private static string FormatDateTime(DateTime? value)
+    {
+        return value.HasValue ? value.Value.ToString("yyyy-MM-dd HH:mm") : "No purchases yet";
     }
 }

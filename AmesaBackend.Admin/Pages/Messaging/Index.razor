@@ -1,0 +1,203 @@
+@page "/messaging"
+@attribute [Authorize(Policy = AdminPermissionNames.SettingsManage)]
+@inherits AuthorizedPageBase
+@using AmesaBackend.Admin.DTOs
+@using AmesaBackend.Admin.Services
+@inject IMessagingAdminService MessagingService
+
+<PageTitle>Messaging - Amesa Admin</PageTitle>
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h1 class="display-5">
+                <i class="fas fa-bullhorn"></i> Messaging
+            </h1>
+            <p class="text-muted">Send targeted in-app, email, SMS, push, web push, and Telegram notifications.</p>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(message))
+    {
+        <div class="alert alert-@messageType">@message</div>
+    }
+
+    <div class="card mb-4">
+        <div class="card-header">
+            <strong>Send Notification</strong>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">User ID or Email</label>
+                    <input class="form-control" @bind="sendRequest.UserLookup" placeholder="user@example.com or UUID" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Type</label>
+                    <select class="form-select" @bind="sendRequest.Type">
+                        <option value="system_announcement">System Announcement</option>
+                        <option value="promotion_created">Promotion</option>
+                        <option value="lottery_draw_starting">Lottery Draw Starting</option>
+                        <option value="payment_completed">Payment</option>
+                        <option value="suspicious_activity">Security</option>
+                    </select>
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label">Title</label>
+                    <input class="form-control" @bind="sendRequest.Title" />
+                </div>
+                <div class="col-md-12">
+                    <label class="form-label">Message</label>
+                    <textarea class="form-control" rows="3" @bind="sendRequest.Message"></textarea>
+                </div>
+                <div class="col-md-12">
+                    <label class="form-label">Channels</label>
+                    <div class="d-flex flex-wrap gap-3">
+                        <label><input type="checkbox" class="form-check-input me-1" @bind="sendRequest.InApp" /> In-app</label>
+                        <label><input type="checkbox" class="form-check-input me-1" @bind="sendRequest.Email" /> Email</label>
+                        <label><input type="checkbox" class="form-check-input me-1" @bind="sendRequest.Sms" /> SMS</label>
+                        <label><input type="checkbox" class="form-check-input me-1" @bind="sendRequest.Push" /> Push</label>
+                        <label><input type="checkbox" class="form-check-input me-1" @bind="sendRequest.WebPush" /> Web Push</label>
+                        <label><input type="checkbox" class="form-check-input me-1" @bind="sendRequest.Telegram" /> Telegram</label>
+                    </div>
+                    <div class="form-text">Non in-app channels are queued for the notification service delivery processor.</div>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Schedule For</label>
+                    <input type="datetime-local" class="form-control" @bind="sendRequest.ScheduledFor" />
+                </div>
+            </div>
+        </div>
+        <div class="card-footer text-end">
+            <button class="btn btn-primary" @onclick="SendNotification" disabled="@isSending">
+                @if (isSending)
+                {
+                    <span class="spinner-border spinner-border-sm me-2"></span>
+                }
+                <i class="fas fa-paper-plane me-1"></i> Queue Notification
+            </button>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <strong>Recent Notifications</strong>
+            <button class="btn btn-sm btn-outline-secondary" @onclick="LoadRecentNotifications">
+                <i class="fas fa-sync"></i> Refresh
+            </button>
+        </div>
+        <div class="card-body">
+            @if (isLoading)
+            {
+                <div class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status"></div>
+                </div>
+            }
+            else if (recentNotifications?.Any() == true)
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead>
+                            <tr>
+                                <th>Created</th>
+                                <th>User</th>
+                                <th>Type</th>
+                                <th>Title</th>
+                                <th>Read</th>
+                                <th>Delivery</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var notification in recentNotifications)
+                            {
+                                <tr>
+                                    <td>@notification.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                                    <td>
+                                        <div>@(notification.UserEmail ?? notification.UserId.ToString())</div>
+                                        <small class="text-muted">@notification.UserId</small>
+                                    </td>
+                                    <td><span class="badge bg-secondary">@notification.Type</span></td>
+                                    <td>
+                                        <strong>@notification.Title</strong>
+                                        <div class="small text-muted">@notification.Message</div>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-@(notification.IsRead ? "success" : "warning")">
+                                            @(notification.IsRead ? "Read" : "Unread")
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-info">@notification.PendingDeliveries pending</span>
+                                        <span class="badge bg-success">@notification.SentDeliveries sent</span>
+                                        <span class="badge bg-danger">@notification.FailedDeliveries failed</span>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <div class="alert alert-info mb-0">No notifications found.</div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private SendAdminNotificationRequest sendRequest = new();
+    private IReadOnlyCollection<AdminNotificationDto>? recentNotifications;
+    private bool isLoading = true;
+    private bool isSending;
+    private string? message;
+    private string messageType = "success";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadRecentNotifications();
+    }
+
+    private async Task LoadRecentNotifications()
+    {
+        isLoading = true;
+        try
+        {
+            recentNotifications = await MessagingService.GetRecentNotificationsAsync();
+        }
+        catch (Exception ex)
+        {
+            SetMessage(ex.Message, "danger");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task SendNotification()
+    {
+        isSending = true;
+        try
+        {
+            var result = await MessagingService.QueueNotificationAsync(sendRequest);
+            SetMessage($"Queued notification {result.NotificationId} for {result.UserEmail} via {string.Join(", ", result.QueuedChannels)}.", "success");
+            sendRequest = new SendAdminNotificationRequest();
+            await LoadRecentNotifications();
+        }
+        catch (Exception ex)
+        {
+            SetMessage(ex.Message, "danger");
+        }
+        finally
+        {
+            isSending = false;
+        }
+    }
+
+    private void SetMessage(string value, string type)
+    {
+        message = value;
+        messageType = type;
+    }
+}

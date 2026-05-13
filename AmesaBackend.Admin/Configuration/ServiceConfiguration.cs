@@ -162,6 +162,8 @@ public static class ServiceConfiguration
         services.AddScoped<ITicketsService, TicketsService>();
         services.AddScoped<IDrawsService, DrawsService>();
         services.AddScoped<IPaymentsService, PaymentsService>();
+        services.AddScoped<IPromotionsAdminService, PromotionsAdminService>();
+        services.AddScoped<IMessagingAdminService, MessagingAdminService>();
         services.AddScoped<IS3ImageService, S3ImageService>();
         services.AddScoped<ICloudWatchLoggingService, CloudWatchLoggingService>();
         services.AddScoped<IRealTimeNotificationService, RealTimeNotificationService>();

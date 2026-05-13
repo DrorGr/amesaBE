@@ -20,7 +20,7 @@
                         </div>
                     }
 
-                    <form method="post" action="api/v1/admin/auth/@(requiresMfa ? "mfa" : "login")">
+                    <form method="post" action="api/v1/admin/auth/@(requiresMfa ? "mfa" : "login")" onsubmit="return window.setAdminLoginLoading(this);">
                         @if (!requiresMfa)
                         {
                             <div class="mb-3">
@@ -54,9 +54,10 @@
                         }
 
                         <div class="d-grid">
-                            <button type="submit" class="btn btn-primary btn-lg">
-                                <i class="fas fa-sign-in-alt me-2"></i>
-                                <span>@(requiresMfa ? "Verify Code" : "Sign In")</span>
+                            <button type="submit" class="btn btn-primary btn-lg" data-loading-text="@(requiresMfa ? "Verifying..." : "Signing in...")">
+                                <span class="spinner-border spinner-border-sm me-2 d-none" aria-hidden="true" data-login-spinner></span>
+                                <i class="fas fa-sign-in-alt me-2" data-login-icon></i>
+                                <span data-login-text>@(requiresMfa ? "Verify Code" : "Sign In")</span>
                             </button>
                         </div>
                     </form>
@@ -65,6 +66,36 @@
         </div>
     </div>
 </div>
+
+<script>
+    window.setAdminLoginLoading = function (form) {
+        var submitButton = form.querySelector('button[type="submit"]');
+        if (!submitButton) {
+            return true;
+        }
+
+        submitButton.disabled = true;
+        submitButton.setAttribute('aria-busy', 'true');
+
+        var spinner = submitButton.querySelector('[data-login-spinner]');
+        var icon = submitButton.querySelector('[data-login-icon]');
+        var text = submitButton.querySelector('[data-login-text]');
+
+        if (spinner) {
+            spinner.classList.remove('d-none');
+        }
+
+        if (icon) {
+            icon.classList.add('d-none');
+        }
+
+        if (text) {
+            text.textContent = submitButton.getAttribute('data-loading-text') || 'Signing in...';
+        }
+
+        return true;
+    };
+</script>
 
 @code {
     private string? errorMessage;
