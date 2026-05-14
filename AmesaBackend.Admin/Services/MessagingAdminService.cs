@@ -39,7 +39,7 @@ public sealed class MessagingAdminService : IMessagingAdminService
 
     public async Task<IReadOnlyCollection<AdminNotificationDto>> GetRecentNotificationsAsync(int limit = 50)
     {
-        await _permissions.RequirePermissionAsync(AdminPermissionNames.SettingsManage);
+        await RequireEngagementAccessAsync();
 
         var notifications = await _notificationContext.UserNotifications
             .AsNoTracking()
@@ -92,7 +92,7 @@ public sealed class MessagingAdminService : IMessagingAdminService
 
     public async Task<SendAdminNotificationResult> QueueNotificationAsync(SendAdminNotificationRequest request)
     {
-        await _permissions.RequirePermissionAsync(AdminPermissionNames.SettingsManage);
+        await RequireEngagementAccessAsync();
 
         if (string.IsNullOrWhiteSpace(request.Title) || string.IsNullOrWhiteSpace(request.Message))
         {
@@ -188,6 +188,17 @@ public sealed class MessagingAdminService : IMessagingAdminService
         }
 
         return (user.Id, user.Email);
+    }
+
+    private async Task RequireEngagementAccessAsync()
+    {
+        if (await _permissions.HasPermissionAsync(AdminPermissionNames.SettingsManage) ||
+            await _permissions.HasPermissionAsync(AdminPermissionNames.AuditRead))
+        {
+            return;
+        }
+
+        throw new UnauthorizedAccessException($"Admin permission required: {AdminPermissionNames.SettingsManage} or {AdminPermissionNames.AuditRead}");
     }
 
     private static IReadOnlyCollection<string> GetChannels(SendAdminNotificationRequest request)
