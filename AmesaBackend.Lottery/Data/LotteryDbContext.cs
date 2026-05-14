@@ -62,6 +62,10 @@ namespace AmesaBackend.Lottery.Data
                 entity.Property(e => e.TicketNumber).IsRequired().HasMaxLength(20);
                 entity.Property(e => e.Status).IsRequired().HasMaxLength(50);
                 entity.Property(e => e.PurchasePrice).HasColumnType("decimal(10,2)");
+                // The deployed Lottery migration does not include these optional ticket audit columns.
+                // Promotion usage is tracked separately, so ignore them to keep ticket inserts aligned with the table.
+                entity.Ignore(e => e.PromotionCode);
+                entity.Ignore(e => e.DiscountAmount);
                 entity.HasIndex(e => e.HouseId);
                 entity.HasIndex(e => e.UserId);
                 entity.HasIndex(e => e.TicketNumber);
