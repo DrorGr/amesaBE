@@ -36,6 +36,34 @@ namespace AmesaBackend.Lottery.Services
                     return false;
                 }
 
+                var reserved = await TryReserveInventoryAsync(houseId, quantity, reservationToken);
+                if (reserved)
+                {
+                    return true;
+                }
+
+                // Redis may be cold or clearly drifted from the database. Refresh once and retry
+                // so purchases are not blocked by missing/stale cache keys, but do not overwrite
+                // active Redis reservations from concurrent requests.
+                if (await ShouldRefreshInventoryFromDatabaseAsync(houseId, quantity))
+                {
+                    await RefreshInventoryFromDatabaseAsync(houseId);
+                    return await TryReserveInventoryAsync(houseId, quantity, reservationToken);
+                }
+
+                return false;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error reserving inventory for house {HouseId}", houseId);
+                return false; // Fail-closed: Return false on error
+            }
+        }
+
+        private async Task<bool> TryReserveInventoryAsync(Guid houseId, int quantity, string reservationToken)
+        {
+            try
+            {
                 // Lua script for atomic reserve operation with bounds checking
                 var script = @"
                     local houseKey = 'lottery:inventory:' .. ARGV[1]
@@ -85,7 +113,7 @@ namespace AmesaBackend.Lottery.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error reserving inventory for house {HouseId}", houseId);
+                _logger.LogError(ex, "Error trying to reserve inventory for house {HouseId}", houseId);
                 return false; // Fail-closed: Return false on error
             }
         }
@@ -350,6 +378,80 @@ namespace AmesaBackend.Lottery.Services
                 .CountAsync();
 
             return Math.Max(0, house.TotalTickets - soldCount);
+        }
+
+        private async Task RefreshInventoryFromDatabaseAsync(Guid houseId)
+        {
+            var house = await _context.Houses.FindAsync(houseId);
+            if (house == null)
+            {
+                return;
+            }
+
+            var soldCount = await GetSoldFromDatabaseAsync(houseId);
+            var reservedCount = await _context.TicketReservations
+                .Where(r => r.HouseId == houseId && r.Status == "pending")
+                .SumAsync(r => (int?)r.Quantity) ?? 0;
+            var availableCount = Math.Max(0, house.TotalTickets - soldCount - reservedCount);
+
+            var houseKey = $"lottery:inventory:{houseId}";
+            var reservedKey = $"lottery:inventory:{houseId}:reserved";
+            var soldKey = $"lottery:inventory:{houseId}:sold";
+
+            var script = @"
+                local available = tonumber(ARGV[1])
+                local reserved = tonumber(ARGV[2])
+                local sold = tonumber(ARGV[3])
+
+                if available < 0 or reserved < 0 or sold < 0 then
+                    return 0
+                end
+
+                redis.call('SET', KEYS[1], available)
+                redis.call('SET', KEYS[2], reserved)
+                redis.call('SET', KEYS[3], sold)
+                return 1
+            ";
+
+            var result = await _db.ScriptEvaluateAsync(
+                script,
+                keys: new RedisKey[] { houseKey, reservedKey, soldKey },
+                values: new RedisValue[] { availableCount, reservedCount, soldCount });
+
+            if ((int)result == 1)
+            {
+                _logger.LogInformation(
+                    "Refreshed inventory cache for house {HouseId}: available={Available}, reserved={Reserved}, sold={Sold}",
+                    houseId, availableCount, reservedCount, soldCount);
+            }
+            else
+            {
+                _logger.LogWarning("Failed to refresh inventory cache for house {HouseId}", houseId);
+            }
+        }
+
+        private async Task<bool> ShouldRefreshInventoryFromDatabaseAsync(Guid houseId, int quantity)
+        {
+            var houseKey = $"lottery:inventory:{houseId}";
+            var reservedKey = $"lottery:inventory:{houseId}:reserved";
+
+            var available = await _db.StringGetAsync(houseKey);
+            var reserved = await _db.StringGetAsync(reservedKey);
+
+            if (!available.HasValue)
+            {
+                return true;
+            }
+
+            var availableCount = (int)available;
+            var reservedCount = reserved.HasValue ? (int)reserved : 0;
+
+            if (availableCount > 0 || reservedCount > 0)
+            {
+                return false;
+            }
+
+            return await GetAvailableFromDatabaseAsync(houseId) >= quantity;
         }
 
         private async Task<int> GetSoldFromDatabaseAsync(Guid houseId)
