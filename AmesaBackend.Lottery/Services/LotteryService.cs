@@ -1289,13 +1289,6 @@ namespace AmesaBackend.Lottery.Services
                     throw new InvalidOperationException("House not found");
                 }
 
-                // Check participant cap with transaction safety
-                var canEnter = await CanUserEnterLotteryAsync(request.UserId, request.HouseId, useTransaction: true);
-                if (!canEnter)
-                {
-                    throw new InvalidOperationException("Participant cap reached");
-                }
-
                 // Check verification requirement
                 await CheckVerificationRequirementAsync(request.UserId);
 
@@ -1315,125 +1308,140 @@ namespace AmesaBackend.Lottery.Services
                     };
                 }
 
-                // Create tickets in transaction
-                using var transaction = await _context.Database.BeginTransactionAsync(
-                    System.Data.IsolationLevel.Serializable);
-                
-                try
+                // Retry-on-failure is enabled for Npgsql. Explicit transactions must be
+                // executed through EF's strategy or transient failures can poison the transaction.
+                var strategy = _context.Database.CreateExecutionStrategy();
+                return await strategy.ExecuteAsync(async () =>
                 {
-                    // Double-check cap within transaction
-                    canEnter = await CanUserEnterLotteryAsync(request.UserId, request.HouseId, useTransaction: false);
-                    if (!canEnter)
-                    {
-                        await transaction.RollbackAsync();
-                        throw new InvalidOperationException("Participant cap reached");
-                    }
+                    await using var transaction = await _context.Database.BeginTransactionAsync(
+                        System.Data.IsolationLevel.Serializable);
 
-                    // Double-check idempotency within transaction (race condition protection)
-                    var existingInTransaction = await _context.LotteryTickets
-                        .Where(t => t.PaymentId == request.PaymentId && t.Status == "Active")
-                        .ToListAsync();
-
-                    if (existingInTransaction.Any())
+                    try
                     {
-                        await transaction.RollbackAsync();
-                        _logger.LogWarning("Tickets already exist for payment {PaymentId} within transaction. Returning existing tickets.", 
-                            request.PaymentId);
+                        // Double-check cap within the ticket creation transaction.
+                        var canEnter = await CanUserEnterLotteryAsync(request.UserId, request.HouseId, useTransaction: false);
+                        if (!canEnter)
+                        {
+                            throw new InvalidOperationException("Participant cap reached");
+                        }
+
+                        // Double-check idempotency within transaction (race condition protection)
+                        var existingInTransaction = await _context.LotteryTickets
+                            .Where(t => t.PaymentId == request.PaymentId && t.Status == "Active")
+                            .ToListAsync();
+
+                        if (existingInTransaction.Any())
+                        {
+                            await transaction.CommitAsync();
+                            _logger.LogWarning("Tickets already exist for payment {PaymentId} within transaction. Returning existing tickets.",
+                                request.PaymentId);
+                            return new CreateTicketsFromPaymentResponse
+                            {
+                                TicketNumbers = existingInTransaction.Select(t => t.TicketNumber).ToList(),
+                                TicketsPurchased = existingInTransaction.Count
+                            };
+                        }
+
+                        // Generate ticket numbers (atomic operation via Redis or SELECT FOR UPDATE)
+                        var baseTicketNumber = await GetNextTicketNumberAsync(request.HouseId, request.Quantity);
+                        var tickets = new List<LotteryTicket>();
+
+                        for (int i = 0; i < request.Quantity; i++)
+                        {
+                            var ticket = new LotteryTicket
+                            {
+                                Id = Guid.NewGuid(),
+                                TicketNumber = $"{request.HouseId.ToString("N")[..8]}-{baseTicketNumber + i:D6}",
+                                HouseId = request.HouseId,
+                                UserId = request.UserId,
+                                PurchasePrice = house.TicketPrice, // Original ticket price
+                                PromotionCode = request.PromotionCode, // Store promotion code used
+                                DiscountAmount = request.DiscountAmount, // Store discount amount applied
+                                Status = "Active",
+                                PurchaseDate = DateTime.UtcNow,
+                                PaymentId = request.PaymentId,
+                                CreatedAt = DateTime.UtcNow,
+                                UpdatedAt = DateTime.UtcNow
+                            };
+                            tickets.Add(ticket);
+                        }
+
+                        _context.LotteryTickets.AddRange(tickets);
+                        await _context.SaveChangesAsync();
+                        await transaction.CommitAsync();
+
+                        _logger.LogInformation(
+                            "Created {Count} tickets from payment {PaymentId} for user {UserId}, house {HouseId}",
+                            tickets.Count, request.PaymentId, request.UserId, request.HouseId);
+
+                        // Gamification integration (after successful ticket creation)
+                        if (_gamificationService != null)
+                        {
+                            try
+                            {
+                                // Award points: +10 per ticket
+                                var pointsPerTicket = 10;
+                                var totalPoints = tickets.Count * pointsPerTicket;
+                                await _gamificationService.AwardPointsAsync(
+                                    request.UserId,
+                                    totalPoints,
+                                    "Ticket Purchase",
+                                    request.PaymentId);
+
+                                // Update streak
+                                await _gamificationService.UpdateStreakAsync(request.UserId);
+
+                                // Check if this is first entry
+                                var totalEntries = await _context.LotteryTickets
+                                    .Where(t => t.UserId == request.UserId)
+                                    .CountAsync();
+
+                                if (totalEntries == tickets.Count)
+                                {
+                                    // First entry - award bonus points
+                                    await _gamificationService.AwardPointsAsync(
+                                        request.UserId,
+                                        50,
+                                        "First Entry Bonus",
+                                        request.PaymentId);
+                                }
+
+                                // Check achievements
+                                await _gamificationService.CheckAchievementsAsync(
+                                    request.UserId,
+                                    "EntryPurchase",
+                                    new { ticketCount = totalEntries });
+                            }
+                            catch (Exception ex)
+                            {
+                                // Log but don't fail ticket creation if gamification fails
+                                _logger.LogWarning(ex, "Gamification integration failed for user {UserId} after ticket creation", request.UserId);
+                            }
+                        }
+
                         return new CreateTicketsFromPaymentResponse
                         {
-                            TicketNumbers = existingInTransaction.Select(t => t.TicketNumber).ToList(),
-                            TicketsPurchased = existingInTransaction.Count
+                            TicketNumbers = tickets.Select(t => t.TicketNumber).ToList(),
+                            TicketsPurchased = tickets.Count
                         };
                     }
-
-                    // Generate ticket numbers (atomic operation via Redis or SELECT FOR UPDATE)
-                    var baseTicketNumber = await GetNextTicketNumberAsync(request.HouseId, request.Quantity);
-                    var tickets = new List<LotteryTicket>();
-
-                    for (int i = 0; i < request.Quantity; i++)
-                    {
-                        var ticket = new LotteryTicket
-                        {
-                            Id = Guid.NewGuid(),
-                            TicketNumber = $"{request.HouseId.ToString("N")[..8]}-{baseTicketNumber + i:D6}",
-                            HouseId = request.HouseId,
-                            UserId = request.UserId,
-                            PurchasePrice = house.TicketPrice, // Original ticket price
-                            PromotionCode = request.PromotionCode, // Store promotion code used
-                            DiscountAmount = request.DiscountAmount, // Store discount amount applied
-                            Status = "Active",
-                            PurchaseDate = DateTime.UtcNow,
-                            PaymentId = request.PaymentId,
-                            CreatedAt = DateTime.UtcNow,
-                            UpdatedAt = DateTime.UtcNow
-                        };
-                        tickets.Add(ticket);
-                    }
-
-                    _context.LotteryTickets.AddRange(tickets);
-                    await _context.SaveChangesAsync();
-                    await transaction.CommitAsync();
-
-                    _logger.LogInformation(
-                        "Created {Count} tickets from payment {PaymentId} for user {UserId}, house {HouseId}",
-                        tickets.Count, request.PaymentId, request.UserId, request.HouseId);
-
-                    // Gamification integration (after successful ticket creation)
-                    if (_gamificationService != null)
+                    catch
                     {
                         try
                         {
-                            // Award points: +10 per ticket
-                            var pointsPerTicket = 10;
-                            var totalPoints = tickets.Count * pointsPerTicket;
-                            await _gamificationService.AwardPointsAsync(
-                                request.UserId, 
-                                totalPoints, 
-                                "Ticket Purchase", 
-                                request.PaymentId);
-
-                            // Update streak
-                            await _gamificationService.UpdateStreakAsync(request.UserId);
-
-                            // Check if this is first entry
-                            var totalEntries = await _context.LotteryTickets
-                                .Where(t => t.UserId == request.UserId)
-                                .CountAsync();
-                            
-                            if (totalEntries == tickets.Count)
-                            {
-                                // First entry - award bonus points
-                                await _gamificationService.AwardPointsAsync(
-                                    request.UserId, 
-                                    50, 
-                                    "First Entry Bonus", 
-                                    request.PaymentId);
-                            }
-
-                            // Check achievements
-                            await _gamificationService.CheckAchievementsAsync(
-                                request.UserId, 
-                                "EntryPurchase", 
-                                new { ticketCount = totalEntries });
+                            await transaction.RollbackAsync();
                         }
-                        catch (Exception ex)
+                        catch (Exception rollbackEx)
                         {
-                            // Log but don't fail ticket creation if gamification fails
-                            _logger.LogWarning(ex, "Gamification integration failed for user {UserId} after ticket creation", request.UserId);
+                            _logger.LogWarning(rollbackEx,
+                                "Rollback failed after ticket creation transaction error for payment {PaymentId}",
+                                request.PaymentId);
                         }
-                    }
 
-                    return new CreateTicketsFromPaymentResponse
-                    {
-                        TicketNumbers = tickets.Select(t => t.TicketNumber).ToList(),
-                        TicketsPurchased = tickets.Count
-                    };
-                }
-                catch
-                {
-                    await transaction.RollbackAsync();
-                    throw;
-                }
+                        _context.ChangeTracker.Clear();
+                        throw;
+                    }
+                });
             }
             catch (Exception ex)
             {
