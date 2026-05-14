@@ -2,6 +2,7 @@ using System.Text.Json;
 using AmesaBackend.Admin.DTOs;
 using AmesaBackend.Admin.Security;
 using AmesaBackend.Auth.Data;
+using AmesaBackend.Auth.Models;
 using AmesaBackend.Lottery.Data;
 using AmesaBackend.Notification.Constants;
 using AmesaBackend.Notification.Data;
@@ -18,6 +19,8 @@ public interface IMessagingAdminService
 
 public sealed class MessagingAdminService : IMessagingAdminService
 {
+    private const int MaxGroupRecipientsPerSend = 500;
+
     private readonly NotificationDbContext _notificationContext;
     private readonly AuthDbContext _authContext;
     private readonly LotteryDbContext _lotteryContext;
@@ -43,7 +46,7 @@ public sealed class MessagingAdminService : IMessagingAdminService
 
     public async Task<IReadOnlyCollection<AdminNotificationDto>> GetRecentNotificationsAsync(int limit = 50)
     {
-        await RequireEngagementAccessAsync();
+        await RequireNotificationReadAccessAsync();
 
         var notifications = await _notificationContext.UserNotifications
             .AsNoTracking()
@@ -96,7 +99,7 @@ public sealed class MessagingAdminService : IMessagingAdminService
 
     public async Task<SendAdminNotificationResult> QueueNotificationAsync(SendAdminNotificationRequest request)
     {
-        await RequireEngagementAccessAsync();
+        await RequireNotificationSendAccessAsync();
 
         if (string.IsNullOrWhiteSpace(request.Title) || string.IsNullOrWhiteSpace(request.Message))
         {
@@ -203,10 +206,15 @@ public sealed class MessagingAdminService : IMessagingAdminService
 
         var recipients = await _authContext.Users
             .AsNoTracking()
-            .Where(u => userIds.Contains(u.Id))
+            .Where(u => userIds.Contains(u.Id) && u.Status == UserStatus.Active)
             .OrderBy(u => u.Email)
             .Select(u => new { u.Id, u.Email })
             .ToListAsync();
+
+        if (recipients.Count > MaxGroupRecipientsPerSend)
+        {
+            throw new InvalidOperationException($"Group target matched more than {MaxGroupRecipientsPerSend} active users. Narrow the target before sending.");
+        }
 
         return recipients.Select(u => (u.Id, u.Email)).ToList();
     }
@@ -247,6 +255,14 @@ public sealed class MessagingAdminService : IMessagingAdminService
                 {
                     throw new InvalidOperationException("Select a birthday month.");
                 }
+                if (request.BirthdayMonth is < 1 or > 12)
+                {
+                    throw new InvalidOperationException("Birthday month must be between 1 and 12.");
+                }
+                if (request.BirthdayDay is < 1 or > 31)
+                {
+                    throw new InvalidOperationException("Birthday day must be between 1 and 31.");
+                }
 
                 var birthdayQuery = _authContext.Users
                     .AsNoTracking()
@@ -281,10 +297,10 @@ public sealed class MessagingAdminService : IMessagingAdminService
                     throw new InvalidOperationException("Enter a language code for language targeting.");
                 }
 
-                var language = request.Language.Trim();
+                var language = request.Language.Trim().ToLowerInvariant();
                 return await _authContext.Users
                     .AsNoTracking()
-                    .Where(u => u.PreferredLanguage == language)
+                    .Where(u => u.PreferredLanguage.ToLower() == language)
                     .Select(u => u.Id)
                     .Distinct()
                     .ToListAsync();
@@ -316,15 +332,28 @@ public sealed class MessagingAdminService : IMessagingAdminService
         return (user.Id, user.Email);
     }
 
-    private async Task RequireEngagementAccessAsync()
+    private async Task RequireNotificationReadAccessAsync()
     {
-        if (await _permissions.HasPermissionAsync(AdminPermissionNames.SettingsManage) ||
+        if (await _permissions.HasPermissionAsync(AdminPermissionNames.NotificationsRead) ||
+            await _permissions.HasPermissionAsync(AdminPermissionNames.NotificationsSend) ||
+            await _permissions.HasPermissionAsync(AdminPermissionNames.SettingsManage) ||
             await _permissions.HasPermissionAsync(AdminPermissionNames.AuditRead))
         {
             return;
         }
 
-        throw new UnauthorizedAccessException($"Admin permission required: {AdminPermissionNames.SettingsManage} or {AdminPermissionNames.AuditRead}");
+        throw new UnauthorizedAccessException($"Admin permission required: {AdminPermissionNames.NotificationsRead} or {AdminPermissionNames.SettingsManage}");
+    }
+
+    private async Task RequireNotificationSendAccessAsync()
+    {
+        if (await _permissions.HasPermissionAsync(AdminPermissionNames.NotificationsSend) ||
+            await _permissions.HasPermissionAsync(AdminPermissionNames.SettingsManage))
+        {
+            return;
+        }
+
+        throw new UnauthorizedAccessException($"Admin permission required: {AdminPermissionNames.NotificationsSend} or {AdminPermissionNames.SettingsManage}");
     }
 
     private static IReadOnlyCollection<string> GetChannels(SendAdminNotificationRequest request)

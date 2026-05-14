@@ -175,71 +175,97 @@ namespace AmesaBackend.Notification.Services.Background
                            (q.ScheduledFor == null || q.ScheduledFor <= DateTime.UtcNow))
                 .OrderByDescending(q => q.Priority)
                 .ThenBy(q => q.CreatedAt)
-                .Take(10)
+                .Take(50)
                 .ToListAsync(cancellationToken);
 
-            foreach (var item in pendingItems)
+            foreach (var notificationGroup in pendingItems.GroupBy(item => item.NotificationId))
             {
+                var items = notificationGroup.ToList();
+                var firstItem = items.First();
                 try
                 {
-                    item.Status = "processing";
-                    item.ProcessedAt = DateTime.UtcNow;
+                    foreach (var item in items)
+                    {
+                        item.Status = "processing";
+                        item.ProcessedAt = DateTime.UtcNow;
+                    }
+
                     await context.SaveChangesAsync(cancellationToken);
 
-                    if (item.Notification == null)
+                    if (firstItem.Notification == null)
                     {
-                        _logger.LogWarning("Queue item {QueueId} has no associated notification", item.Id);
-                        item.Status = "failed";
-                        item.ErrorMessage = "Notification not found";
+                        _logger.LogWarning("Queue notification {NotificationId} has no associated notification", notificationGroup.Key);
+                        foreach (var item in items)
+                        {
+                            item.Status = "failed";
+                            item.ErrorMessage = "Notification not found";
+                        }
+
                         await context.SaveChangesAsync(cancellationToken);
                         continue;
                     }
 
-                    // Create notification request from queue item
+                    var channels = items
+                        .Select(item => item.Channel)
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+
+                    // Create one notification request per notification id so multi-channel
+                    // queued sends do not create duplicate visible in-app notifications.
                     var notificationRequest = new NotificationRequest
                     {
-                        UserId = item.Notification.UserId,
-                        Channel = item.Channel,
-                        Type = item.Notification.Type,
-                        Title = item.Notification.Title,
-                        Message = item.Notification.Message,
+                        UserId = firstItem.Notification.UserId,
+                        Channel = string.Join(",", channels),
+                        Type = firstItem.Notification.Type,
+                        Title = firstItem.Notification.Title,
+                        Message = firstItem.Notification.Message,
                         Language = "en", // Default, can be enhanced
-                        Data = item.Notification.Data != null
-                            ? JsonSerializer.Deserialize<Dictionary<string, object>>(item.Notification.Data)
+                        Data = firstItem.Notification.Data != null
+                            ? JsonSerializer.Deserialize<Dictionary<string, object>>(firstItem.Notification.Data)
                             : null
                     };
 
                     // Process notification via orchestrator
                     var result = await orchestrator.SendMultiChannelAsync(
-                        item.Notification.UserId,
+                        firstItem.Notification.UserId,
                         notificationRequest,
-                        new List<string> { item.Channel });
+                        channels);
 
                     if (result.SuccessCount > 0)
                     {
-                        item.Status = "completed";
-                        _logger.LogInformation("Successfully processed queue item {QueueId}", item.Id);
+                        foreach (var item in items)
+                        {
+                            item.Status = "completed";
+                        }
+
+                        _logger.LogInformation("Successfully processed notification queue group {NotificationId}", notificationGroup.Key);
                     }
                     else
                     {
-                        item.Status = "failed";
-                        item.ErrorMessage = "All delivery attempts failed";
-                        item.RetryCount++;
+                        foreach (var item in items)
+                        {
+                            item.Status = "failed";
+                            item.ErrorMessage = "All delivery attempts failed";
+                            item.RetryCount++;
+                        }
                     }
 
                     await context.SaveChangesAsync(cancellationToken);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error processing queue item {QueueId}", item.Id);
-                    item.Status = "failed";
-                    item.ErrorMessage = ex.Message;
-                    item.RetryCount++;
-
-                    if (item.RetryCount >= item.MaxRetries)
+                    _logger.LogError(ex, "Error processing notification queue group {NotificationId}", notificationGroup.Key);
+                    foreach (var item in items)
                     {
                         item.Status = "failed";
-                        _logger.LogWarning("Queue item {QueueId} exceeded max retries", item.Id);
+                        item.ErrorMessage = ex.Message;
+                        item.RetryCount++;
+
+                        if (item.RetryCount >= item.MaxRetries)
+                        {
+                            item.Status = "failed";
+                            _logger.LogWarning("Queue item {QueueId} exceeded max retries", item.Id);
+                        }
                     }
 
                     await context.SaveChangesAsync(cancellationToken);

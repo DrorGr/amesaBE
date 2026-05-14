@@ -135,6 +135,16 @@ namespace AmesaBackend.Admin.Services
                 throw new InvalidOperationException("Email, username, name, and password are required.");
             }
 
+            if (request.Password.Length < 12)
+            {
+                throw new InvalidOperationException("Temporary password must be at least 12 characters long.");
+            }
+
+            if (username.Length < 3)
+            {
+                throw new InvalidOperationException("Username must be at least 3 characters long.");
+            }
+
             if (await _context.Users.AnyAsync(u => u.Email == email || u.Username == username))
             {
                 throw new InvalidOperationException("A user with this email or username already exists.");
@@ -176,11 +186,11 @@ namespace AmesaBackend.Admin.Services
                 throw new KeyNotFoundException($"User with ID {id} not found");
 
             if (!string.IsNullOrWhiteSpace(request.FirstName))
-                user.FirstName = request.FirstName;
+                user.FirstName = request.FirstName.Trim();
             if (!string.IsNullOrWhiteSpace(request.LastName))
-                user.LastName = request.LastName;
+                user.LastName = request.LastName.Trim();
             if (!string.IsNullOrWhiteSpace(request.Phone))
-                user.Phone = request.Phone;
+                user.Phone = request.Phone.Trim();
             if (request.Status.HasValue)
                 user.Status = request.Status.Value;
 

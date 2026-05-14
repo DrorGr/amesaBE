@@ -142,13 +142,16 @@ else
                                 </a>
                             </li>
                         }
-                        @if (Can(AdminPermissionNames.SettingsManage) || Can(AdminPermissionNames.AuditRead))
+                        @if (Can(AdminPermissionNames.PromotionsRead) || Can(AdminPermissionNames.PromotionsWrite) || Can(AdminPermissionNames.SettingsManage) || Can(AdminPermissionNames.AuditRead))
                         {
                             <li class="nav-item">
                                 <a class="nav-link" href="promotions">
                                     <i class="fas fa-tags me-2"></i> Promotions
                                 </a>
                             </li>
+                        }
+                        @if (Can(AdminPermissionNames.NotificationsRead) || Can(AdminPermissionNames.NotificationsSend) || Can(AdminPermissionNames.SettingsManage) || Can(AdminPermissionNames.AuditRead))
+                        {
                             <li class="nav-item">
                                 <a class="nav-link" href="messaging">
                                     <i class="fas fa-bullhorn me-2"></i> Messaging

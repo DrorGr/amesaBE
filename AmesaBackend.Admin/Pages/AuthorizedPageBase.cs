@@ -26,14 +26,14 @@ namespace AmesaBackend.Admin.Pages
             {
                 if (!AuthService.IsAuthenticated())
                 {
-                    Navigation.NavigateTo("login");
+                    Navigation.NavigateTo("/admin/login");
                     return;
                 }
             }
             catch (Exception)
             {
                 // If authentication check fails, redirect to login
-                Navigation.NavigateTo("login");
+                Navigation.NavigateTo("/admin/login");
                 return;
             }
 

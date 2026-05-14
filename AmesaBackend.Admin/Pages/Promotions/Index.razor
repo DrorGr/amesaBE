@@ -1,9 +1,9 @@
 @page "/promotions"
-@attribute [Authorize(Policy = AdminPermissionNames.AuditRead)]
 @inherits AuthorizedPageBase
 @using AmesaBackend.Admin.DTOs
 @using AmesaBackend.Admin.Services
 @inject IPromotionsAdminService PromotionsService
+@inject IAdminPermissionService PermissionService
 
 <PageTitle>Promotions - Amesa Admin</PageTitle>
 
@@ -16,7 +16,7 @@
             <p class="text-muted">Create, disable, and monitor promotion codes used by checkout.</p>
         </div>
         <div class="col-auto d-flex align-items-end">
-            <button class="btn btn-primary" @onclick="ShowCreateForm">
+            <button class="btn btn-primary" @onclick="ShowCreateForm" disabled="@(!canManagePromotions)">
                 <i class="fas fa-plus"></i> Create Promotion
             </button>
         </div>
@@ -25,6 +25,12 @@
     @if (!string.IsNullOrWhiteSpace(message))
     {
         <div class="alert alert-@messageType">@message</div>
+    }
+    @if (!canManagePromotions)
+    {
+        <div class="alert alert-warning">
+            You can review promotions, but creating or editing promotions requires promotion write or settings management access.
+        </div>
     }
 
     <div class="card mb-4">
@@ -190,12 +196,12 @@
                                     </td>
                                     <td>
                                         <div class="btn-group btn-group-sm">
-                                            <button class="btn btn-outline-primary" @onclick="() => EditPromotion(promotion)">
+                                            <button class="btn btn-outline-primary" @onclick="() => EditPromotion(promotion)" disabled="@(!canManagePromotions)">
                                                 <i class="fas fa-edit"></i>
                                             </button>
                                             @if (promotion.IsActive)
                                             {
-                                                <button class="btn btn-outline-danger" @onclick="() => DisablePromotion(promotion.Id)">
+                                                <button class="btn btn-outline-danger" @onclick="() => DisablePromotion(promotion.Id)" disabled="@(!canManagePromotions)">
                                                     <i class="fas fa-ban"></i>
                                                 </button>
                                             }
@@ -226,9 +232,12 @@
     private string? statusFilter;
     private string? message;
     private string messageType = "success";
+    private bool canManagePromotions;
 
     protected override async Task OnInitializedAsync()
     {
+        canManagePromotions = await PermissionService.HasPermissionAsync(AdminPermissionNames.PromotionsWrite) ||
+            await PermissionService.HasPermissionAsync(AdminPermissionNames.SettingsManage);
         await LoadPromotions();
     }
 

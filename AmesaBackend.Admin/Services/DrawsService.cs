@@ -1,9 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using AmesaBackend.Lottery.Data;
+using AmesaBackend.Lottery.DTOs;
 using AmesaBackend.Lottery.Models;
+using AmesaBackend.Lottery.Services.Interfaces;
 using AmesaBackend.Admin.DTOs;
 using AmesaBackend.Admin.Security;
-using System.Security.Cryptography;
 
 namespace AmesaBackend.Admin.Services
 {
@@ -21,17 +22,20 @@ namespace AmesaBackend.Admin.Services
         private readonly ILogger<DrawsService> _logger;
         private readonly IAdminPermissionService _permissions;
         private readonly IAdminAuditService _audit;
+        private readonly ILotteryService _lotteryService;
 
         public DrawsService(
             LotteryDbContext context,
             ILogger<DrawsService> logger,
             IAdminPermissionService permissions,
-            IAdminAuditService audit)
+            IAdminAuditService audit,
+            ILotteryService lotteryService)
         {
             _context = context;
             _logger = logger;
             _permissions = permissions;
             _audit = audit;
+            _lotteryService = lotteryService;
         }
 
         public async Task<PagedResult<DrawDto>> GetDrawsAsync(int page = 1, int pageSize = 20, Guid? houseId = null, string? status = null)
@@ -117,6 +121,11 @@ namespace AmesaBackend.Admin.Services
         {
             await _permissions.RequirePermissionAsync(AdminPermissionNames.DrawsConduct);
 
+            if (request.DrawDate <= DateTime.UtcNow)
+            {
+                throw new InvalidOperationException("Draw date must be in the future.");
+            }
+
             var house = await _context.Houses.FirstOrDefaultAsync(h => h.Id == request.HouseId && h.DeletedAt == null);
             if (house == null)
             {
@@ -187,38 +196,24 @@ namespace AmesaBackend.Admin.Services
             if (draw.TotalParticipationPercentage < draw.House.MinimumParticipationPercentage)
                 throw new InvalidOperationException("Draw cannot be conducted before the minimum participation threshold is met");
 
-            // Get all tickets for this house
-            var tickets = await _context.LotteryTickets
-                .Where(t => t.HouseId == draw.HouseId && t.Status == "Active")
-                .ToListAsync();
+            await _lotteryService.ConductDrawAsync(drawId, new ConductDrawRequest
+            {
+                DrawMethod = "random",
+                DrawSeed = Guid.NewGuid().ToString("N")
+            });
 
-            if (!tickets.Any())
-                throw new InvalidOperationException("No active tickets found for this draw");
-
-            var winningTicket = tickets[RandomNumberGenerator.GetInt32(tickets.Count)];
-
-            draw.WinningTicketId = winningTicket.Id;
-            draw.WinningTicketNumber = winningTicket.TicketNumber;
-            draw.WinnerUserId = winningTicket.UserId;
-            draw.DrawStatus = "Completed";
-            draw.DrawMethod = "random";
+            draw = await _context.LotteryDraws.FirstAsync(d => d.Id == drawId);
             draw.ConductedBy = conductedBy;
-            draw.ConductedAt = DateTime.UtcNow;
             draw.UpdatedAt = DateTime.UtcNow;
-
-            // Mark ticket as winner
-            winningTicket.IsWinner = true;
-            winningTicket.UpdatedAt = DateTime.UtcNow;
-
             await _context.SaveChangesAsync();
 
-            _logger.LogInformation("Draw conducted: {DrawId} - Winner: {TicketNumber}", drawId, winningTicket.TicketNumber);
+            _logger.LogInformation("Draw conducted by admin: {DrawId}", drawId);
             await _audit.LogAsync("draw.conducted", "draw", drawId, new
             {
                 draw.HouseId,
-                winningTicket.Id,
-                winningTicket.TicketNumber,
-                winningTicket.UserId,
+                draw.WinningTicketId,
+                draw.WinningTicketNumber,
+                draw.WinnerUserId,
                 conductedBy,
                 draw.TotalTicketsSold,
                 draw.TotalParticipationPercentage
@@ -256,15 +251,17 @@ namespace AmesaBackend.Admin.Services
                 var participation = house.TotalTickets > 0
                     ? Math.Round((decimal)ticketsSold / house.TotalTickets * 100, 2)
                     : 0;
+                var drawDate = house.DrawDate!.Value;
 
-                var draw = existingDraws.FirstOrDefault(d => d.HouseId == house.Id);
+                var draw = existingDraws.FirstOrDefault(d => d.HouseId == house.Id && d.DrawStatus == "Pending")
+                    ?? existingDraws.FirstOrDefault(d => d.HouseId == house.Id && d.DrawDate == drawDate);
                 if (draw == null)
                 {
                     _context.LotteryDraws.Add(new LotteryDraw
                     {
                         Id = Guid.NewGuid(),
                         HouseId = house.Id,
-                        DrawDate = house.DrawDate!.Value,
+                        DrawDate = drawDate,
                         TotalTicketsSold = ticketsSold,
                         TotalParticipationPercentage = participation,
                         DrawStatus = "Pending",
@@ -277,11 +274,11 @@ namespace AmesaBackend.Admin.Services
                 }
 
                 if (draw.DrawStatus == "Pending" &&
-                    (draw.DrawDate != house.DrawDate.Value ||
+                    (draw.DrawDate != drawDate ||
                      draw.TotalTicketsSold != ticketsSold ||
                      draw.TotalParticipationPercentage != participation))
                 {
-                    draw.DrawDate = house.DrawDate.Value;
+                    draw.DrawDate = drawDate;
                     draw.TotalTicketsSold = ticketsSold;
                     draw.TotalParticipationPercentage = participation;
                     draw.UpdatedAt = DateTime.UtcNow;

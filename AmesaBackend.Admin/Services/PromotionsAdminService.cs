@@ -34,7 +34,7 @@ public sealed class PromotionsAdminService : IPromotionsAdminService
 
     public async Task<PagedResult<AdminPromotionDto>> GetPromotionsAsync(int page = 1, int pageSize = 20, string? search = null, bool? isActive = null)
     {
-        await RequireEngagementAccessAsync();
+        await RequirePromotionReadAccessAsync();
 
         var query = _context.Promotions.AsNoTracking().AsQueryable();
 
@@ -79,7 +79,7 @@ public sealed class PromotionsAdminService : IPromotionsAdminService
 
     public async Task<AdminPromotionDto> SavePromotionAsync(SaveAdminPromotionRequest request)
     {
-        await RequireEngagementAccessAsync();
+        await RequirePromotionWriteAccessAsync();
 
         ValidatePromotion(request);
         var applicableHouses = ParseHouseIds(request.ApplicableHouseIds);
@@ -138,7 +138,7 @@ public sealed class PromotionsAdminService : IPromotionsAdminService
 
     public async Task DisablePromotionAsync(Guid id)
     {
-        await RequireEngagementAccessAsync();
+        await RequirePromotionWriteAccessAsync();
 
         var promotion = await _context.Promotions.FirstOrDefaultAsync(p => p.Id == id)
             ?? throw new KeyNotFoundException("Promotion not found.");
@@ -150,15 +150,28 @@ public sealed class PromotionsAdminService : IPromotionsAdminService
         await _audit.LogAsync("promotion.disabled", "promotion", id, new { promotion.Code, promotion.Title });
     }
 
-    private async Task RequireEngagementAccessAsync()
+    private async Task RequirePromotionReadAccessAsync()
     {
-        if (await _permissions.HasPermissionAsync(AdminPermissionNames.SettingsManage) ||
+        if (await _permissions.HasPermissionAsync(AdminPermissionNames.PromotionsRead) ||
+            await _permissions.HasPermissionAsync(AdminPermissionNames.PromotionsWrite) ||
+            await _permissions.HasPermissionAsync(AdminPermissionNames.SettingsManage) ||
             await _permissions.HasPermissionAsync(AdminPermissionNames.AuditRead))
         {
             return;
         }
 
-        throw new UnauthorizedAccessException($"Admin permission required: {AdminPermissionNames.SettingsManage} or {AdminPermissionNames.AuditRead}");
+        throw new UnauthorizedAccessException($"Admin permission required: {AdminPermissionNames.PromotionsRead} or {AdminPermissionNames.SettingsManage}");
+    }
+
+    private async Task RequirePromotionWriteAccessAsync()
+    {
+        if (await _permissions.HasPermissionAsync(AdminPermissionNames.PromotionsWrite) ||
+            await _permissions.HasPermissionAsync(AdminPermissionNames.SettingsManage))
+        {
+            return;
+        }
+
+        throw new UnauthorizedAccessException($"Admin permission required: {AdminPermissionNames.PromotionsWrite} or {AdminPermissionNames.SettingsManage}");
     }
 
     private async Task<decimal> GetTotalDiscountAsync(Guid promotionId)

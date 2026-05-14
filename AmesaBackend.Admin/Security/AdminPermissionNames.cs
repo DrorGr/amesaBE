@@ -17,6 +17,10 @@ public static class AdminPermissionNames
     public const string PaymentsRefund = "payments.refund";
     public const string TranslationsRead = "translations.read";
     public const string TranslationsWrite = "translations.write";
+    public const string PromotionsRead = "promotions.read";
+    public const string PromotionsWrite = "promotions.write";
+    public const string NotificationsRead = "notifications.read";
+    public const string NotificationsSend = "notifications.send";
     public const string AuditRead = "audit.read";
     public const string AdminUsersManage = "admin_users.manage";
     public const string SettingsManage = "settings.manage";
@@ -38,6 +42,10 @@ public static class AdminPermissionNames
         PaymentsRefund,
         TranslationsRead,
         TranslationsWrite,
+        PromotionsRead,
+        PromotionsWrite,
+        NotificationsRead,
+        NotificationsSend,
         AuditRead,
         AdminUsersManage,
         SettingsManage

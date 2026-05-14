@@ -1,10 +1,10 @@
 @page "/messaging"
-@attribute [Authorize(Policy = AdminPermissionNames.AuditRead)]
 @inherits AuthorizedPageBase
 @using AmesaBackend.Admin.DTOs
 @using AmesaBackend.Admin.Services
 @inject IMessagingAdminService MessagingService
 @inject IHousesService HousesService
+@inject IAdminPermissionService PermissionService
 
 <PageTitle>Messaging - Amesa Admin</PageTitle>
 
@@ -28,6 +28,12 @@
             <strong>Send Notification</strong>
         </div>
         <div class="card-body">
+            @if (!canSendNotifications)
+            {
+                <div class="alert alert-warning">
+                    You can review recent notifications, but sending requires notification send or settings management access.
+                </div>
+            }
             <div class="row g-3">
                 <div class="col-md-4">
                     <label class="form-label">Target</label>
@@ -148,7 +154,7 @@
             </div>
         </div>
         <div class="card-footer text-end">
-            <button class="btn btn-primary" @onclick="SendNotification" disabled="@isSending">
+            <button class="btn btn-primary" @onclick="SendNotification" disabled="@(isSending || !canSendNotifications)">
                 @if (isSending)
                 {
                     <span class="spinner-border spinner-border-sm me-2"></span>
@@ -234,9 +240,12 @@
     private string messageType = "success";
     private string? houseTargetId;
     private string? lotteryTargetId;
+    private bool canSendNotifications;
 
     protected override async Task OnInitializedAsync()
     {
+        canSendNotifications = await PermissionService.HasPermissionAsync(AdminPermissionNames.NotificationsSend) ||
+            await PermissionService.HasPermissionAsync(AdminPermissionNames.SettingsManage);
         await LoadHouses();
         await LoadRecentNotifications();
     }

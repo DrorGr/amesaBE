@@ -6,6 +6,8 @@ using AmesaBackend.Admin.Security;
 using AmesaBackend.Admin.Services;
 using AmesaBackend.Admin.Services.Interfaces;
 using AmesaBackend.Auth.Services.Interfaces;
+using AmesaBackend.Lottery.Services;
+using AmesaBackend.Lottery.Services.Interfaces;
 using AmesaBackend.Shared.Extensions;
 using StackExchange.Redis;
 using Amazon.S3;
@@ -160,6 +162,7 @@ public static class ServiceConfiguration
         services.AddScoped<IUsersService, UsersService>();
         services.AddScoped<ITranslationsService, TranslationsService>();
         services.AddScoped<ITicketsService, TicketsService>();
+        services.AddScoped<ILotteryService, LotteryService>();
         services.AddScoped<IDrawsService, DrawsService>();
         services.AddScoped<IPaymentsService, PaymentsService>();
         services.AddScoped<IPromotionsAdminService, PromotionsAdminService>();
