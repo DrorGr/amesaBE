@@ -230,17 +230,17 @@
 
     private void NavigateToCreate()
     {
-        Navigation.NavigateTo("/houses/create");
+        Navigation.NavigateTo("houses/create");
     }
 
     private void ViewHouse(Guid id)
     {
-        Navigation.NavigateTo($"/houses/{id}");
+        Navigation.NavigateTo($"houses/{id}/edit");
     }
 
     private void EditHouse(Guid id)
     {
-        Navigation.NavigateTo($"/houses/{id}/edit");
+        Navigation.NavigateTo($"houses/{id}/edit");
     }
 
     private async Task DeleteHouse(Guid id)

@@ -258,8 +258,7 @@
 
             var createdHouse = await HousesService.CreateHouseAsync(request);
             
-            // Navigate to the house detail or list page
-            Navigation.NavigateTo($"/houses/{createdHouse.Id}");
+            Navigation.NavigateTo($"houses/{createdHouse.Id}/edit");
         }
         catch (Exception ex)
         {
@@ -274,7 +273,7 @@
 
     private void NavigateBack()
     {
-        Navigation.NavigateTo("/houses");
+        Navigation.NavigateTo("houses");
     }
 
     private void HandleImagesChanged(List<ImageInfo> images)

@@ -220,12 +220,12 @@
 
     private void ViewUser(Guid id)
     {
-        Navigation.NavigateTo($"/users/{id}");
+        Navigation.NavigateTo($"users/{id}/edit");
     }
 
     private void EditUser(Guid id)
     {
-        Navigation.NavigateTo($"/users/{id}/edit");
+        Navigation.NavigateTo($"users/{id}/edit");
     }
 
     private async Task SuspendUser(Guid id)

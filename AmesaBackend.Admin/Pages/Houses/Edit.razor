@@ -317,8 +317,7 @@
 
             var updatedHouse = await HousesService.UpdateHouseAsync(Id, request);
             
-            // Navigate to the house detail or list page
-            Navigation.NavigateTo($"/houses/{updatedHouse.Id}");
+            Navigation.NavigateTo("houses");
         }
         catch (Exception ex)
         {
@@ -333,7 +332,7 @@
 
     private void NavigateBack()
     {
-        Navigation.NavigateTo("/houses");
+        Navigation.NavigateTo("houses");
     }
 
     private void HandleImagesChanged(List<ImageInfo> images)
