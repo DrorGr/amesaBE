@@ -18,6 +18,15 @@
             </h1>
             <p class="text-muted">View and conduct lottery draws</p>
         </div>
+        <div class="col-auto">
+            <AuthorizeView Policy="@AdminPermissionNames.DrawsConduct">
+                <Authorized>
+                    <button class="btn btn-primary" @onclick="ShowCreateDrawModal">
+                        <i class="fas fa-plus"></i> New Draw
+                    </button>
+                </Authorized>
+            </AuthorizeView>
+        </div>
     </div>
 
     <!-- Filters -->
@@ -88,6 +97,7 @@
                                 <th>Status</th>
                                 <th>Method</th>
                                 <th>Conducted At</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -219,6 +229,55 @@
     <div class="modal-backdrop fade show"></div>
 }
 
+<!-- Create Draw Modal -->
+@if (showCreateModal)
+{
+    <div class="modal fade show" style="display: block;" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">New Draw</h5>
+                    <button type="button" class="btn-close" @onclick="CloseCreateDrawModal"></button>
+                </div>
+                <div class="modal-body">
+                    @if (!string.IsNullOrWhiteSpace(createError))
+                    {
+                        <div class="alert alert-danger">@createError</div>
+                    }
+                    <div class="mb-3">
+                        <label class="form-label">House</label>
+                        <select class="form-select" @bind="createHouseId">
+                            <option value="">Select House</option>
+                            @if (houses != null)
+                            {
+                                @foreach (var house in houses)
+                                {
+                                    <option value="@house.Id">@house.Title</option>
+                                }
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Draw Date</label>
+                        <input type="datetime-local" class="form-control" @bind="createDrawDate" />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseCreateDrawModal">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="CreateDraw" disabled="@isCreatingDraw">
+                        @if (isCreatingDraw)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                        }
+                        Create Draw
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
 @code {
     private PagedResult<DrawDto>? draws;
     private List<HouseDto>? houses;
@@ -231,6 +290,11 @@
     private string conductDrawHouseTitle = string.Empty;
     private bool showConductModal = false;
     private bool isConducting = false;
+    private bool showCreateModal = false;
+    private bool isCreatingDraw = false;
+    private string? createHouseId;
+    private DateTime createDrawDate = DateTime.UtcNow.AddDays(1);
+    private string? createError;
 
     protected override async Task OnInitializedAsync()
     {
@@ -299,6 +363,50 @@
         showConductModal = false;
         selectedDrawId = null;
         conductDrawHouseTitle = string.Empty;
+    }
+
+    private void ShowCreateDrawModal()
+    {
+        createHouseId = null;
+        createDrawDate = DateTime.UtcNow.AddDays(1);
+        createError = null;
+        showCreateModal = true;
+    }
+
+    private void CloseCreateDrawModal()
+    {
+        showCreateModal = false;
+        createError = null;
+    }
+
+    private async Task CreateDraw()
+    {
+        isCreatingDraw = true;
+        createError = null;
+        try
+        {
+            if (string.IsNullOrWhiteSpace(createHouseId) || !Guid.TryParse(createHouseId, out var houseId))
+            {
+                throw new InvalidOperationException("Select a house.");
+            }
+
+            await DrawsService.CreateDrawAsync(new CreateDrawRequest
+            {
+                HouseId = houseId,
+                DrawDate = createDrawDate
+            });
+
+            CloseCreateDrawModal();
+            await LoadDraws();
+        }
+        catch (Exception ex)
+        {
+            createError = ex.Message;
+        }
+        finally
+        {
+            isCreatingDraw = false;
+        }
     }
 
     private async Task ConfirmConductDraw()

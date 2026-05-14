@@ -57,7 +57,15 @@ public sealed class AdminNotificationDto
 
 public sealed class SendAdminNotificationRequest
 {
+    public string TargetMode { get; set; } = "user";
     public string UserLookup { get; set; } = string.Empty;
+    public string GroupBasis { get; set; } = "house";
+    public Guid? HouseId { get; set; }
+    public Guid? LotteryHouseId { get; set; }
+    public int? BirthdayMonth { get; set; }
+    public int? BirthdayDay { get; set; }
+    public string? LocationQuery { get; set; }
+    public string? Language { get; set; }
     public string Type { get; set; } = "system_announcement";
     public string Title { get; set; } = string.Empty;
     public string Message { get; set; } = string.Empty;
@@ -75,5 +83,6 @@ public sealed class SendAdminNotificationResult
     public Guid NotificationId { get; set; }
     public Guid UserId { get; set; }
     public string UserEmail { get; set; } = string.Empty;
+    public int RecipientCount { get; set; }
     public IReadOnlyCollection<string> QueuedChannels { get; set; } = Array.Empty<string>();
 }

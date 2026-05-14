@@ -1,0 +1,145 @@
+@page "/users/create"
+@attribute [Authorize(Policy = AdminPermissionNames.UsersWrite)]
+@inherits AuthorizedPageBase
+@using AmesaBackend.Admin.Services
+@using AmesaBackend.Admin.DTOs
+@using AmesaBackend.Auth.Models
+@inject IUsersService UsersService
+
+<PageTitle>New User - Amesa Admin</PageTitle>
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h1 class="display-5">
+                <i class="fas fa-user-plus"></i> New User
+            </h1>
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-secondary" @onclick="NavigateBack">
+                <i class="fas fa-arrow-left"></i> Back to List
+            </button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="alert alert-danger">@errorMessage</div>
+    }
+
+    <div class="card">
+        <div class="card-body">
+            <EditForm Model="@request" OnValidSubmit="HandleSubmit">
+                <DataAnnotationsValidator />
+                <ValidationSummary class="text-danger mb-3" />
+
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label class="form-label">Email</label>
+                            <InputText type="email" @bind-Value="request.Email" class="form-control" />
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label class="form-label">Username</label>
+                            <InputText @bind-Value="request.Username" class="form-control" />
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label class="form-label">First Name</label>
+                            <InputText @bind-Value="request.FirstName" class="form-control" />
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label class="form-label">Last Name</label>
+                            <InputText @bind-Value="request.LastName" class="form-control" />
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="mb-3">
+                            <label class="form-label">Phone</label>
+                            <InputText @bind-Value="request.Phone" class="form-control" />
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="mb-3">
+                            <label class="form-label">Preferred Language</label>
+                            <InputText @bind-Value="request.PreferredLanguage" class="form-control" />
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="mb-3">
+                            <label class="form-label">Status</label>
+                            <InputSelect @bind-Value="request.Status" class="form-select">
+                                <option value="@UserStatus.Pending">Pending</option>
+                                <option value="@UserStatus.Active">Active</option>
+                                <option value="@UserStatus.Suspended">Suspended</option>
+                                <option value="@UserStatus.Banned">Banned</option>
+                            </InputSelect>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Temporary Password</label>
+                    <InputText type="password" @bind-Value="request.Password" class="form-control" />
+                    <div class="form-text">Share this password with the user through a secure channel.</div>
+                </div>
+
+                <div class="d-flex justify-content-between mt-4">
+                    <button type="button" class="btn btn-secondary" @onclick="NavigateBack">
+                        <i class="fas fa-times"></i> Cancel
+                    </button>
+                    <button type="submit" class="btn btn-primary" disabled="@isSubmitting">
+                        @if (isSubmitting)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                        }
+                        <i class="fas fa-save"></i> Create User
+                    </button>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+</div>
+
+@code {
+    private CreateUserRequest request = new();
+    private bool isSubmitting;
+    private string? errorMessage;
+
+    private async Task HandleSubmit()
+    {
+        if (isSubmitting) return;
+
+        isSubmitting = true;
+        errorMessage = null;
+        try
+        {
+            var createdUser = await UsersService.CreateUserAsync(request);
+            Navigation.NavigateTo($"/admin/users/{createdUser.Id}/edit");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private void NavigateBack()
+    {
+        Navigation.NavigateTo("/admin/users");
+    }
+}

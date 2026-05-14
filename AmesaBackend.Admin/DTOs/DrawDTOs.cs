@@ -17,5 +17,11 @@ namespace AmesaBackend.Admin.DTOs
         public DateTime? ConductedAt { get; set; }
         public DateTime CreatedAt { get; set; }
     }
+
+    public class CreateDrawRequest
+    {
+        public Guid HouseId { get; set; }
+        public DateTime DrawDate { get; set; } = DateTime.UtcNow.AddDays(1);
+    }
 }
 

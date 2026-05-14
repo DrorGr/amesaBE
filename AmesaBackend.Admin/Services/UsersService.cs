@@ -10,9 +10,11 @@ namespace AmesaBackend.Admin.Services
     {
         Task<PagedResult<UserDto>> GetUsersAsync(int page = 1, int pageSize = 20, string? search = null, UserStatus? status = null);
         Task<UserDto?> GetUserByIdAsync(Guid id);
+        Task<UserDto> CreateUserAsync(CreateUserRequest request);
         Task<UserDto> UpdateUserAsync(Guid id, UpdateUserRequest request);
         Task<bool> SuspendUserAsync(Guid id);
         Task<bool> ActivateUserAsync(Guid id);
+        Task<bool> DeleteUserAsync(Guid id);
     }
 
     public class UsersService : IUsersService
@@ -117,6 +119,54 @@ namespace AmesaBackend.Admin.Services
             };
         }
 
+        public async Task<UserDto> CreateUserAsync(CreateUserRequest request)
+        {
+            await _permissions.RequirePermissionAsync(AdminPermissionNames.UsersWrite);
+
+            var email = request.Email.Trim().ToLowerInvariant();
+            var username = request.Username.Trim();
+
+            if (string.IsNullOrWhiteSpace(email) ||
+                string.IsNullOrWhiteSpace(username) ||
+                string.IsNullOrWhiteSpace(request.FirstName) ||
+                string.IsNullOrWhiteSpace(request.LastName) ||
+                string.IsNullOrWhiteSpace(request.Password))
+            {
+                throw new InvalidOperationException("Email, username, name, and password are required.");
+            }
+
+            if (await _context.Users.AnyAsync(u => u.Email == email || u.Username == username))
+            {
+                throw new InvalidOperationException("A user with this email or username already exists.");
+            }
+
+            var now = DateTime.UtcNow;
+            var user = new User
+            {
+                Id = Guid.NewGuid(),
+                Email = email,
+                Username = username,
+                FirstName = request.FirstName.Trim(),
+                LastName = request.LastName.Trim(),
+                Phone = string.IsNullOrWhiteSpace(request.Phone) ? null : request.Phone.Trim(),
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
+                Status = request.Status,
+                VerificationStatus = UserVerificationStatus.Unverified,
+                AuthProvider = AuthProvider.Email,
+                PreferredLanguage = string.IsNullOrWhiteSpace(request.PreferredLanguage) ? "en" : request.PreferredLanguage.Trim(),
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+
+            _context.Users.Add(user);
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("User created by admin: {UserId} - {Email}", user.Id, user.Email);
+            await _audit.LogAsync("user.created", "user", user.Id, new { user.Email, user.Status });
+
+            return await GetUserByIdAsync(user.Id) ?? throw new InvalidOperationException("Failed to retrieve created user");
+        }
+
         public async Task<UserDto> UpdateUserAsync(Guid id, UpdateUserRequest request)
         {
             await _permissions.RequirePermissionAsync(AdminPermissionNames.UsersWrite);
@@ -178,6 +228,23 @@ namespace AmesaBackend.Admin.Services
 
             _logger.LogInformation("User activated: {UserId} - {Email}", user.Id, user.Email);
             await _audit.LogAsync("user.activated", "user", user.Id, new { user.Email, user.Status });
+            return true;
+        }
+
+        public async Task<bool> DeleteUserAsync(Guid id)
+        {
+            await _permissions.RequirePermissionAsync(AdminPermissionNames.UsersWrite);
+
+            var user = await _context.Users.FindAsync(id);
+            if (user == null) return false;
+
+            user.Status = UserStatus.Deleted;
+            user.DeletedAt = DateTime.UtcNow;
+            user.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("User soft-deleted by admin: {UserId} - {Email}", user.Id, user.Email);
+            await _audit.LogAsync("user.deleted", "user", user.Id, new { user.Email });
             return true;
         }
     }

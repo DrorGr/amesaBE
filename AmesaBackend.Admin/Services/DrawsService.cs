@@ -11,6 +11,7 @@ namespace AmesaBackend.Admin.Services
     {
         Task<PagedResult<DrawDto>> GetDrawsAsync(int page = 1, int pageSize = 20, Guid? houseId = null, string? status = null);
         Task<DrawDto?> GetDrawByIdAsync(Guid id);
+        Task<DrawDto> CreateDrawAsync(CreateDrawRequest request);
         Task<DrawDto> ConductDrawAsync(Guid drawId, Guid conductedBy);
     }
 
@@ -110,6 +111,60 @@ namespace AmesaBackend.Admin.Services
                 ConductedAt = draw.ConductedAt,
                 CreatedAt = draw.CreatedAt
             };
+        }
+
+        public async Task<DrawDto> CreateDrawAsync(CreateDrawRequest request)
+        {
+            await _permissions.RequirePermissionAsync(AdminPermissionNames.DrawsConduct);
+
+            var house = await _context.Houses.FirstOrDefaultAsync(h => h.Id == request.HouseId && h.DeletedAt == null);
+            if (house == null)
+            {
+                throw new KeyNotFoundException("House not found.");
+            }
+
+            var existingPendingDraw = await _context.LotteryDraws
+                .FirstOrDefaultAsync(d => d.HouseId == request.HouseId && d.DrawStatus == "Pending");
+            if (existingPendingDraw != null)
+            {
+                throw new InvalidOperationException("This house already has a pending draw.");
+            }
+
+            var ticketsSold = await _context.LotteryTickets
+                .CountAsync(t => t.HouseId == request.HouseId && t.Status == "Active");
+            var participation = house.TotalTickets > 0
+                ? Math.Round((decimal)ticketsSold / house.TotalTickets * 100, 2)
+                : 0;
+
+            var now = DateTime.UtcNow;
+            var draw = new LotteryDraw
+            {
+                Id = Guid.NewGuid(),
+                HouseId = request.HouseId,
+                DrawDate = request.DrawDate,
+                TotalTicketsSold = ticketsSold,
+                TotalParticipationPercentage = participation,
+                DrawStatus = "Pending",
+                DrawMethod = "random",
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+
+            house.DrawDate = request.DrawDate;
+            house.UpdatedAt = now;
+            _context.LotteryDraws.Add(draw);
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Draw created by admin: {DrawId} for house {HouseId}", draw.Id, request.HouseId);
+            await _audit.LogAsync("draw.created", "draw", draw.Id, new
+            {
+                draw.HouseId,
+                draw.DrawDate,
+                draw.TotalTicketsSold,
+                draw.TotalParticipationPercentage
+            });
+
+            return await GetDrawByIdAsync(draw.Id) ?? throw new InvalidOperationException("Failed to retrieve created draw");
         }
 
         public async Task<DrawDto> ConductDrawAsync(Guid drawId, Guid conductedBy)

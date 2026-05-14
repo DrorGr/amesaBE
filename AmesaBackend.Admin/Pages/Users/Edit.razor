@@ -243,7 +243,7 @@
 
             var updatedUser = await UsersService.UpdateUserAsync(Id, request);
             
-            Navigation.NavigateTo("users");
+            Navigation.NavigateTo("/admin/users");
         }
         catch (Exception ex)
         {
@@ -258,7 +258,7 @@
 
     private void NavigateBack()
     {
-        Navigation.NavigateTo("users");
+        Navigation.NavigateTo("/admin/users");
     }
 
     private string GetVerificationBadgeClass(string verificationStatus)

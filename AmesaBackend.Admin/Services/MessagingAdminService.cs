@@ -2,6 +2,7 @@ using System.Text.Json;
 using AmesaBackend.Admin.DTOs;
 using AmesaBackend.Admin.Security;
 using AmesaBackend.Auth.Data;
+using AmesaBackend.Lottery.Data;
 using AmesaBackend.Notification.Constants;
 using AmesaBackend.Notification.Data;
 using AmesaBackend.Notification.Models;
@@ -19,6 +20,7 @@ public sealed class MessagingAdminService : IMessagingAdminService
 {
     private readonly NotificationDbContext _notificationContext;
     private readonly AuthDbContext _authContext;
+    private readonly LotteryDbContext _lotteryContext;
     private readonly IAdminPermissionService _permissions;
     private readonly IAdminAuditService _audit;
     private readonly ILogger<MessagingAdminService> _logger;
@@ -26,12 +28,14 @@ public sealed class MessagingAdminService : IMessagingAdminService
     public MessagingAdminService(
         NotificationDbContext notificationContext,
         AuthDbContext authContext,
+        LotteryDbContext lotteryContext,
         IAdminPermissionService permissions,
         IAdminAuditService audit,
         ILogger<MessagingAdminService> logger)
     {
         _notificationContext = notificationContext;
         _authContext = authContext;
+        _lotteryContext = lotteryContext;
         _permissions = permissions;
         _audit = audit;
         _logger = logger;
@@ -99,7 +103,7 @@ public sealed class MessagingAdminService : IMessagingAdminService
             throw new InvalidOperationException("Title and message are required.");
         }
 
-        var user = await ResolveUserAsync(request.UserLookup);
+        var recipients = await ResolveRecipientsAsync(request);
         var channels = GetChannels(request);
         if (!channels.Any())
         {
@@ -111,61 +115,183 @@ public sealed class MessagingAdminService : IMessagingAdminService
             .ToList();
         var isQueuePlaceholder = externalChannels.Any();
 
-        var notification = new UserNotification
-        {
-            Id = Guid.NewGuid(),
-            UserId = user.Id,
-            Type = string.IsNullOrWhiteSpace(request.Type) ? NotificationTypeConstants.SystemAnnouncement : request.Type.Trim(),
-            NotificationTypeCode = string.IsNullOrWhiteSpace(request.Type) ? NotificationTypeConstants.SystemAnnouncement : request.Type.Trim(),
-            Title = request.Title.Trim(),
-            Message = request.Message.Trim(),
-            Data = JsonSerializer.Serialize(new
-            {
-                source = "admin",
-                queuedByAdminUserId = await _permissions.GetCurrentAdminUserIdAsync()
-            }),
-            IsDeleted = isQueuePlaceholder,
-            DeletedAt = isQueuePlaceholder ? DateTime.UtcNow : null,
-            DeletedBy = isQueuePlaceholder ? "admin_queue_placeholder" : null,
-            CreatedAt = DateTime.UtcNow
-        };
+        var queuedByAdminUserId = await _permissions.GetCurrentAdminUserIdAsync();
+        var notifications = new List<UserNotification>();
 
-        _notificationContext.UserNotifications.Add(notification);
-
-        foreach (var channel in externalChannels)
+        foreach (var user in recipients)
         {
-            _notificationContext.NotificationQueue.Add(new NotificationQueue
+            var notification = new UserNotification
             {
                 Id = Guid.NewGuid(),
-                NotificationId = notification.Id,
-                Channel = channel,
-                Priority = 8,
-                ScheduledFor = request.ScheduledFor,
-                Status = NotificationChannelConstants.QueueStatusPending,
-                MaxRetries = NotificationChannelConstants.DefaultMaxRetries,
+                UserId = user.Id,
+                Type = string.IsNullOrWhiteSpace(request.Type) ? NotificationTypeConstants.SystemAnnouncement : request.Type.Trim(),
+                NotificationTypeCode = string.IsNullOrWhiteSpace(request.Type) ? NotificationTypeConstants.SystemAnnouncement : request.Type.Trim(),
+                Title = request.Title.Trim(),
+                Message = request.Message.Trim(),
+                Data = JsonSerializer.Serialize(new
+                {
+                    source = "admin",
+                    targetMode = request.TargetMode,
+                    groupBasis = request.GroupBasis,
+                    queuedByAdminUserId
+                }),
+                IsDeleted = isQueuePlaceholder,
+                DeletedAt = isQueuePlaceholder ? DateTime.UtcNow : null,
+                DeletedBy = isQueuePlaceholder ? "admin_queue_placeholder" : null,
                 CreatedAt = DateTime.UtcNow
-            });
+            };
+
+            notifications.Add(notification);
+            _notificationContext.UserNotifications.Add(notification);
+
+            foreach (var channel in externalChannels)
+            {
+                _notificationContext.NotificationQueue.Add(new NotificationQueue
+                {
+                    Id = Guid.NewGuid(),
+                    NotificationId = notification.Id,
+                    Channel = channel,
+                    Priority = 8,
+                    ScheduledFor = request.ScheduledFor,
+                    Status = NotificationChannelConstants.QueueStatusPending,
+                    MaxRetries = NotificationChannelConstants.DefaultMaxRetries,
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
         }
 
         await _notificationContext.SaveChangesAsync();
 
-        _logger.LogInformation("Admin queued notification {NotificationId} for user {UserId}", notification.Id, user.Id);
-        await _audit.LogAsync("notification.queued", "notification", notification.Id, new
+        var firstNotification = notifications.First();
+        var firstRecipient = recipients.First();
+
+        _logger.LogInformation("Admin queued notification batch {NotificationId} for {RecipientCount} recipients", firstNotification.Id, recipients.Count);
+        await _audit.LogAsync("notification.queued", "notification", firstNotification.Id, new
         {
-            user.Id,
-            user.Email,
-            notification.Type,
-            notification.Title,
+            firstRecipient.Id,
+            firstRecipient.Email,
+            firstNotification.Type,
+            firstNotification.Title,
+            request.TargetMode,
+            request.GroupBasis,
+            RecipientCount = recipients.Count,
             channels
         });
 
         return new SendAdminNotificationResult
         {
-            NotificationId = notification.Id,
-            UserId = user.Id,
-            UserEmail = user.Email,
+            NotificationId = firstNotification.Id,
+            UserId = firstRecipient.Id,
+            UserEmail = firstRecipient.Email,
+            RecipientCount = recipients.Count,
             QueuedChannels = channels
         };
+    }
+
+    private async Task<IReadOnlyCollection<(Guid Id, string Email)>> ResolveRecipientsAsync(SendAdminNotificationRequest request)
+    {
+        if (!string.Equals(request.TargetMode, "group", StringComparison.OrdinalIgnoreCase))
+        {
+            return new[] { await ResolveUserAsync(request.UserLookup) };
+        }
+
+        var userIds = await ResolveGroupUserIdsAsync(request);
+        if (!userIds.Any())
+        {
+            throw new InvalidOperationException("No users matched the selected group target.");
+        }
+
+        var recipients = await _authContext.Users
+            .AsNoTracking()
+            .Where(u => userIds.Contains(u.Id))
+            .OrderBy(u => u.Email)
+            .Select(u => new { u.Id, u.Email })
+            .ToListAsync();
+
+        return recipients.Select(u => (u.Id, u.Email)).ToList();
+    }
+
+    private async Task<IReadOnlyCollection<Guid>> ResolveGroupUserIdsAsync(SendAdminNotificationRequest request)
+    {
+        var basis = (request.GroupBasis ?? string.Empty).Trim().ToLowerInvariant();
+        switch (basis)
+        {
+            case "house":
+                if (!request.HouseId.HasValue)
+                {
+                    throw new InvalidOperationException("Select a house for house-based targeting.");
+                }
+
+                return await _lotteryContext.LotteryTickets
+                    .AsNoTracking()
+                    .Where(t => t.HouseId == request.HouseId.Value && t.UserId != Guid.Empty)
+                    .Select(t => t.UserId)
+                    .Distinct()
+                    .ToListAsync();
+
+            case "lottery":
+                if (!request.LotteryHouseId.HasValue)
+                {
+                    throw new InvalidOperationException("Select a lottery house for lottery-based targeting.");
+                }
+
+                return await _lotteryContext.LotteryTickets
+                    .AsNoTracking()
+                    .Where(t => t.HouseId == request.LotteryHouseId.Value && t.UserId != Guid.Empty)
+                    .Select(t => t.UserId)
+                    .Distinct()
+                    .ToListAsync();
+
+            case "birthday":
+                if (!request.BirthdayMonth.HasValue)
+                {
+                    throw new InvalidOperationException("Select a birthday month.");
+                }
+
+                var birthdayQuery = _authContext.Users
+                    .AsNoTracking()
+                    .Where(u => u.DateOfBirth.HasValue && u.DateOfBirth.Value.Month == request.BirthdayMonth.Value);
+
+                if (request.BirthdayDay.HasValue)
+                {
+                    birthdayQuery = birthdayQuery.Where(u => u.DateOfBirth!.Value.Day == request.BirthdayDay.Value);
+                }
+
+                return await birthdayQuery.Select(u => u.Id).Distinct().ToListAsync();
+
+            case "location":
+                if (string.IsNullOrWhiteSpace(request.LocationQuery))
+                {
+                    throw new InvalidOperationException("Enter a city or country for location targeting.");
+                }
+
+                var location = request.LocationQuery.Trim();
+                return await _authContext.UserAddresses
+                    .AsNoTracking()
+                    .Where(a =>
+                        (a.City != null && EF.Functions.ILike(a.City, $"%{location}%")) ||
+                        (a.Country != null && EF.Functions.ILike(a.Country, $"%{location}%")))
+                    .Select(a => a.UserId)
+                    .Distinct()
+                    .ToListAsync();
+
+            case "language":
+                if (string.IsNullOrWhiteSpace(request.Language))
+                {
+                    throw new InvalidOperationException("Enter a language code for language targeting.");
+                }
+
+                var language = request.Language.Trim();
+                return await _authContext.Users
+                    .AsNoTracking()
+                    .Where(u => u.PreferredLanguage == language)
+                    .Select(u => u.Id)
+                    .Distinct()
+                    .ToListAsync();
+
+            default:
+                throw new InvalidOperationException("Unsupported group targeting basis.");
+        }
     }
 
     private async Task<(Guid Id, string Email)> ResolveUserAsync(string userLookup)

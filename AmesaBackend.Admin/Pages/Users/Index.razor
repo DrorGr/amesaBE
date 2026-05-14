@@ -5,6 +5,7 @@
 @using AmesaBackend.Admin.DTOs
 @using AmesaBackend.Auth.Models
 @inject IUsersService UsersService
+@inject IJSRuntime JSRuntime
 
 <PageTitle>Users - Amesa Admin</PageTitle>
 
@@ -14,6 +15,15 @@
             <h1 class="display-5">
                 <i class="fas fa-users"></i> Users Management
             </h1>
+        </div>
+        <div class="col-auto">
+            <AuthorizeView Policy="@AdminPermissionNames.UsersWrite">
+                <Authorized>
+                    <button class="btn btn-primary" @onclick="NavigateToCreate">
+                        <i class="fas fa-plus"></i> New User
+                    </button>
+                </Authorized>
+            </AuthorizeView>
         </div>
     </div>
 
@@ -133,6 +143,13 @@
                                                     }
                                                 </Authorized>
                                             </AuthorizeView>
+                                            <AuthorizeView Policy="@AdminPermissionNames.UsersWrite">
+                                                <Authorized>
+                                                    <button class="btn btn-outline-danger" @onclick="() => DeleteUser(user.Id)" title="Delete">
+                                                        <i class="fas fa-trash"></i>
+                                                    </button>
+                                                </Authorized>
+                                            </AuthorizeView>
                                         </div>
                                     </td>
                                 </tr>
@@ -218,14 +235,19 @@
         await LoadUsers();
     }
 
+    private void NavigateToCreate()
+    {
+        Navigation.NavigateTo("/admin/users/create");
+    }
+
     private void ViewUser(Guid id)
     {
-        Navigation.NavigateTo($"users/{id}/edit");
+        Navigation.NavigateTo($"/admin/users/{id}/edit");
     }
 
     private void EditUser(Guid id)
     {
-        Navigation.NavigateTo($"users/{id}/edit");
+        Navigation.NavigateTo($"/admin/users/{id}/edit");
     }
 
     private async Task SuspendUser(Guid id)
@@ -251,6 +273,24 @@
         catch (Exception ex)
         {
             Console.WriteLine($"Error activating user: {ex.Message}");
+        }
+    }
+
+    private async Task DeleteUser(Guid id)
+    {
+        if (!await JSRuntime.InvokeAsync<bool>("confirm", "Soft-delete this user?"))
+        {
+            return;
+        }
+
+        try
+        {
+            await UsersService.DeleteUserAsync(id);
+            await LoadUsers();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error deleting user: {ex.Message}");
         }
     }
 

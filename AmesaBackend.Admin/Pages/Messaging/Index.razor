@@ -4,6 +4,7 @@
 @using AmesaBackend.Admin.DTOs
 @using AmesaBackend.Admin.Services
 @inject IMessagingAdminService MessagingService
+@inject IHousesService HousesService
 
 <PageTitle>Messaging - Amesa Admin</PageTitle>
 
@@ -29,8 +30,11 @@
         <div class="card-body">
             <div class="row g-3">
                 <div class="col-md-4">
-                    <label class="form-label">User ID or Email</label>
-                    <input class="form-control" @bind="sendRequest.UserLookup" placeholder="user@example.com or UUID" />
+                    <label class="form-label">Target</label>
+                    <select class="form-select" @bind="sendRequest.TargetMode">
+                        <option value="user">Single User</option>
+                        <option value="group">Group</option>
+                    </select>
                 </div>
                 <div class="col-md-3">
                     <label class="form-label">Type</label>
@@ -46,6 +50,81 @@
                     <label class="form-label">Title</label>
                     <input class="form-control" @bind="sendRequest.Title" />
                 </div>
+                @if (sendRequest.TargetMode == "user")
+                {
+                    <div class="col-md-4">
+                        <label class="form-label">User ID or Email</label>
+                        <input class="form-control" @bind="sendRequest.UserLookup" placeholder="user@example.com or UUID" />
+                    </div>
+                }
+                else
+                {
+                    <div class="col-md-3">
+                        <label class="form-label">Group Basis</label>
+                        <select class="form-select" @bind="sendRequest.GroupBasis">
+                            <option value="house">Same House</option>
+                            <option value="lottery">Same Lottery</option>
+                            <option value="birthday">Birthday</option>
+                            <option value="location">Location</option>
+                            <option value="language">Language</option>
+                        </select>
+                    </div>
+
+                    @if (sendRequest.GroupBasis == "house")
+                    {
+                        <div class="col-md-5">
+                            <label class="form-label">House</label>
+                            <select class="form-select" @bind="houseTargetId">
+                                <option value="">Select House</option>
+                                @foreach (var house in houses)
+                                {
+                                    <option value="@house.Id">@house.Title</option>
+                                }
+                            </select>
+                            <div class="form-text">Targets users who bought tickets for this house.</div>
+                        </div>
+                    }
+                    else if (sendRequest.GroupBasis == "lottery")
+                    {
+                        <div class="col-md-5">
+                            <label class="form-label">Lottery House</label>
+                            <select class="form-select" @bind="lotteryTargetId">
+                                <option value="">Select House</option>
+                                @foreach (var house in houses)
+                                {
+                                    <option value="@house.Id">@house.Title</option>
+                                }
+                            </select>
+                            <div class="form-text">Targets users participating in this lottery.</div>
+                        </div>
+                    }
+                    else if (sendRequest.GroupBasis == "birthday")
+                    {
+                        <div class="col-md-2">
+                            <label class="form-label">Month</label>
+                            <input type="number" min="1" max="12" class="form-control" @bind="sendRequest.BirthdayMonth" />
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">Day</label>
+                            <input type="number" min="1" max="31" class="form-control" @bind="sendRequest.BirthdayDay" />
+                            <div class="form-text">Leave day empty for the full month.</div>
+                        </div>
+                    }
+                    else if (sendRequest.GroupBasis == "location")
+                    {
+                        <div class="col-md-5">
+                            <label class="form-label">City or Country</label>
+                            <input class="form-control" @bind="sendRequest.LocationQuery" placeholder="Tel Aviv, Israel, London..." />
+                        </div>
+                    }
+                    else if (sendRequest.GroupBasis == "language")
+                    {
+                        <div class="col-md-2">
+                            <label class="form-label">Language</label>
+                            <input class="form-control" @bind="sendRequest.Language" placeholder="en, he, ar..." />
+                        </div>
+                    }
+                }
                 <div class="col-md-12">
                     <label class="form-label">Message</label>
                     <textarea class="form-control" rows="3" @bind="sendRequest.Message"></textarea>
@@ -147,15 +226,32 @@
 
 @code {
     private SendAdminNotificationRequest sendRequest = new();
+    private List<HouseDto> houses = new();
     private IReadOnlyCollection<AdminNotificationDto>? recentNotifications;
     private bool isLoading = true;
     private bool isSending;
     private string? message;
     private string messageType = "success";
+    private string? houseTargetId;
+    private string? lotteryTargetId;
 
     protected override async Task OnInitializedAsync()
     {
+        await LoadHouses();
         await LoadRecentNotifications();
+    }
+
+    private async Task LoadHouses()
+    {
+        try
+        {
+            var result = await HousesService.GetHousesAsync(1, 1000, null, null);
+            houses = result.Items.ToList();
+        }
+        catch (Exception ex)
+        {
+            SetMessage(ex.Message, "danger");
+        }
     }
 
     private async Task LoadRecentNotifications()
@@ -180,9 +276,15 @@
         isSending = true;
         try
         {
+            sendRequest.HouseId = Guid.TryParse(houseTargetId, out var houseId) ? houseId : null;
+            sendRequest.LotteryHouseId = Guid.TryParse(lotteryTargetId, out var lotteryHouseId) ? lotteryHouseId : null;
+
             var result = await MessagingService.QueueNotificationAsync(sendRequest);
-            SetMessage($"Queued notification {result.NotificationId} for {result.UserEmail} via {string.Join(", ", result.QueuedChannels)}.", "success");
+            var target = result.RecipientCount == 1 ? result.UserEmail : $"{result.RecipientCount} recipients";
+            SetMessage($"Queued notification {result.NotificationId} for {target} via {string.Join(", ", result.QueuedChannels)}.", "success");
             sendRequest = new SendAdminNotificationRequest();
+            houseTargetId = null;
+            lotteryTargetId = null;
             await LoadRecentNotifications();
         }
         catch (Exception ex)

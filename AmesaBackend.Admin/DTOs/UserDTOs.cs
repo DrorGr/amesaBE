@@ -27,5 +27,17 @@ namespace AmesaBackend.Admin.DTOs
         public string? Phone { get; set; }
         public UserStatus? Status { get; set; }
     }
+
+    public class CreateUserRequest
+    {
+        public string Email { get; set; } = string.Empty;
+        public string Username { get; set; } = string.Empty;
+        public string FirstName { get; set; } = string.Empty;
+        public string LastName { get; set; } = string.Empty;
+        public string? Phone { get; set; }
+        public string Password { get; set; } = string.Empty;
+        public UserStatus Status { get; set; } = UserStatus.Active;
+        public string PreferredLanguage { get; set; } = "en";
+    }
 }
 

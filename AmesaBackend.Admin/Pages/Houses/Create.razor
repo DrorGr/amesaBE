@@ -258,7 +258,7 @@
 
             var createdHouse = await HousesService.CreateHouseAsync(request);
             
-            Navigation.NavigateTo($"houses/{createdHouse.Id}/edit");
+            Navigation.NavigateTo($"/admin/houses/{createdHouse.Id}/edit");
         }
         catch (Exception ex)
         {
@@ -273,7 +273,7 @@
 
     private void NavigateBack()
     {
-        Navigation.NavigateTo("houses");
+        Navigation.NavigateTo("/admin/houses");
     }
 
     private void HandleImagesChanged(List<ImageInfo> images)
