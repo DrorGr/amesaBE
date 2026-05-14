@@ -23,22 +23,22 @@ namespace AmesaBackend.Payment.Data
             modelBuilder.Entity<UserPaymentMethod>(entity =>
             {
                 entity.HasKey(e => e.Id);
-                entity.Property(e => e.Id).HasColumnName("id");
-                entity.Property(e => e.UserId).HasColumnName("user_id");
-                entity.Property(e => e.Type).IsRequired().HasMaxLength(50).HasColumnName("type");
-                entity.Property(e => e.Provider).HasMaxLength(50).HasColumnName("provider");
-                entity.Property(e => e.ProviderPaymentMethodId).HasMaxLength(255).HasColumnName("provider_payment_method_id");
-                entity.Property(e => e.CardLastFour).HasMaxLength(4).HasColumnName("card_last_four");
-                entity.Property(e => e.CardBrand).HasMaxLength(50).HasColumnName("card_brand");
-                entity.Property(e => e.CardExpMonth).HasColumnName("card_exp_month");
-                entity.Property(e => e.CardExpYear).HasColumnName("card_exp_year");
-                entity.Property(e => e.IsDefault).HasColumnName("is_default");
-                entity.Property(e => e.IsActive).HasColumnName("is_active");
-                entity.Property(e => e.WalletType).HasMaxLength(100).HasColumnName("wallet_type");
-                entity.Property(e => e.WalletAccountId).HasMaxLength(255).HasColumnName("wallet_account_id");
-                entity.Property(e => e.PaymentMethodMetadata).HasColumnName("payment_method_metadata");
-                entity.Property(e => e.CreatedAt).HasColumnName("created_at");
-                entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
+                entity.Property(e => e.Id).HasColumnName("Id");
+                entity.Property(e => e.UserId).HasColumnName("UserId");
+                entity.Property(e => e.Type).IsRequired().HasMaxLength(50).HasColumnName("Type");
+                entity.Property(e => e.Provider).HasMaxLength(50).HasColumnName("Provider");
+                entity.Property(e => e.ProviderPaymentMethodId).HasMaxLength(255).HasColumnName("ProviderPaymentMethodId");
+                entity.Property(e => e.CardLastFour).HasMaxLength(4).HasColumnName("CardLastFour");
+                entity.Property(e => e.CardBrand).HasMaxLength(50).HasColumnName("CardBrand");
+                entity.Property(e => e.CardExpMonth).HasColumnName("CardExpMonth");
+                entity.Property(e => e.CardExpYear).HasColumnName("CardExpYear");
+                entity.Property(e => e.IsDefault).HasColumnName("IsDefault");
+                entity.Property(e => e.IsActive).HasColumnName("IsActive");
+                entity.Property(e => e.CreatedAt).HasColumnName("CreatedAt");
+                entity.Property(e => e.UpdatedAt).HasColumnName("UpdatedAt");
+                entity.Ignore(e => e.WalletType);
+                entity.Ignore(e => e.WalletAccountId);
+                entity.Ignore(e => e.PaymentMethodMetadata);
                 entity.HasIndex(e => e.UserId);
             });
 
