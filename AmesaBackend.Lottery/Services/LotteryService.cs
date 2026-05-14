@@ -1156,21 +1156,26 @@ namespace AmesaBackend.Lottery.Services
 
                 if (shouldCreateTransaction)
                 {
-                    // Create a transaction with Serializable isolation for cap checks to prevent race conditions
-                    using var transaction = await _context.Database.BeginTransactionAsync(
-                        System.Data.IsolationLevel.Serializable);
-                    
-                    try
+                    // Retry-on-failure is enabled for Npgsql. Explicit transactions must run
+                    // inside EF's execution strategy to avoid invalid user-initiated transactions.
+                    var strategy = _context.Database.CreateExecutionStrategy();
+                    return await strategy.ExecuteAsync(async () =>
                     {
-                        var result = await CheckCanEnterLotteryInternalAsync(userId, houseId);
-                        await transaction.CommitAsync();
-                        return result;
-                    }
-                    catch
-                    {
-                        await transaction.RollbackAsync();
-                        throw;
-                    }
+                        await using var transaction = await _context.Database.BeginTransactionAsync(
+                            System.Data.IsolationLevel.Serializable);
+
+                        try
+                        {
+                            var result = await CheckCanEnterLotteryInternalAsync(userId, houseId);
+                            await transaction.CommitAsync();
+                            return result;
+                        }
+                        catch
+                        {
+                            await transaction.RollbackAsync();
+                            throw;
+                        }
+                    });
                 }
                 else
                 {
