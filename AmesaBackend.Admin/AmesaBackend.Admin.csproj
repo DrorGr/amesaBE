@@ -29,6 +29,7 @@
     <ProjectReference Include="..\AmesaBackend.Content\AmesaBackend.Content.csproj" />
     <ProjectReference Include="..\AmesaBackend.LotteryResults\AmesaBackend.LotteryResults.csproj" />
     <ProjectReference Include="..\AmesaBackend.Notification\AmesaBackend.Notification.csproj" />
+    <ProjectReference Include="..\AmesaBackend.Analytics\AmesaBackend.Analytics.csproj" />
   </ItemGroup>
 
   <Target Name="ExcludeReferencedAppSettings" BeforeTargets="ComputeFilesToPublish">

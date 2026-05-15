@@ -275,6 +275,40 @@ body {
     background-color: var(--amesa-primary) !important;
 }
 
+/* Health panel */
+.admin-health-panel .health-status-dot {
+    width: 0.625rem;
+    height: 0.625rem;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+.admin-health-panel .health-status-healthy {
+    background-color: var(--amesa-success);
+    box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.2);
+}
+
+.admin-health-panel .health-status-degraded {
+    background-color: var(--amesa-warning);
+    box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.2);
+}
+
+.admin-health-panel .health-status-unhealthy {
+    background-color: var(--amesa-danger);
+    box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.2);
+}
+
+.admin-health-panel .health-status-unknown,
+.admin-health-panel .health-status-skipped {
+    background-color: #94a3b8;
+}
+
+.admin-presence-card .display-6 {
+    font-weight: 700;
+    color: var(--amesa-text);
+}
+
 @media (max-width: 767.98px) {
     .sidebar {
         min-height: auto;

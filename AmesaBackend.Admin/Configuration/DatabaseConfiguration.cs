@@ -10,6 +10,7 @@ using AmesaBackend.Payment.Data;
 using AmesaBackend.Content.Data;
 using AmesaBackend.LotteryResults.Data;
 using AmesaBackend.Notification.Data;
+using AmesaBackend.Analytics.Data;
 using Serilog;
 
 namespace AmesaBackend.Admin.Configuration;
@@ -47,6 +48,9 @@ public static class DatabaseConfiguration
             
             services.AddDbContext<AdminDbContext>(options =>
                 ConfigureDbContext(options, connectionString, "amesa_admin", environment), ServiceLifetime.Scoped);
+
+            services.AddDbContext<AnalyticsDbContext>(options =>
+                ConfigureDbContext(options, connectionString, "amesa_analytics", environment));
         }
         else
         {

@@ -158,6 +158,8 @@ public static class ServiceConfiguration
         services.AddScoped<AuthenticationStateProvider, AdminAuthenticationStateProvider>();
         services.AddScoped<IAdminDatabaseService, AdminDatabaseService>();
         services.AddScoped<IDashboardService, DashboardService>();
+        services.AddHttpClient("DashboardHealth");
+        services.AddScoped<IDashboardHealthService, DashboardHealthService>();
         services.AddScoped<IHousesService, HousesService>();
         services.AddScoped<IUsersService, UsersService>();
         services.AddScoped<ITranslationsService, TranslationsService>();

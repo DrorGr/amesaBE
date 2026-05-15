@@ -5,6 +5,7 @@
 @using AmesaBackend.Admin.Models
 @inject IAdminDatabaseService DatabaseService
 @inject IDashboardService DashboardService
+@inject IDashboardHealthService DashboardHealthService
 
 <PageTitle>Dashboard - Amesa Admin</PageTitle>
 
@@ -19,9 +20,102 @@
     </div>
 
     <div class="alert alert-info mb-4 admin-env-banner">
-        <i class="fas fa-database"></i> 
+        <i class="fas fa-database"></i>
         <strong>Current Environment:</strong> @DatabaseService.GetCurrentEnvironment()
+        @if (healthOverview != null)
+        {
+            <span class="ms-2 text-muted">| Health checked @healthOverview.CheckedAtUtc.ToString("HH:mm:ss") UTC</span>
+        }
     </div>
+
+    @if (isHealthLoading)
+    {
+        <div class="card mb-4 admin-health-panel">
+            <div class="card-body text-center py-4">
+                <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                <span class="ms-2 text-muted">Loading system health...</span>
+            </div>
+        </div>
+    }
+    else if (healthOverview != null)
+    {
+        <div class="row g-4 mb-4 admin-health-panel">
+            <div class="col-lg-4">
+                <div class="card h-100 admin-presence-card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <strong><i class="fas fa-users me-2"></i>Live Presence</strong>
+                        <button class="btn btn-sm btn-outline-secondary" @onclick="RefreshHealthAsync" disabled="@isRefreshingHealth">
+                            <i class="fas fa-sync @(isRefreshingHealth ? "fa-spin" : "")"></i>
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <p class="small text-muted mb-3">Active in the last @healthOverview.Presence.PresenceWindowMinutes minutes</p>
+                        <div class="row g-3 text-center">
+                            <div class="col-6">
+                                <div class="display-6">@healthOverview.Presence.LoggedInUsers</div>
+                                <div class="small text-muted">Logged-in users</div>
+                                <div class="small text-muted">@healthOverview.Presence.LoggedInSessions sessions</div>
+                            </div>
+                            <div class="col-6">
+                                <div class="display-6">@healthOverview.Presence.GuestSessions</div>
+                                <div class="small text-muted">Guest / anonymous</div>
+                                <div class="small text-muted">@healthOverview.Presence.AdminSessionsOnline admin online</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <div class="card h-100">
+                    <div class="card-header"><strong><i class="fas fa-server me-2"></i>Services</strong></div>
+                    <div class="card-body p-0">
+                        <ul class="list-group list-group-flush">
+                            @foreach (var item in healthOverview.Services)
+                            {
+                                <li class="list-group-item d-flex align-items-center justify-content-between gap-2 py-2">
+                                    <div class="d-flex align-items-center gap-2 min-w-0">
+                                        <span class="health-status-dot @GetHealthDotClass(item.Status)"></span>
+                                        <span class="text-truncate">@item.Name</span>
+                                    </div>
+                                    <small class="text-muted text-nowrap">
+                                        @(item.ResponseTimeMs.HasValue ? $"{item.ResponseTimeMs}ms" : item.Detail ?? item.Status)
+                                    </small>
+                                </li>
+                            }
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <div class="card h-100">
+                    <div class="card-header"><strong><i class="fas fa-store me-2"></i>Products</strong></div>
+                    <div class="card-body p-0">
+                        @if (healthOverview.Products.Any())
+                        {
+                            <ul class="list-group list-group-flush">
+                                @foreach (var item in healthOverview.Products)
+                                {
+                                    <li class="list-group-item d-flex align-items-center justify-content-between gap-2 py-2">
+                                        <div class="d-flex align-items-center gap-2 min-w-0">
+                                            <span class="health-status-dot @GetHealthDotClass(item.Status)"></span>
+                                            <span class="text-truncate">@item.Name</span>
+                                        </div>
+                                        <small class="text-muted text-nowrap">
+                                            @(item.IsConfigured ? (item.ResponseTimeMs.HasValue ? $"{item.ResponseTimeMs}ms" : item.Detail ?? item.Status) : "Not configured")
+                                        </small>
+                                    </li>
+                                }
+                            </ul>
+                        }
+                        else
+                        {
+                            <p class="text-muted small p-3 mb-0">No product endpoints configured.</p>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
 
     @if (isLoading)
     {
@@ -231,17 +325,27 @@
 
 @code {
     private DashboardStats stats = new();
+    private DashboardHealthOverview? healthOverview;
     private bool isLoading = true;
+    private bool isHealthLoading = true;
+    private bool isRefreshingHealth;
 
     protected override async Task OnInitializedAsync()
     {
+        var statsTask = LoadStatsAsync();
+        var healthTask = LoadHealthAsync();
+        await Task.WhenAll(statsTask, healthTask);
+    }
+
+    private async Task LoadStatsAsync()
+    {
+        isLoading = true;
         try
         {
             stats = await DashboardService.GetDashboardStatsAsync();
         }
         catch (Exception ex)
         {
-            // Log error - stats will show zeros
             Console.WriteLine($"Error loading dashboard stats: {ex.Message}");
         }
         finally
@@ -249,6 +353,45 @@
             isLoading = false;
         }
     }
+
+    private async Task LoadHealthAsync()
+    {
+        isHealthLoading = true;
+        try
+        {
+            healthOverview = await DashboardHealthService.GetHealthOverviewAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading dashboard health: {ex.Message}");
+        }
+        finally
+        {
+            isHealthLoading = false;
+        }
+    }
+
+    private async Task RefreshHealthAsync()
+    {
+        isRefreshingHealth = true;
+        try
+        {
+            await LoadHealthAsync();
+        }
+        finally
+        {
+            isRefreshingHealth = false;
+        }
+    }
+
+    private static string GetHealthDotClass(string status) => status.ToLowerInvariant() switch
+    {
+        "healthy" => "health-status-healthy",
+        "degraded" => "health-status-degraded",
+        "unhealthy" => "health-status-unhealthy",
+        "skipped" => "health-status-skipped",
+        _ => "health-status-unknown"
+    };
 }
 
 
