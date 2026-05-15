@@ -540,7 +540,7 @@ public sealed class DashboardHealthService : IDashboardHealthService
         new("payment-api", "Payment API", "service", null, "/api/v1/payment/health", "http"),
         new("notification-api", "Notification API", "service", null, "/api/v1/notifications/health", "http"),
         new("content-api", "Content API", "service", null, "/api/v1/content/health", "http"),
-        new("lottery-results-api", "Lottery Results API", "service", null, "/api/v1/lottery-results/health", "http"),
+        new("lottery-results-api", "Lottery Results API", "service", null, "/api/v1/lotteryresults/health", "http"),
         new("analytics-api", "Analytics API", "service", null, "/api/v1/analytics/health", "http"),
         new("admin-panel", "Admin Panel", "service", null, "/admin/health", "local"),
         new("amesa-main", "Amesa Website", "product", "https://amesa.com", "/", "http"),

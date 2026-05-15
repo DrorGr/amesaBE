@@ -33,6 +33,9 @@ public static class MiddlewareConfiguration
         app.UseAuthorization();
 
         app.MapHealthChecks("/health");
+        // ALB routes /api/v1/lotteryresults/* — must not collide with GET {id} on the controller
+        app.MapHealthChecks("/api/v1/lotteryresults/health").AllowAnonymous();
+        app.MapHealthChecks("/api/v1/lottery-results/health").AllowAnonymous();
         app.MapControllers();
 
         return app;

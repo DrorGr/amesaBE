@@ -58,7 +58,7 @@ public static class MiddlewareConfiguration
         app.UseAuthorization();
 
         // Basic health check for ALB - only checks if service is running
-        app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+        var basicHealthOptions = new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
         {
             Predicate = check => check.Name == "basic",
             ResultStatusCodes = {
@@ -66,7 +66,12 @@ public static class MiddlewareConfiguration
                 [Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus.Degraded] = Microsoft.AspNetCore.Http.StatusCodes.Status200OK,
                 [Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus.Unhealthy] = Microsoft.AspNetCore.Http.StatusCodes.Status503ServiceUnavailable
             }
-        });
+        };
+
+        app.MapHealthChecks("/health", basicHealthOptions);
+        // Gateway-facing paths (controllers use /api/v1/notifications and require auth)
+        app.MapHealthChecks("/api/v1/notifications/health", basicHealthOptions).AllowAnonymous();
+        app.MapHealthChecks("/api/v1/notification/health", basicHealthOptions).AllowAnonymous();
 
         // Detailed health check with all channels - for monitoring/debugging
         app.MapHealthChecks("/health/notifications", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
