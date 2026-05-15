@@ -23,5 +23,10 @@ namespace AmesaBackend.Admin.DTOs
         public Guid HouseId { get; set; }
         public DateTime DrawDate { get; set; } = DateTime.UtcNow.AddDays(1);
     }
+
+    public class UpdateDrawScheduleRequest
+    {
+        public DateTime DrawDate { get; set; }
+    }
 }
 

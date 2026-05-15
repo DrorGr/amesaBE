@@ -207,11 +207,21 @@ namespace AmesaBackend.Notification.Services.Background
 
                     var channels = items
                         .Select(item => item.Channel)
+                        .Where(c => !string.Equals(c, "in_app", StringComparison.OrdinalIgnoreCase))
                         .Distinct(StringComparer.OrdinalIgnoreCase)
                         .ToList();
 
-                    // Create one notification request per notification id so multi-channel
-                    // queued sends do not create duplicate visible in-app notifications.
+                    if (!channels.Any())
+                    {
+                        foreach (var item in items)
+                        {
+                            item.Status = "completed";
+                        }
+
+                        await context.SaveChangesAsync(cancellationToken);
+                        continue;
+                    }
+
                     var notificationRequest = new NotificationRequest
                     {
                         UserId = firstItem.Notification.UserId,
@@ -225,11 +235,15 @@ namespace AmesaBackend.Notification.Services.Background
                             : null
                     };
 
-                    // Process notification via orchestrator
+                    var existingNotificationId = firstItem.Notification.IsDeleted
+                        ? (Guid?)null
+                        : firstItem.Notification.Id;
+
                     var result = await orchestrator.SendMultiChannelAsync(
                         firstItem.Notification.UserId,
                         notificationRequest,
-                        channels);
+                        channels,
+                        existingNotificationId);
 
                     if (result.SuccessCount > 0)
                     {

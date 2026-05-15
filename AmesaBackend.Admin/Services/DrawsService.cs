@@ -13,6 +13,8 @@ namespace AmesaBackend.Admin.Services
         Task<PagedResult<DrawDto>> GetDrawsAsync(int page = 1, int pageSize = 20, Guid? houseId = null, string? status = null);
         Task<DrawDto?> GetDrawByIdAsync(Guid id);
         Task<DrawDto> CreateDrawAsync(CreateDrawRequest request);
+        Task<DrawDto> UpdateDrawScheduleAsync(Guid drawId, UpdateDrawScheduleRequest request);
+        Task<bool> CancelDrawAsync(Guid drawId);
         Task<DrawDto> ConductDrawAsync(Guid drawId, Guid conductedBy);
     }
 
@@ -174,6 +176,66 @@ namespace AmesaBackend.Admin.Services
             });
 
             return await GetDrawByIdAsync(draw.Id) ?? throw new InvalidOperationException("Failed to retrieve created draw");
+        }
+
+        public async Task<DrawDto> UpdateDrawScheduleAsync(Guid drawId, UpdateDrawScheduleRequest request)
+        {
+            await _permissions.RequirePermissionAsync(AdminPermissionNames.DrawsConduct);
+
+            if (request.DrawDate <= DateTime.UtcNow)
+            {
+                throw new InvalidOperationException("Draw date must be in the future.");
+            }
+
+            var draw = await _context.LotteryDraws
+                .Include(d => d.House)
+                .FirstOrDefaultAsync(d => d.Id == drawId);
+
+            if (draw == null)
+            {
+                throw new KeyNotFoundException($"Draw with ID {drawId} not found");
+            }
+
+            if (draw.DrawStatus != "Pending")
+            {
+                throw new InvalidOperationException("Only pending draws can be rescheduled.");
+            }
+
+            draw.DrawDate = request.DrawDate;
+            draw.UpdatedAt = DateTime.UtcNow;
+            draw.House.DrawDate = request.DrawDate;
+            draw.House.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Draw rescheduled by admin: {DrawId} to {DrawDate}", drawId, request.DrawDate);
+            await _audit.LogAsync("draw.rescheduled", "draw", drawId, new { draw.HouseId, request.DrawDate });
+
+            return await GetDrawByIdAsync(drawId) ?? throw new InvalidOperationException("Failed to retrieve updated draw");
+        }
+
+        public async Task<bool> CancelDrawAsync(Guid drawId)
+        {
+            await _permissions.RequirePermissionAsync(AdminPermissionNames.DrawsConduct);
+
+            var draw = await _context.LotteryDraws.FirstOrDefaultAsync(d => d.Id == drawId);
+            if (draw == null)
+            {
+                return false;
+            }
+
+            if (draw.DrawStatus != "Pending")
+            {
+                throw new InvalidOperationException("Only pending draws can be cancelled.");
+            }
+
+            draw.DrawStatus = "Cancelled";
+            draw.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Draw cancelled by admin: {DrawId}", drawId);
+            await _audit.LogAsync("draw.cancelled", "draw", drawId, new { draw.HouseId });
+            return true;
         }
 
         public async Task<DrawDto> ConductDrawAsync(Guid drawId, Guid conductedBy)

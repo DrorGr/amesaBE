@@ -153,14 +153,40 @@
                 </div>
             </div>
         </div>
-        <div class="card-footer text-end">
-            <button class="btn btn-primary" @onclick="SendNotification" disabled="@(isSending || !canSendNotifications)">
-                @if (isSending)
+        <div class="card-footer d-flex justify-content-between align-items-center flex-wrap gap-2">
+            @if (recipientPreview != null)
+            {
+                <div class="text-start small text-muted">
+                    <strong>@recipientPreview.TotalCount</strong> recipient@(recipientPreview.TotalCount == 1 ? "" : "s") matched.
+                    @if (recipientPreview.Recipients.Any())
+                    {
+                        <div>@string.Join(", ", recipientPreview.Recipients.Select(r => r.Email))@(recipientPreview.TotalCount > recipientPreview.Recipients.Count ? "..." : "")</div>
+                    }
+                </div>
+            }
+            else
+            {
+                <span></span>
+            }
+            <div>
+                @if (canSendNotifications)
                 {
-                    <span class="spinner-border spinner-border-sm me-2"></span>
+                    <button class="btn btn-outline-secondary me-2" @onclick="PreviewRecipients" disabled="@isPreviewing">
+                        @if (isPreviewing)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                        }
+                        Preview Recipients
+                    </button>
                 }
-                <i class="fas fa-paper-plane me-1"></i> Queue Notification
-            </button>
+                <button class="btn btn-primary" @onclick="SendNotification" disabled="@(isSending || !canSendNotifications)">
+                    @if (isSending)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2"></span>
+                    }
+                    <i class="fas fa-paper-plane me-1"></i> Queue Notification
+                </button>
+            </div>
         </div>
     </div>
 
@@ -236,6 +262,8 @@
     private IReadOnlyCollection<AdminNotificationDto>? recentNotifications;
     private bool isLoading = true;
     private bool isSending;
+    private bool isPreviewing;
+    private AdminMessageRecipientPreviewDto? recipientPreview;
     private string? message;
     private string messageType = "success";
     private string? houseTargetId;
@@ -280,6 +308,26 @@
         }
     }
 
+    private async Task PreviewRecipients()
+    {
+        isPreviewing = true;
+        try
+        {
+            sendRequest.HouseId = Guid.TryParse(houseTargetId, out var houseId) ? houseId : null;
+            sendRequest.LotteryHouseId = Guid.TryParse(lotteryTargetId, out var lotteryHouseId) ? lotteryHouseId : null;
+            recipientPreview = await MessagingService.PreviewRecipientsAsync(sendRequest);
+        }
+        catch (Exception ex)
+        {
+            recipientPreview = null;
+            SetMessage(ex.Message, "danger");
+        }
+        finally
+        {
+            isPreviewing = false;
+        }
+    }
+
     private async Task SendNotification()
     {
         isSending = true;
@@ -289,6 +337,7 @@
             sendRequest.LotteryHouseId = Guid.TryParse(lotteryTargetId, out var lotteryHouseId) ? lotteryHouseId : null;
 
             var result = await MessagingService.QueueNotificationAsync(sendRequest);
+            recipientPreview = null;
             var target = result.RecipientCount == 1 ? result.UserEmail : $"{result.RecipientCount} recipients";
             SetMessage($"Queued notification {result.NotificationId} for {target} via {string.Join(", ", result.QueuedChannels)}.", "success");
             sendRequest = new SendAdminNotificationRequest();

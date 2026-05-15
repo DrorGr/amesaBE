@@ -61,11 +61,11 @@ namespace AmesaBackend.Notification.Services
             _metricsService = metricsService;
         }
 
-        public async Task<OrchestrationResult> SendMultiChannelAsync(Guid userId, NotificationRequest request, List<string> channels)
+        public async Task<OrchestrationResult> SendMultiChannelAsync(Guid userId, NotificationRequest request, List<string> channels, Guid? existingNotificationId = null)
         {
             var result = new OrchestrationResult
             {
-                NotificationId = Guid.NewGuid()
+                NotificationId = existingNotificationId ?? Guid.NewGuid()
             };
 
             // Use explicit transaction for data consistency
@@ -140,20 +140,29 @@ namespace AmesaBackend.Notification.Services
                     }
                 }
 
-                // Create notification record
-                var notification = new UserNotification
+                UserNotification notification;
+                if (existingNotificationId.HasValue)
                 {
-                    Id = result.NotificationId,
-                    UserId = userId,
-                    Type = request.Type,
-                    NotificationTypeCode = request.Type, // Use Type as NotificationTypeCode if not specified in request
-                    Title = request.Title,
-                    Message = request.Message,
-                    Data = request.Data != null ? JsonSerializer.Serialize(request.Data) : null,
-                    CreatedAt = DateTime.UtcNow
-                };
+                    notification = await _context.UserNotifications
+                        .FirstOrDefaultAsync(n => n.Id == existingNotificationId.Value && n.UserId == userId && !n.IsDeleted)
+                        ?? throw new InvalidOperationException($"Notification {existingNotificationId.Value} not found for user {userId}");
+                }
+                else
+                {
+                    notification = new UserNotification
+                    {
+                        Id = result.NotificationId,
+                        UserId = userId,
+                        Type = request.Type,
+                        NotificationTypeCode = request.Type,
+                        Title = request.Title,
+                        Message = request.Message,
+                        Data = request.Data != null ? JsonSerializer.Serialize(request.Data) : null,
+                        CreatedAt = DateTime.UtcNow
+                    };
 
-                _context.UserNotifications.Add(notification);
+                    _context.UserNotifications.Add(notification);
+                }
 
                 // Save notification record first to ensure data consistency
                 // If SaveChangesAsync fails, no notifications will be sent

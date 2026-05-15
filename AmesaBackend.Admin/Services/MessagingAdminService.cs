@@ -14,6 +14,7 @@ namespace AmesaBackend.Admin.Services;
 public interface IMessagingAdminService
 {
     Task<IReadOnlyCollection<AdminNotificationDto>> GetRecentNotificationsAsync(int limit = 50);
+    Task<AdminMessageRecipientPreviewDto> PreviewRecipientsAsync(SendAdminNotificationRequest request);
     Task<SendAdminNotificationResult> QueueNotificationAsync(SendAdminNotificationRequest request);
 }
 
@@ -97,6 +98,21 @@ public sealed class MessagingAdminService : IMessagingAdminService
         }).ToList();
     }
 
+    public async Task<AdminMessageRecipientPreviewDto> PreviewRecipientsAsync(SendAdminNotificationRequest request)
+    {
+        await RequireNotificationSendAccessAsync();
+
+        var recipients = await ResolveRecipientsAsync(request);
+        return new AdminMessageRecipientPreviewDto
+        {
+            TotalCount = recipients.Count,
+            Recipients = recipients
+                .Take(25)
+                .Select(r => new AdminMessageRecipientDto { UserId = r.Id, Email = r.Email })
+                .ToList()
+        };
+    }
+
     public async Task<SendAdminNotificationResult> QueueNotificationAsync(SendAdminNotificationRequest request)
     {
         await RequireNotificationSendAccessAsync();
@@ -116,7 +132,8 @@ public sealed class MessagingAdminService : IMessagingAdminService
         var externalChannels = channels
             .Where(c => !string.Equals(c, "in_app", StringComparison.OrdinalIgnoreCase))
             .ToList();
-        var isQueuePlaceholder = externalChannels.Any();
+        var includesInApp = request.InApp;
+        var isQueuePlaceholder = externalChannels.Any() && !includesInApp;
 
         var queuedByAdminUserId = await _permissions.GetCurrentAdminUserIdAsync();
         var notifications = new List<UserNotification>();

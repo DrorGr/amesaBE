@@ -86,3 +86,15 @@ public sealed class SendAdminNotificationResult
     public int RecipientCount { get; set; }
     public IReadOnlyCollection<string> QueuedChannels { get; set; } = Array.Empty<string>();
 }
+
+public sealed class AdminMessageRecipientPreviewDto
+{
+    public int TotalCount { get; set; }
+    public IReadOnlyCollection<AdminMessageRecipientDto> Recipients { get; set; } = Array.Empty<AdminMessageRecipientDto>();
+}
+
+public sealed class AdminMessageRecipientDto
+{
+    public Guid UserId { get; set; }
+    public string Email { get; set; } = string.Empty;
+}

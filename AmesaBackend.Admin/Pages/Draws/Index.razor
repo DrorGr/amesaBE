@@ -147,6 +147,12 @@
                                         {
                                             <AuthorizeView Policy="@AdminPermissionNames.DrawsConduct">
                                                 <Authorized>
+                                                    <button class="btn btn-sm btn-outline-secondary me-1" @onclick="() => ShowRescheduleModal(draw)" title="Reschedule">
+                                                        <i class="fas fa-calendar-alt"></i>
+                                                    </button>
+                                                    <button class="btn btn-sm btn-outline-danger me-1" @onclick="() => ShowCancelDrawModal(draw.Id, draw.HouseTitle)" title="Cancel">
+                                                        <i class="fas fa-ban"></i>
+                                                    </button>
                                                     <button class="btn btn-sm btn-primary" @onclick="() => ShowConductDrawModal(draw.Id, draw.HouseTitle)" title="Conduct Draw">
                                                         <i class="fas fa-dice"></i> Conduct
                                                     </button>
@@ -229,6 +235,70 @@
     <div class="modal-backdrop fade show"></div>
 }
 
+<!-- Reschedule Draw Modal -->
+@if (showRescheduleModal)
+{
+    <div class="modal fade show" style="display: block;" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Reschedule Draw</h5>
+                    <button type="button" class="btn-close" @onclick="CloseRescheduleModal"></button>
+                </div>
+                <div class="modal-body">
+                    @if (!string.IsNullOrWhiteSpace(rescheduleError))
+                    {
+                        <div class="alert alert-danger">@rescheduleError</div>
+                    }
+                    <p>Reschedule draw for <strong>@rescheduleHouseTitle</strong></p>
+                    <label class="form-label">New Draw Date</label>
+                    <input type="datetime-local" class="form-control" @bind="rescheduleDrawDate" />
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseRescheduleModal">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="ConfirmRescheduleDraw" disabled="@isRescheduling">
+                        @if (isRescheduling)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                        }
+                        Save
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+<!-- Cancel Draw Modal -->
+@if (showCancelModal)
+{
+    <div class="modal fade show" style="display: block;" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Cancel Draw</h5>
+                    <button type="button" class="btn-close" @onclick="CloseCancelDrawModal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Cancel the pending draw for <strong>@cancelDrawHouseTitle</strong>?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseCancelDrawModal">Keep</button>
+                    <button type="button" class="btn btn-danger" @onclick="ConfirmCancelDraw" disabled="@isCancelling">
+                        @if (isCancelling)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                        }
+                        Cancel Draw
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
 <!-- Create Draw Modal -->
 @if (showCreateModal)
 {
@@ -295,6 +365,15 @@
     private string? createHouseId;
     private DateTime createDrawDate = DateTime.UtcNow.AddDays(1);
     private string? createError;
+    private bool showRescheduleModal;
+    private bool showCancelModal;
+    private bool isRescheduling;
+    private bool isCancelling;
+    private Guid? rescheduleDrawId;
+    private string rescheduleHouseTitle = string.Empty;
+    private DateTime rescheduleDrawDate = DateTime.UtcNow.AddDays(1);
+    private string? rescheduleError;
+    private string cancelDrawHouseTitle = string.Empty;
 
     protected override async Task OnInitializedAsync()
     {
@@ -363,6 +442,89 @@
         showConductModal = false;
         selectedDrawId = null;
         conductDrawHouseTitle = string.Empty;
+    }
+
+    private void ShowRescheduleModal(DrawDto draw)
+    {
+        rescheduleDrawId = draw.Id;
+        rescheduleHouseTitle = draw.HouseTitle;
+        rescheduleDrawDate = draw.DrawDate;
+        rescheduleError = null;
+        showRescheduleModal = true;
+    }
+
+    private void CloseRescheduleModal()
+    {
+        showRescheduleModal = false;
+        rescheduleDrawId = null;
+        rescheduleHouseTitle = string.Empty;
+        rescheduleError = null;
+    }
+
+    private async Task ConfirmRescheduleDraw()
+    {
+        if (!rescheduleDrawId.HasValue)
+        {
+            return;
+        }
+
+        isRescheduling = true;
+        rescheduleError = null;
+        try
+        {
+            await DrawsService.UpdateDrawScheduleAsync(rescheduleDrawId.Value, new UpdateDrawScheduleRequest
+            {
+                DrawDate = rescheduleDrawDate
+            });
+            CloseRescheduleModal();
+            await LoadDraws();
+        }
+        catch (Exception ex)
+        {
+            rescheduleError = ex.Message;
+        }
+        finally
+        {
+            isRescheduling = false;
+        }
+    }
+
+    private void ShowCancelDrawModal(Guid drawId, string houseTitle)
+    {
+        selectedDrawId = drawId;
+        cancelDrawHouseTitle = houseTitle;
+        showCancelModal = true;
+    }
+
+    private void CloseCancelDrawModal()
+    {
+        showCancelModal = false;
+        selectedDrawId = null;
+        cancelDrawHouseTitle = string.Empty;
+    }
+
+    private async Task ConfirmCancelDraw()
+    {
+        if (!selectedDrawId.HasValue)
+        {
+            return;
+        }
+
+        isCancelling = true;
+        try
+        {
+            await DrawsService.CancelDrawAsync(selectedDrawId.Value);
+            CloseCancelDrawModal();
+            await LoadDraws();
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error cancelling draw: {ex.Message}");
+        }
+        finally
+        {
+            isCancelling = false;
+        }
     }
 
     private void ShowCreateDrawModal()
