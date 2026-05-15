@@ -40,7 +40,7 @@
     else if (healthOverview != null)
     {
         <div class="row g-4 mb-4 admin-health-panel">
-            <div class="col-lg-4">
+            <div class="col-lg-5">
                 <div class="card h-100 admin-presence-card">
                     <div class="card-header d-flex justify-content-between align-items-center">
                         <strong><i class="fas fa-users me-2"></i>Live Presence</strong>
@@ -65,37 +65,47 @@
                     </div>
                 </div>
             </div>
-            <div class="col-lg-4">
+            <div class="col-lg-7">
                 <div class="card h-100">
-                    <div class="card-header"><strong><i class="fas fa-server me-2"></i>Services</strong></div>
-                    <div class="card-body p-0">
-                        <ul class="list-group list-group-flush">
-                            @foreach (var item in healthOverview.Services)
-                            {
-                                <li class="list-group-item d-flex align-items-center justify-content-between gap-2 py-2">
-                                    <div class="d-flex align-items-center gap-2 min-w-0">
-                                        <span class="health-status-dot @GetHealthDotClass(item.Status)"></span>
-                                        <span class="text-truncate">@item.Name</span>
-                                    </div>
-                                    <small class="text-muted text-nowrap">
-                                        @(item.ResponseTimeMs.HasValue ? $"{item.ResponseTimeMs}ms" : item.Detail ?? item.Status)
-                                    </small>
-                                </li>
-                            }
-                        </ul>
-                    </div>
-                </div>
-            </div>
-            <div class="col-lg-4">
-                <div class="card h-100">
-                    <div class="card-header"><strong><i class="fas fa-store me-2"></i>Products</strong></div>
-                    <div class="card-body p-0">
+                    <div class="card-header"><strong><i class="fas fa-heartbeat me-2"></i>System Health</strong></div>
+                    <div class="card-body">
+                        <div class="dropdown mb-3">
+                            <button class="btn btn-outline-secondary dropdown-toggle w-100 d-flex justify-content-between align-items-center"
+                                    type="button"
+                                    data-bs-toggle="dropdown"
+                                    aria-expanded="false">
+                                <span><i class="fas fa-server me-2"></i>Services</span>
+                                <span class="badge @GetHealthSummaryBadgeClass(healthOverview.Services)">
+                                    @CountHealthy(healthOverview.Services)/@healthOverview.Services.Count healthy
+                                </span>
+                            </button>
+                            <ul class="dropdown-menu w-100 admin-health-dropdown">
+                                @foreach (var item in healthOverview.Services)
+                                {
+                                    <li>
+                                        <span class="dropdown-item-text d-flex align-items-center justify-content-between gap-2 py-2">
+                                            <span class="d-flex align-items-center gap-2 min-w-0">
+                                                <span class="health-status-dot @GetHealthDotClass(item.Status)"></span>
+                                                <span class="text-truncate">@item.Name</span>
+                                            </span>
+                                            <small class="text-muted text-nowrap">
+                                                @(item.ResponseTimeMs.HasValue ? $"{item.ResponseTimeMs}ms" : item.Detail ?? item.Status)
+                                            </small>
+                                        </span>
+                                    </li>
+                                }
+                            </ul>
+                        </div>
+
+                        <div class="small text-muted text-uppercase fw-semibold mb-2">
+                            <i class="fas fa-globe me-1"></i> Products (customer-facing)
+                        </div>
                         @if (healthOverview.Products.Any())
                         {
-                            <ul class="list-group list-group-flush">
+                            <ul class="list-group list-group-flush admin-product-health-list">
                                 @foreach (var item in healthOverview.Products)
                                 {
-                                    <li class="list-group-item d-flex align-items-center justify-content-between gap-2 py-2">
+                                    <li class="list-group-item d-flex align-items-center justify-content-between gap-2 py-2 px-0 border-0">
                                         <div class="d-flex align-items-center gap-2 min-w-0">
                                             <span class="health-status-dot @GetHealthDotClass(item.Status)"></span>
                                             <span class="text-truncate">@item.Name</span>
@@ -109,7 +119,7 @@
                         }
                         else
                         {
-                            <p class="text-muted small p-3 mb-0">No product endpoints configured.</p>
+                            <p class="text-muted small mb-0">No product endpoints configured.</p>
                         }
                     </div>
                 </div>
@@ -382,6 +392,30 @@
         {
             isRefreshingHealth = false;
         }
+    }
+
+    private static int CountHealthy(IReadOnlyList<HealthCheckItem> items) =>
+        items.Count(i => string.Equals(i.Status, "healthy", StringComparison.OrdinalIgnoreCase));
+
+    private static string GetHealthSummaryBadgeClass(IReadOnlyList<HealthCheckItem> items)
+    {
+        if (items.Count == 0)
+        {
+            return "bg-secondary";
+        }
+
+        var healthy = CountHealthy(items);
+        if (healthy == items.Count)
+        {
+            return "bg-success";
+        }
+
+        if (healthy == 0)
+        {
+            return "bg-danger";
+        }
+
+        return "bg-warning text-dark";
     }
 
     private static string GetHealthDotClass(string status) => status.ToLowerInvariant() switch

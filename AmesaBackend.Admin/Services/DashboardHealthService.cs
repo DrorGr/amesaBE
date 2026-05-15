@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net;
 using AmesaBackend.Admin.Data;
 using AmesaBackend.Admin.Models;
 using AmesaBackend.Admin.Security;
@@ -67,10 +68,11 @@ public sealed class DashboardHealthService : IDashboardHealthService
         var presenceWindowMinutes = _configuration.GetValue("ServiceHealth:PresenceWindowMinutes", 15);
         var timeout = TimeSpan.FromSeconds(Math.Clamp(timeoutSeconds, 2, 30));
 
-        var httpTargets = GetHttpTargets();
+        var gatewayBaseUrl = _configuration["ServiceHealth:GatewayBaseUrl"]?.Trim();
+        var httpTargets = GetHttpTargets(gatewayBaseUrl);
         var dbTargets = GetDatabaseTargets();
 
-        var httpResults = await Task.WhenAll(httpTargets.Select(t => ProbeHttpAsync(t, timeout, cancellationToken)));
+        var httpResults = await Task.WhenAll(httpTargets.Select(t => ProbeTargetAsync(t, timeout, cancellationToken)));
         var dbResults = await Task.WhenAll(dbTargets.Select(t => ProbeDatabaseAsync(t, cancellationToken)));
         var presence = await GetPresenceAsync(presenceWindowMinutes, cancellationToken);
         var redis = await ProbeRedisAsync(cancellationToken);
@@ -96,7 +98,7 @@ public sealed class DashboardHealthService : IDashboardHealthService
         };
     }
 
-    private List<HealthProbeTarget> GetHttpTargets()
+    private List<HealthProbeTarget> GetHttpTargets(string? gatewayBaseUrl)
     {
         var targets = new List<HealthProbeTarget>();
         var section = _configuration.GetSection("ServiceHealth:Endpoints");
@@ -104,8 +106,12 @@ public sealed class DashboardHealthService : IDashboardHealthService
         {
             foreach (var child in section.GetChildren())
             {
-                var url = child["Url"];
-                if (string.IsNullOrWhiteSpace(url))
+                var probeMode = child["ProbeMode"] ?? "http";
+                var healthPath = child["HealthPath"] ?? "/health";
+                var explicitUrl = child["Url"]?.Trim();
+                var requestUrl = ResolveProbeUrl(explicitUrl, healthPath, gatewayBaseUrl, probeMode);
+                if (string.IsNullOrWhiteSpace(requestUrl) &&
+                    !string.Equals(probeMode, "local", StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }
@@ -114,25 +120,130 @@ public sealed class DashboardHealthService : IDashboardHealthService
                     child.Key,
                     child["Name"] ?? child.Key,
                     child["Category"] ?? "service",
-                    url.Trim(),
-                    child["HealthPath"] ?? "/health"));
+                    requestUrl ?? string.Empty,
+                    probeMode));
             }
 
             return targets;
         }
 
-        foreach (var (key, name, category, defaultUrl) in DefaultHttpEndpoints)
+        foreach (var endpoint in DefaultHttpEndpoints)
         {
-            var url = _configuration[$"Services:{key}:Url"] ?? defaultUrl;
-            if (string.IsNullOrWhiteSpace(url))
+            var probeMode = endpoint.ProbeMode;
+            var healthPath = endpoint.HealthPath;
+            var explicitUrl = _configuration[$"Services:{endpoint.Key}:Url"] ?? endpoint.DefaultUrl;
+            var requestUrl = ResolveProbeUrl(explicitUrl?.Trim(), healthPath, gatewayBaseUrl, probeMode);
+            if (string.IsNullOrWhiteSpace(requestUrl) &&
+                !string.Equals(probeMode, "local", StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
 
-            targets.Add(new HealthProbeTarget(key, name, category, url.Trim(), "/health"));
+            targets.Add(new HealthProbeTarget(
+                endpoint.Key,
+                endpoint.Name,
+                endpoint.Category,
+                requestUrl ?? string.Empty,
+                probeMode));
         }
 
         return targets;
+    }
+
+    private static string? ResolveProbeUrl(
+        string? explicitUrl,
+        string healthPath,
+        string? gatewayBaseUrl,
+        string probeMode)
+    {
+        if (string.Equals(probeMode, "local", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(explicitUrl))
+        {
+            return explicitUrl;
+        }
+
+        if (!string.IsNullOrWhiteSpace(gatewayBaseUrl))
+        {
+            return BuildHealthUrl(gatewayBaseUrl, healthPath);
+        }
+
+        return null;
+    }
+
+    private async Task<HealthCheckItem> ProbeTargetAsync(
+        HealthProbeTarget target,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        if (string.Equals(target.ProbeMode, "local", StringComparison.OrdinalIgnoreCase))
+        {
+            return await ProbeLocalProcessHealthAsync(target, timeout, cancellationToken);
+        }
+
+        return await ProbeHttpAsync(target, timeout, cancellationToken);
+    }
+
+    private async Task<HealthCheckItem> ProbeLocalProcessHealthAsync(
+        HealthProbeTarget target,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        var localUrls = new[]
+        {
+            "http://127.0.0.1:8080/health",
+            "http://localhost:8080/health",
+            "http://127.0.0.1:8080/admin/health",
+            "http://localhost:8080/admin/health"
+        };
+
+        var client = _httpClientFactory.CreateClient("DashboardHealth");
+        client.Timeout = timeout;
+
+        string? lastDetail = null;
+        foreach (var healthUrl in localUrls)
+        {
+            var stopwatch = Stopwatch.StartNew();
+            try
+            {
+                using var response = await client.GetAsync(healthUrl, cancellationToken);
+                stopwatch.Stop();
+
+                if (response.IsSuccessStatusCode)
+                {
+                    return new HealthCheckItem
+                    {
+                        Key = target.Key,
+                        Name = target.Name,
+                        Category = target.Category,
+                        Status = StatusHealthy,
+                        Detail = "This instance",
+                        ResponseTimeMs = (int)stopwatch.ElapsedMilliseconds,
+                        IsConfigured = true
+                    };
+                }
+
+                lastDetail = $"HTTP {(int)response.StatusCode}";
+            }
+            catch (Exception ex)
+            {
+                stopwatch.Stop();
+                lastDetail = ex.Message;
+            }
+        }
+
+        return new HealthCheckItem
+        {
+            Key = target.Key,
+            Name = target.Name,
+            Category = target.Category,
+            Status = StatusHealthy,
+            Detail = lastDetail == null ? "Serving dashboard" : $"Serving dashboard ({lastDetail})",
+            IsConfigured = true
+        };
     }
 
     private static List<DbProbeTarget> GetDatabaseTargets() =>
@@ -149,7 +260,7 @@ public sealed class DashboardHealthService : IDashboardHealthService
 
     private async Task<HealthCheckItem> ProbeHttpAsync(HealthProbeTarget target, TimeSpan timeout, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(target.BaseUrl))
+        if (string.IsNullOrWhiteSpace(target.RequestUrl))
         {
             return new HealthCheckItem
             {
@@ -162,7 +273,7 @@ public sealed class DashboardHealthService : IDashboardHealthService
             };
         }
 
-        var healthUrl = BuildHealthUrl(target.BaseUrl, target.HealthPath ?? "/health");
+        var healthUrl = target.RequestUrl;
         var client = _httpClientFactory.CreateClient("DashboardHealth");
         client.Timeout = timeout;
 
@@ -173,6 +284,12 @@ public sealed class DashboardHealthService : IDashboardHealthService
             stopwatch.Stop();
 
             var status = response.IsSuccessStatusCode ? StatusHealthy : StatusUnhealthy;
+            if (!response.IsSuccessStatusCode &&
+                response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.MovedPermanently or HttpStatusCode.Found)
+            {
+                status = StatusDegraded;
+            }
+
             return new HealthCheckItem
             {
                 Key = target.Key,
@@ -416,20 +533,34 @@ public sealed class DashboardHealthService : IDashboardHealthService
         return $"{trimmed}{path}";
     }
 
-    private static readonly (string key, string name, string category, string defaultUrl)[] DefaultHttpEndpoints =
+    private static readonly DefaultHttpEndpoint[] DefaultHttpEndpoints =
     [
-        ("AuthService", "Auth API", "service", "http://amesa-auth-service:8080"),
-        ("LotteryService", "Lottery API", "service", "http://amesa-lottery-service:8080"),
-        ("PaymentService", "Payment API", "service", "http://amesa-payment-service:8080"),
-        ("NotificationService", "Notification API", "service", "http://amesa-notification-service:8080"),
-        ("ContentService", "Content API", "service", "http://amesa-content-service:8080"),
-        ("LotteryResultsService", "Lottery Results API", "service", "http://amesa-lottery-results-service:8080"),
-        ("AnalyticsService", "Analytics API", "service", "http://amesa-analytics-service:8080"),
-        ("AdminService", "Admin Panel", "service", "http://amesa-admin-service:8080"),
-        ("Frontend", "Customer Web App", "product", "")
+        new("auth-api", "Auth API", "service", null, "/api/v1/auth/health", "http"),
+        new("lottery-api", "Lottery API", "service", null, "/api/v1/lottery/health", "http"),
+        new("payment-api", "Payment API", "service", null, "/api/v1/payment/health", "http"),
+        new("notification-api", "Notification API", "service", null, "/api/v1/notifications/health", "http"),
+        new("content-api", "Content API", "service", null, "/api/v1/content/health", "http"),
+        new("lottery-results-api", "Lottery Results API", "service", null, "/api/v1/lottery-results/health", "http"),
+        new("analytics-api", "Analytics API", "service", null, "/api/v1/analytics/health", "http"),
+        new("admin-panel", "Admin Panel", "service", null, "/admin/health", "local"),
+        new("amesa-main", "Amesa Website", "product", "https://amesa.com", "/", "http"),
+        new("amesa-www", "Amesa (www)", "product", "https://www.amesa.com", "/", "http")
     ];
 
-    private sealed record HealthProbeTarget(string Key, string Name, string Category, string BaseUrl, string? HealthPath);
+    private sealed record HealthProbeTarget(
+        string Key,
+        string Name,
+        string Category,
+        string RequestUrl,
+        string ProbeMode);
+
+    private sealed record DefaultHttpEndpoint(
+        string Key,
+        string Name,
+        string Category,
+        string? DefaultUrl,
+        string HealthPath,
+        string ProbeMode);
 
     private sealed record DbProbeTarget(string Key, string Name, Type DbContextType);
 }

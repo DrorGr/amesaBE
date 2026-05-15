@@ -309,6 +309,19 @@ body {
     color: var(--amesa-text);
 }
 
+.admin-health-dropdown {
+    max-height: 18rem;
+    overflow-y: auto;
+}
+
+.admin-health-dropdown .dropdown-item-text {
+    white-space: normal;
+}
+
+.admin-product-health-list .list-group-item {
+    background: transparent;
+}
+
 @media (max-width: 767.98px) {
     .sidebar {
         min-height: auto;
