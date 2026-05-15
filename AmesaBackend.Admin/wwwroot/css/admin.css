@@ -309,13 +309,9 @@ body {
     color: var(--amesa-text);
 }
 
-.admin-health-dropdown {
+.admin-health-services-list {
     max-height: 18rem;
     overflow-y: auto;
-}
-
-.admin-health-dropdown .dropdown-item-text {
-    white-space: normal;
 }
 
 .admin-product-health-list .list-group-item {
