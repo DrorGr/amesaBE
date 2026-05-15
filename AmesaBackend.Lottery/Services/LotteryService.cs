@@ -889,6 +889,7 @@ namespace AmesaBackend.Lottery.Services
         {
             var tickets = await _context.LotteryTickets
                 .Include(t => t.House)
+                    .ThenInclude(h => h.Images)
                 .Where(t => t.UserId == userId && t.Status != null && t.Status.ToLower() == "active")
                 .OrderByDescending(t => t.PurchaseDate)
                 .ToListAsync();
@@ -1072,17 +1073,32 @@ namespace AmesaBackend.Lottery.Services
 
         private LotteryTicketDto MapToTicketDto(LotteryTicket ticket)
         {
+            var house = ticket.House;
+            var primaryImage = house?.Images?
+                .OrderByDescending(i => i.IsPrimary)
+                .ThenBy(i => i.DisplayOrder)
+                .FirstOrDefault();
+
             return new LotteryTicketDto
             {
                 Id = ticket.Id,
                 TicketNumber = ticket.TicketNumber,
                 HouseId = ticket.HouseId,
-                HouseTitle = ticket.House?.Title ?? "",
+                HouseTitle = house?.Title ?? "",
                 PurchasePrice = ticket.PurchasePrice,
                 Status = ticket.Status,
                 PurchaseDate = ticket.PurchaseDate,
                 IsWinner = ticket.IsWinner,
-                CreatedAt = ticket.CreatedAt
+                CreatedAt = ticket.CreatedAt,
+                HouseLocation = house?.Location,
+                HouseBedrooms = house?.Bedrooms,
+                HouseBathrooms = house?.Bathrooms,
+                HouseSquareFeet = house?.SquareFeet,
+                HousePropertyType = house?.PropertyType,
+                HouseTicketPrice = house?.TicketPrice,
+                HouseDrawDate = house?.DrawDate,
+                HouseLotteryEndDate = house?.LotteryEndDate,
+                HouseImageUrl = primaryImage?.ImageUrl
             };
         }
 

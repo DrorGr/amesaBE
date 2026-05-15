@@ -172,6 +172,15 @@ namespace AmesaBackend.Lottery.DTOs
         public DateTime PurchaseDate { get; set; }
         public bool IsWinner { get; set; }
         public DateTime CreatedAt { get; set; }
+        public string? HouseLocation { get; set; }
+        public int? HouseBedrooms { get; set; }
+        public int? HouseBathrooms { get; set; }
+        public int? HouseSquareFeet { get; set; }
+        public string? HousePropertyType { get; set; }
+        public decimal? HouseTicketPrice { get; set; }
+        public DateTime? HouseDrawDate { get; set; }
+        public DateTime? HouseLotteryEndDate { get; set; }
+        public string? HouseImageUrl { get; set; }
     }
 
 
