@@ -85,6 +85,7 @@ public sealed class SendAdminNotificationResult
     public string UserEmail { get; set; } = string.Empty;
     public int RecipientCount { get; set; }
     public IReadOnlyCollection<string> QueuedChannels { get; set; } = Array.Empty<string>();
+    public bool ProcessedAsynchronously { get; set; }
 }
 
 public sealed class AdminMessageRecipientPreviewDto

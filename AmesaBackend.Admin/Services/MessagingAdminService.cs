@@ -20,7 +20,8 @@ public interface IMessagingAdminService
 
 public sealed class MessagingAdminService : IMessagingAdminService
 {
-    private const int MaxGroupRecipientsPerSend = 500;
+    private const int MaxGroupRecipientsPerSend = 10_000;
+    private const int PersistBatchSize = 100;
 
     private readonly NotificationDbContext _notificationContext;
     private readonly AuthDbContext _authContext;
@@ -136,7 +137,11 @@ public sealed class MessagingAdminService : IMessagingAdminService
         var isQueuePlaceholder = externalChannels.Any() && !includesInApp;
 
         var queuedByAdminUserId = await _permissions.GetCurrentAdminUserIdAsync();
+        var notificationType = string.IsNullOrWhiteSpace(request.Type)
+            ? NotificationTypeConstants.SystemAnnouncement
+            : request.Type.Trim();
         var notifications = new List<UserNotification>();
+        var persistBatch = new List<UserNotification>();
 
         foreach (var user in recipients)
         {
@@ -144,8 +149,8 @@ public sealed class MessagingAdminService : IMessagingAdminService
             {
                 Id = Guid.NewGuid(),
                 UserId = user.Id,
-                Type = string.IsNullOrWhiteSpace(request.Type) ? NotificationTypeConstants.SystemAnnouncement : request.Type.Trim(),
-                NotificationTypeCode = string.IsNullOrWhiteSpace(request.Type) ? NotificationTypeConstants.SystemAnnouncement : request.Type.Trim(),
+                Type = notificationType,
+                NotificationTypeCode = notificationType,
                 Title = request.Title.Trim(),
                 Message = request.Message.Trim(),
                 Data = JsonSerializer.Serialize(new
@@ -153,7 +158,8 @@ public sealed class MessagingAdminService : IMessagingAdminService
                     source = "admin",
                     targetMode = request.TargetMode,
                     groupBasis = request.GroupBasis,
-                    queuedByAdminUserId
+                    queuedByAdminUserId,
+                    campaign = recipients.Count > PersistBatchSize ? "admin_bulk" : null
                 }),
                 IsDeleted = isQueuePlaceholder,
                 DeletedAt = isQueuePlaceholder ? DateTime.UtcNow : null,
@@ -162,25 +168,30 @@ public sealed class MessagingAdminService : IMessagingAdminService
             };
 
             notifications.Add(notification);
+            persistBatch.Add(notification);
             _notificationContext.UserNotifications.Add(notification);
+
+            if (includesInApp)
+            {
+                _notificationContext.NotificationQueue.Add(CreateQueueItem(notification.Id, "in_app", request.ScheduledFor));
+            }
 
             foreach (var channel in externalChannels)
             {
-                _notificationContext.NotificationQueue.Add(new NotificationQueue
-                {
-                    Id = Guid.NewGuid(),
-                    NotificationId = notification.Id,
-                    Channel = channel,
-                    Priority = 8,
-                    ScheduledFor = request.ScheduledFor,
-                    Status = NotificationChannelConstants.QueueStatusPending,
-                    MaxRetries = NotificationChannelConstants.DefaultMaxRetries,
-                    CreatedAt = DateTime.UtcNow
-                });
+                _notificationContext.NotificationQueue.Add(CreateQueueItem(notification.Id, channel, request.ScheduledFor));
+            }
+
+            if (persistBatch.Count >= PersistBatchSize)
+            {
+                await _notificationContext.SaveChangesAsync();
+                persistBatch.Clear();
             }
         }
 
-        await _notificationContext.SaveChangesAsync();
+        if (persistBatch.Count > 0 || _notificationContext.ChangeTracker.HasChanges())
+        {
+            await _notificationContext.SaveChangesAsync();
+        }
 
         var firstNotification = notifications.First();
         var firstRecipient = recipients.First();
@@ -204,7 +215,8 @@ public sealed class MessagingAdminService : IMessagingAdminService
             UserId = firstRecipient.Id,
             UserEmail = firstRecipient.Email,
             RecipientCount = recipients.Count,
-            QueuedChannels = channels
+            QueuedChannels = channels,
+            ProcessedAsynchronously = recipients.Count > 1 || externalChannels.Any() || includesInApp
         };
     }
 
@@ -408,4 +420,17 @@ public sealed class MessagingAdminService : IMessagingAdminService
 
         return channels.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
     }
+
+    private static NotificationQueue CreateQueueItem(Guid notificationId, string channel, DateTime? scheduledFor) =>
+        new()
+        {
+            Id = Guid.NewGuid(),
+            NotificationId = notificationId,
+            Channel = channel,
+            Priority = 8,
+            ScheduledFor = scheduledFor,
+            Status = NotificationChannelConstants.QueueStatusPending,
+            MaxRetries = NotificationChannelConstants.DefaultMaxRetries,
+            CreatedAt = DateTime.UtcNow
+        };
 }

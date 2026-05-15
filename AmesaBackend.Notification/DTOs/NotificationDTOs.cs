@@ -255,6 +255,11 @@ namespace AmesaBackend.Notification.DTOs
         
         [StringLength(10)]
         public string Language { get; set; } = "en";
+
+        /// <summary>
+        /// When true, skips per-user orchestrator rate limits (e.g. admin system announcements).
+        /// </summary>
+        public bool BypassUserRateLimit { get; set; }
     }
 
     public class NotificationPreferences

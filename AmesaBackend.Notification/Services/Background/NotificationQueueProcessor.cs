@@ -205,13 +205,15 @@ namespace AmesaBackend.Notification.Services.Background
                         continue;
                     }
 
-                    var channels = items
+                    var inAppRequested = items.Any(item =>
+                        string.Equals(item.Channel, "in_app", StringComparison.OrdinalIgnoreCase));
+                    var externalChannels = items
                         .Select(item => item.Channel)
                         .Where(c => !string.Equals(c, "in_app", StringComparison.OrdinalIgnoreCase))
                         .Distinct(StringComparer.OrdinalIgnoreCase)
                         .ToList();
 
-                    if (!channels.Any())
+                    if (!inAppRequested && !externalChannels.Any())
                     {
                         foreach (var item in items)
                         {
@@ -225,11 +227,12 @@ namespace AmesaBackend.Notification.Services.Background
                     var notificationRequest = new NotificationRequest
                     {
                         UserId = firstItem.Notification.UserId,
-                        Channel = string.Join(",", channels),
+                        Channel = string.Join(",", externalChannels),
                         Type = firstItem.Notification.Type,
                         Title = firstItem.Notification.Title,
                         Message = firstItem.Notification.Message,
-                        Language = "en", // Default, can be enhanced
+                        Language = "en",
+                        BypassUserRateLimit = true,
                         Data = firstItem.Notification.Data != null
                             ? JsonSerializer.Deserialize<Dictionary<string, object>>(firstItem.Notification.Data)
                             : null
@@ -239,13 +242,26 @@ namespace AmesaBackend.Notification.Services.Background
                         ? (Guid?)null
                         : firstItem.Notification.Id;
 
-                    var result = await orchestrator.SendMultiChannelAsync(
-                        firstItem.Notification.UserId,
-                        notificationRequest,
-                        channels,
-                        existingNotificationId);
+                    if (inAppRequested)
+                    {
+                        await orchestrator.DeliverInAppAsync(
+                            firstItem.Notification.UserId,
+                            notificationRequest,
+                            existingNotificationId);
+                    }
 
-                    if (result.SuccessCount > 0)
+                    OrchestrationResult? externalResult = null;
+                    if (externalChannels.Any())
+                    {
+                        externalResult = await orchestrator.SendMultiChannelAsync(
+                            firstItem.Notification.UserId,
+                            notificationRequest,
+                            externalChannels,
+                            existingNotificationId);
+                    }
+
+                    var succeeded = inAppRequested || (externalResult?.SuccessCount ?? 0) > 0;
+                    if (succeeded)
                     {
                         foreach (var item in items)
                         {

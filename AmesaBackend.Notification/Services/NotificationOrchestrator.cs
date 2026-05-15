@@ -125,17 +125,19 @@ namespace AmesaBackend.Notification.Services
                     }
                 }
                 
-                // Check quiet hours if configured
-                if (cachedPrefs.ContainsKey("quietHoursStart") && cachedPrefs.ContainsKey("quietHoursEnd"))
+                if (!ShouldBypassUserRateLimit(request))
                 {
-                    var now = DateTime.UtcNow.TimeOfDay;
-                    if (TimeSpan.TryParse(cachedPrefs["quietHoursStart"]?.ToString(), out var start) &&
-                        TimeSpan.TryParse(cachedPrefs["quietHoursEnd"]?.ToString(), out var end))
+                    if (cachedPrefs.ContainsKey("quietHoursStart") && cachedPrefs.ContainsKey("quietHoursEnd"))
                     {
-                        if (now >= start && now <= end)
+                        var now = DateTime.UtcNow.TimeOfDay;
+                        if (TimeSpan.TryParse(cachedPrefs["quietHoursStart"]?.ToString(), out var start) &&
+                            TimeSpan.TryParse(cachedPrefs["quietHoursEnd"]?.ToString(), out var end))
                         {
-                            _logger.LogInformation("Quiet hours active for user {UserId}, skipping notification", userId);
-                            return result;
+                            if (now >= start && now <= end)
+                            {
+                                _logger.LogInformation("Quiet hours active for user {UserId}, skipping notification", userId);
+                                return result;
+                            }
                         }
                     }
                 }
@@ -197,25 +199,27 @@ namespace AmesaBackend.Notification.Services
                 var deliveriesToAdd = new List<NotificationDelivery>();
                 var channelsToSend = new List<(string ChannelName, IChannelProvider Provider, NotificationDelivery Delivery)>();
                 
-                // Check per-user rate limit across all channels
-                var userRateLimitKey = $"notification_user:{userId}";
-                var userRateLimit = 50; // Max 50 notifications per hour per user
-                var userCanSend = await _rateLimitService.CheckRateLimitAsync(
-                    userRateLimitKey, 
-                    userRateLimit, 
-                    TimeSpan.FromHours(1));
-
-                if (!userCanSend)
+                if (!ShouldBypassUserRateLimit(request))
                 {
-                    _logger.LogWarning("Per-user rate limit exceeded for user {UserId}", userId);
-                    await transaction.RollbackAsync();
-                    result.DeliveryResults.Add(new DeliveryResult
+                    var userRateLimitKey = $"notification_user:{userId}";
+                    var userRateLimit = 50;
+                    var userCanSend = await _rateLimitService.CheckRateLimitAsync(
+                        userRateLimitKey,
+                        userRateLimit,
+                        TimeSpan.FromHours(1));
+
+                    if (!userCanSend)
                     {
-                        Success = false,
-                        ErrorMessage = "User rate limit exceeded"
-                    });
-                    result.FailureCount++;
-                    return result;
+                        _logger.LogWarning("Per-user rate limit exceeded for user {UserId}", userId);
+                        await transaction.RollbackAsync();
+                        result.DeliveryResults.Add(new DeliveryResult
+                        {
+                            Success = false,
+                            ErrorMessage = "User rate limit exceeded"
+                        });
+                        result.FailureCount++;
+                        return result;
+                    }
                 }
                 
                 foreach (var channelName in channels)
@@ -299,8 +303,10 @@ namespace AmesaBackend.Notification.Services
                 // Commit transaction before sending notifications
                 await transaction.CommitAsync();
                 
-                // Increment per-user rate limit after successful commit
-                await _rateLimitService.IncrementRateLimitAsync(userRateLimitKey, TimeSpan.FromHours(1));
+                if (!ShouldBypassUserRateLimit(request))
+                {
+                    await _rateLimitService.IncrementRateLimitAsync($"notification_user:{userId}", TimeSpan.FromHours(1));
+                }
                 
                 // Now send notifications (outside transaction to avoid long-running transactions)
                 foreach (var (channelName, provider, delivery) in channelsToSend)
@@ -454,6 +460,34 @@ namespace AmesaBackend.Notification.Services
                 await transaction.RollbackAsync();
                 throw;
             }
+        }
+
+        public async Task<OrchestrationResult> DeliverInAppAsync(Guid userId, NotificationRequest request, Guid? existingNotificationId = null)
+        {
+            request.BypassUserRateLimit = request.BypassUserRateLimit || ShouldBypassUserRateLimit(request);
+            return await SendMultiChannelAsync(userId, request, new List<string>(), existingNotificationId);
+        }
+
+        private static bool ShouldBypassUserRateLimit(NotificationRequest request)
+        {
+            if (request.BypassUserRateLimit)
+            {
+                return true;
+            }
+
+            if (string.Equals(request.Type, NotificationTypeConstants.SystemAnnouncement, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (request.Data != null &&
+                request.Data.TryGetValue("source", out var source) &&
+                string.Equals(source?.ToString(), "admin", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            return false;
         }
 
         public async Task<List<DeliveryStatusDto>> GetDeliveryStatusAsync(Guid notificationId)

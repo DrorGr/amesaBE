@@ -167,6 +167,8 @@ public static class ServiceConfiguration
         services.AddScoped<IPaymentsService, PaymentsService>();
         services.AddScoped<IPromotionsAdminService, PromotionsAdminService>();
         services.AddScoped<IMessagingAdminService, MessagingAdminService>();
+        services.AddScoped<IAdminRbacSeedService, AdminRbacSeedService>();
+        services.AddHostedService<AdminRbacSeedHostedService>();
         services.AddScoped<IS3ImageService, S3ImageService>();
         services.AddScoped<ICloudWatchLoggingService, CloudWatchLoggingService>();
         services.AddScoped<IRealTimeNotificationService, RealTimeNotificationService>();

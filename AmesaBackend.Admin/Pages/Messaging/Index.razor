@@ -339,7 +339,10 @@
             var result = await MessagingService.QueueNotificationAsync(sendRequest);
             recipientPreview = null;
             var target = result.RecipientCount == 1 ? result.UserEmail : $"{result.RecipientCount} recipients";
-            SetMessage($"Queued notification {result.NotificationId} for {target} via {string.Join(", ", result.QueuedChannels)}.", "success");
+            var asyncNote = result.ProcessedAsynchronously
+                ? " Delivery will complete in the background via the notification processor."
+                : string.Empty;
+            SetMessage($"Queued notification {result.NotificationId} for {target} via {string.Join(", ", result.QueuedChannels)}.{asyncNote}", "success");
             sendRequest = new SendAdminNotificationRequest();
             houseTargetId = null;
             lotteryTargetId = null;
