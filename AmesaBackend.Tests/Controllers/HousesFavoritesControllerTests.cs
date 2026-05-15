@@ -10,6 +10,7 @@ using AmesaBackend.Lottery.Controllers;
 using AmesaBackend.Lottery.Services;
 using AmesaBackend.Lottery.DTOs;
 using AuthApp::AmesaBackend.Auth.Services;
+using AuthApp::AmesaBackend.Auth.Services.Interfaces;
 using AmesaBackend.Shared.Caching;
 
 namespace AmesaBackend.Tests.Controllers

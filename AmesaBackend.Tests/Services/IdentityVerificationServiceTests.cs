@@ -1,5 +1,6 @@
 extern alias AuthApp;
 using AuthApp::AmesaBackend.Auth.Services;
+using AuthApp::AmesaBackend.Auth.Services.Interfaces;
 using AuthApp::AmesaBackend.Auth.Data;
 using AuthApp::AmesaBackend.Auth.DTOs;
 using AuthApp::AmesaBackend.Auth.Models;

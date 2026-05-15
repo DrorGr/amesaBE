@@ -10,6 +10,7 @@ using AmesaBackend.Shared.Caching;
 using AmesaBackend.Shared.Events;
 using AmesaBackend.Shared.Rest;
 using AuthApp::AmesaBackend.Auth.Services;
+using AuthApp::AmesaBackend.Auth.Services.Interfaces;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;

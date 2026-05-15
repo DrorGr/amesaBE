@@ -1,6 +1,7 @@
 extern alias AuthApp;
 using AuthApp::AmesaBackend.Auth.Controllers;
 using AuthApp::AmesaBackend.Auth.Services;
+using AuthApp::AmesaBackend.Auth.Services.Interfaces;
 using AuthApp::AmesaBackend.Auth.DTOs;
 using Microsoft.AspNetCore.Mvc;
 using Moq;

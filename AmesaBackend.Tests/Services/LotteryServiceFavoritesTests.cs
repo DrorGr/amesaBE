@@ -8,6 +8,7 @@ using AmesaBackend.Lottery.Models;
 using AmesaBackend.Lottery.DTOs;
 using AmesaBackend.Lottery.Hubs;
 using AuthApp::AmesaBackend.Auth.Services;
+using AuthApp::AmesaBackend.Auth.Services.Interfaces;
 using AuthApp::AmesaBackend.Auth.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;

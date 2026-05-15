@@ -1,5 +1,6 @@
 extern alias AuthApp;
 using AuthApp::AmesaBackend.Auth.Services;
+using AuthApp::AmesaBackend.Auth.Services.Interfaces;
 using AmesaBackend.Payment.Services;
 using AmesaBackend.Payment.DTOs;
 using AmesaBackend.Payment.Data;
