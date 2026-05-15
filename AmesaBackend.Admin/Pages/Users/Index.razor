@@ -109,10 +109,10 @@
                                         }
                                     </td>
                                     <td>
-                                        <span class="badge bg-@GetStatusBadgeClass(user.Status)">@user.Status</span>
+                                        <StatusBadge Value="@user.Status" Style="StatusBadgeStyle.UserStatus" />
                                     </td>
                                     <td>
-                                        <span class="badge bg-@GetVerificationBadgeClass(user.VerificationStatus)">@user.VerificationStatus</span>
+                                        <StatusBadge Value="@user.VerificationStatus" Style="StatusBadgeStyle.Verification" />
                                     </td>
                                     <td>@user.CreatedAt.ToString("yyyy-MM-dd")</td>
                                     <td>
@@ -294,27 +294,5 @@
         }
     }
 
-    private string GetStatusBadgeClass(string status)
-    {
-        return status switch
-        {
-            "Active" => "success",
-            "Suspended" => "warning",
-            "Inactive" => "secondary",
-            _ => "secondary"
-        };
-    }
-
-    private string GetVerificationBadgeClass(string verificationStatus)
-    {
-        return verificationStatus switch
-        {
-            "IdentityVerified" => "success",
-            "Pending" => "warning",
-            "Rejected" => "danger",
-            "NotStarted" => "secondary",
-            _ => "secondary"
-        };
-    }
 }
 

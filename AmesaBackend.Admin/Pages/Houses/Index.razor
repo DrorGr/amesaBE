@@ -103,7 +103,7 @@
                                     <td>€@house.Price.ToString("N2")</td>
                                     <td>€@house.TicketPrice.ToString("N2")</td>
                                     <td>
-                                        <span class="badge bg-@GetStatusBadgeClass(house.Status)">@house.Status</span>
+                                        <StatusBadge Value="@house.Status" Style="StatusBadgeStyle.House" />
                                     </td>
                                     <td>@house.CreatedAt.ToString("yyyy-MM-dd")</td>
                                     <td>
@@ -265,16 +265,5 @@
         return true; // For now, always confirm
     }
 
-    private string GetStatusBadgeClass(string status)
-    {
-        return status switch
-        {
-            "Active" => "success",
-            "Pending" => "warning",
-            "Upcoming" => "info",
-            "Inactive" => "secondary",
-            _ => "secondary"
-        };
-    }
 }
 

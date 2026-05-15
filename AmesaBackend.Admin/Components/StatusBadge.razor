@@ -1,0 +1,176 @@
+<span class="badge bg-@Variant d-inline-flex align-items-center gap-1" title="@DisplayText">
+    <i class="fas @IconClass" aria-hidden="true"></i>
+    <span>@DisplayText</span>
+</span>
+
+@code {
+    [Parameter]
+    public string Value { get; set; } = string.Empty;
+
+    [Parameter]
+    public string? Label { get; set; }
+
+    [Parameter]
+    public StatusBadgeStyle Style { get; set; } = StatusBadgeStyle.General;
+
+    private string DisplayText => string.IsNullOrWhiteSpace(Label) ? Value : Label;
+
+    private string Variant => Style switch
+    {
+        StatusBadgeStyle.UserStatus => MapUserStatus(Value),
+        StatusBadgeStyle.Verification => MapVerification(Value),
+        StatusBadgeStyle.Draw => MapDraw(Value),
+        StatusBadgeStyle.Payment => MapPayment(Value),
+        StatusBadgeStyle.House => MapHouse(Value),
+        StatusBadgeStyle.Ticket => MapTicket(Value),
+        _ => MapGeneral(Value)
+    };
+
+    private string IconClass => Style switch
+    {
+        StatusBadgeStyle.UserStatus => IconForUserStatus(Value),
+        StatusBadgeStyle.Verification => IconForVerification(Value),
+        StatusBadgeStyle.Draw => IconForDraw(Value),
+        StatusBadgeStyle.Payment => IconForPayment(Value),
+        StatusBadgeStyle.House => IconForHouse(Value),
+        StatusBadgeStyle.Ticket => IconForTicket(Value),
+        _ => IconForGeneral(Value)
+    };
+
+    private static string MapUserStatus(string status) => status switch
+    {
+        "Active" => "success",
+        "Suspended" => "warning",
+        "Inactive" => "secondary",
+        _ => "secondary"
+    };
+
+    private static string MapVerification(string status) => status switch
+    {
+        "IdentityVerified" => "success",
+        "Pending" => "warning",
+        "Rejected" => "danger",
+        "NotStarted" => "secondary",
+        _ => "secondary"
+    };
+
+    private static string MapDraw(string status) => status switch
+    {
+        "Pending" => "warning",
+        "Completed" => "success",
+        "Cancelled" => "danger",
+        _ => "secondary"
+    };
+
+    private static string MapPayment(string status) => status switch
+    {
+        "Completed" or "Succeeded" or "Paid" => "success",
+        "Pending" or "Processing" => "warning",
+        "Failed" or "Cancelled" => "danger",
+        "Refunded" => "info",
+        _ => "secondary"
+    };
+
+    private static string MapHouse(string status) => status switch
+    {
+        "Active" or "Published" => "success",
+        "Pending" => "warning",
+        "Upcoming" => "info",
+        "Draft" => "secondary",
+        "Inactive" => "secondary",
+        "Archived" or "Deleted" => "danger",
+        _ => "secondary"
+    };
+
+    private static string MapTicket(string status) => status switch
+    {
+        "Active" => "success",
+        "Sold" => "primary",
+        "Used" or "Winner" => "info",
+        "Cancelled" or "Expired" => "danger",
+        _ => "secondary"
+    };
+
+    private static string MapGeneral(string status)
+    {
+        var normalized = status.ToLowerInvariant();
+        if (normalized.Contains("success") || normalized.Contains("complete") || normalized.Contains("active") || normalized.Contains("verified"))
+        {
+            return "success";
+        }
+
+        if (normalized.Contains("pending") || normalized.Contains("processing") || normalized.Contains("suspend"))
+        {
+            return "warning";
+        }
+
+        if (normalized.Contains("fail") || normalized.Contains("cancel") || normalized.Contains("reject") || normalized.Contains("error"))
+        {
+            return "danger";
+        }
+
+        return "secondary";
+    }
+
+    private static string IconForUserStatus(string status) => status switch
+    {
+        "Active" => "fa-check-circle",
+        "Suspended" => "fa-pause-circle",
+        "Inactive" => "fa-minus-circle",
+        _ => "fa-circle"
+    };
+
+    private static string IconForVerification(string status) => status switch
+    {
+        "IdentityVerified" => "fa-id-card",
+        "Pending" => "fa-clock",
+        "Rejected" => "fa-times-circle",
+        "NotStarted" => "fa-circle",
+        _ => "fa-circle"
+    };
+
+    private static string IconForDraw(string status) => status switch
+    {
+        "Pending" => "fa-clock",
+        "Completed" => "fa-check-circle",
+        "Cancelled" => "fa-ban",
+        _ => "fa-circle"
+    };
+
+    private static string IconForPayment(string status) => status.ToLowerInvariant() switch
+    {
+        "completed" or "succeeded" or "paid" => "fa-check-circle",
+        "pending" or "processing" => "fa-clock",
+        "failed" or "cancelled" or "refunded" => "fa-times-circle",
+        _ => "fa-circle"
+    };
+
+    private static string IconForHouse(string status) => status switch
+    {
+        "Active" or "Published" => "fa-home",
+        "Pending" => "fa-clock",
+        "Upcoming" => "fa-calendar",
+        "Draft" => "fa-pencil-alt",
+        "Inactive" => "fa-minus-circle",
+        "Archived" or "Deleted" => "fa-archive",
+        _ => "fa-circle"
+    };
+
+    private static string IconForTicket(string status) => status switch
+    {
+        "Active" => "fa-ticket-alt",
+        "Sold" => "fa-shopping-cart",
+        "Used" or "Winner" => "fa-trophy",
+        "Cancelled" or "Expired" => "fa-ban",
+        _ => "fa-circle"
+    };
+
+    private static string IconForGeneral(string status) => MapGeneral(status) switch
+    {
+        "success" => "fa-check-circle",
+        "warning" => "fa-clock",
+        "danger" => "fa-exclamation-circle",
+        "info" => "fa-info-circle",
+        _ => "fa-circle"
+    };
+}

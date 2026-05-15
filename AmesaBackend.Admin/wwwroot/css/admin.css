@@ -1,22 +1,288 @@
+/* Amesa Admin — design tokens (aligned with consumer FE blue) */
+:root {
+    --amesa-primary: #3b82f6;
+    --amesa-primary-hover: #2563eb;
+    --amesa-primary-subtle: #dbeafe;
+    --amesa-accent: #f59e0b;
+
+    --amesa-sidebar-bg: #1e293b;
+    --amesa-sidebar-border: #334155;
+    --amesa-sidebar-text: #e2e8f0;
+    --amesa-sidebar-muted: #94a3b8;
+    --amesa-sidebar-hover: rgba(255, 255, 255, 0.08);
+    --amesa-sidebar-active-bg: rgba(59, 130, 246, 0.18);
+    --amesa-sidebar-active-border: #3b82f6;
+
+    --amesa-surface: #f8fafc;
+    --amesa-surface-elevated: #ffffff;
+    --amesa-border: #e2e8f0;
+    --amesa-text: #0f172a;
+    --amesa-text-muted: #64748b;
+
+    --amesa-success: #059669;
+    --amesa-warning: #d97706;
+    --amesa-danger: #dc2626;
+    --amesa-info: #0284c7;
+
+    --bs-primary: var(--amesa-primary);
+    --bs-primary-rgb: 59, 130, 246;
+    --bs-link-color: var(--amesa-primary);
+    --bs-link-hover-color: var(--amesa-primary-hover);
+    --bs-body-bg: var(--amesa-surface);
+    --bs-body-color: var(--amesa-text);
+    --bs-border-color: var(--amesa-border);
+    --bs-focus-ring-color: rgba(59, 130, 246, 0.35);
+}
+
+body {
+    background-color: var(--amesa-surface);
+    color: var(--amesa-text);
+}
+
+.btn-primary {
+    --bs-btn-bg: var(--amesa-primary);
+    --bs-btn-border-color: var(--amesa-primary);
+    --bs-btn-hover-bg: var(--amesa-primary-hover);
+    --bs-btn-hover-border-color: var(--amesa-primary-hover);
+    --bs-btn-active-bg: var(--amesa-primary-hover);
+    --bs-btn-active-border-color: var(--amesa-primary-hover);
+}
+
+.btn:focus-visible,
+.form-control:focus-visible,
+.form-select:focus-visible,
+.nav-link:focus-visible {
+    box-shadow: 0 0 0 0.2rem var(--bs-focus-ring-color);
+}
+
+/* Sidebar */
 .sidebar {
-    background-color: #343a40;
+    background-color: var(--amesa-sidebar-bg);
+    border-right: 1px solid var(--amesa-sidebar-border);
     min-height: 100vh;
-    padding: 20px;
+    padding: 1.25rem 0.75rem;
+}
+
+.sidebar h4 {
+    color: var(--amesa-sidebar-text);
+    font-size: 1.125rem;
+    font-weight: 600;
+    margin-bottom: 0;
+}
+
+.sidebar h4 .fa-crown {
+    color: var(--amesa-accent);
+}
+
+.sidebar small {
+    color: var(--amesa-sidebar-muted);
+    font-size: 0.8125rem;
+    word-break: break-all;
+}
+
+.sidebar hr {
+    border-color: var(--amesa-sidebar-border);
+    opacity: 1;
+}
+
+.sidebar-heading {
+    color: var(--amesa-sidebar-muted) !important;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
 }
 
 .sidebar .nav-link {
-    color: rgba(255, 255, 255, 0.8);
-    padding: 10px 15px;
-    margin: 5px 0;
-    border-radius: 5px;
+    color: var(--amesa-sidebar-text);
+    padding: 0.5rem 0.75rem;
+    margin: 0.125rem 0;
+    border-radius: 0.375rem;
+    border-left: 3px solid transparent;
+    font-size: 0.9375rem;
 }
 
 .sidebar .nav-link:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-    color: white;
+    background-color: var(--amesa-sidebar-hover);
+    color: #fff;
 }
 
+.sidebar .nav-link.active {
+    background-color: var(--amesa-sidebar-active-bg);
+    border-left-color: var(--amesa-sidebar-active-border);
+    color: #fff;
+    font-weight: 500;
+}
+
+.sidebar .nav-link.text-danger-soft {
+    color: #fca5a5;
+}
+
+.sidebar .nav-link.text-danger-soft:hover {
+    background-color: rgba(220, 38, 38, 0.15);
+    color: #fecaca;
+}
+
+/* Main content */
 .main-content {
-    padding: 20px;
+    padding: 1.5rem 1.75rem 2rem;
+    min-height: 100vh;
 }
 
+.admin-page-header {
+    margin-bottom: 1.5rem;
+}
+
+.admin-page-title {
+    font-size: 1.75rem;
+    font-weight: 600;
+    line-height: 1.25;
+    margin-bottom: 0.25rem;
+    color: var(--amesa-text);
+}
+
+.admin-page-subtitle {
+    color: var(--amesa-text-muted);
+    margin-bottom: 0;
+}
+
+/* Cards & tables */
+.card {
+    background: var(--amesa-surface-elevated);
+    border-color: var(--amesa-border);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+}
+
+.card-header {
+    background-color: #f1f5f9;
+    border-bottom-color: var(--amesa-border);
+    font-weight: 600;
+}
+
+.table {
+    --bs-table-hover-bg: #f1f5f9;
+}
+
+.table thead th {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--amesa-text-muted);
+    border-bottom-width: 1px;
+}
+
+.admin-stat-card {
+    border-width: 1px;
+    transition: box-shadow 0.15s ease;
+}
+
+.admin-stat-card:hover {
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+}
+
+.admin-stat-card .card-body h3 {
+    font-weight: 700;
+    color: var(--amesa-text);
+}
+
+.admin-env-banner {
+    border-left: 4px solid var(--amesa-info);
+}
+
+/* Form sections */
+.admin-form-section {
+    border-top: 1px solid var(--amesa-border);
+    margin-top: 1rem;
+    padding-top: 1rem;
+}
+
+.admin-form-section-title {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--amesa-text-muted);
+    margin-bottom: 0.75rem;
+}
+
+/* Login */
+.admin-login-page {
+    min-height: 100vh;
+    background: linear-gradient(145deg, #1e293b 0%, #0f172a 45%, #1e3a5f 100%);
+}
+
+.admin-login-card {
+    border: none;
+    border-radius: 0.75rem;
+}
+
+.admin-login-card .fa-crown {
+    color: var(--amesa-accent);
+}
+
+.admin-login-card h2 {
+    font-weight: 600;
+    color: var(--amesa-text);
+}
+
+/* Blazor error UI */
+#blazor-error-ui {
+    background: #fef2f2;
+    border-top: 1px solid #fecaca;
+    color: #991b1b;
+    padding: 0.75rem 1.25rem;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 2000;
+    display: none;
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.08);
+}
+
+#blazor-error-ui .reload {
+    color: #b91c1c;
+    font-weight: 600;
+    margin-right: 1rem;
+}
+
+#blazor-error-ui .dismiss {
+    cursor: pointer;
+    float: right;
+    font-weight: bold;
+}
+
+/* Semantic badge tuning (Bootstrap overrides) */
+.badge.bg-success {
+    background-color: var(--amesa-success) !important;
+}
+
+.badge.bg-warning {
+    background-color: var(--amesa-warning) !important;
+    color: #fff !important;
+}
+
+.badge.bg-danger {
+    background-color: var(--amesa-danger) !important;
+}
+
+.badge.bg-info {
+    background-color: var(--amesa-info) !important;
+}
+
+.badge.bg-primary {
+    background-color: var(--amesa-primary) !important;
+}
+
+@media (max-width: 767.98px) {
+    .sidebar {
+        min-height: auto;
+        border-right: none;
+        border-bottom: 1px solid var(--amesa-sidebar-border);
+    }
+
+    .main-content {
+        padding: 1rem;
+    }
+}

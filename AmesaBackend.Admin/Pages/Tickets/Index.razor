@@ -178,7 +178,7 @@
                                     <td>@(ticket.UserId.ToString().Substring(0, 8) + "...")</td>
                                     <td>€@ticket.PurchasePrice.ToString("F2")</td>
                                     <td>
-                                        <span class="badge bg-@GetStatusBadgeClass(ticket.Status)">@ticket.Status</span>
+                                        <StatusBadge Value="@ticket.Status" Style="StatusBadgeStyle.Ticket" />
                                     </td>
                                     <td>@ticket.PurchaseDate.ToString("yyyy-MM-dd HH:mm")</td>
                                     <td>
@@ -291,17 +291,6 @@
     {
         currentPage = page;
         await LoadTickets();
-    }
-
-    private string GetStatusBadgeClass(string status)
-    {
-        return status switch
-        {
-            "Active" => "success",
-            "Sold" => "primary",
-            "Cancelled" => "danger",
-            _ => "secondary"
-        };
     }
 
     private string GetHouseStatusBadgeClass(string status)

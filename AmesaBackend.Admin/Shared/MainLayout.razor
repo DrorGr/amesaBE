@@ -5,11 +5,10 @@
 @inject NavigationManager Navigation
 
 @{
-    var currentPath = Navigation.Uri.Replace(Navigation.BaseUri, "").TrimStart('/');
-    var isLoginPage = currentPath.Equals("login", StringComparison.OrdinalIgnoreCase) || 
+    var currentPath = NormalizePath(Navigation.Uri.Replace(Navigation.BaseUri, ""));
+    var isLoginPage = currentPath.Equals("login", StringComparison.OrdinalIgnoreCase) ||
                       currentPath.Equals("admin/login", StringComparison.OrdinalIgnoreCase);
-    
-    // Safely check authentication - never throw exceptions during render
+
     bool isAuthenticated = false;
     if (!isLoginPage)
     {
@@ -19,7 +18,6 @@
         }
         catch
         {
-            // If authentication check fails, assume not authenticated
             isAuthenticated = false;
         }
     }
@@ -34,7 +32,7 @@ else if (!isAuthenticated)
     <div class="container mt-5">
         <div class="row justify-content-center">
             <div class="col-md-6">
-                <div class="card">
+                <div class="card shadow-sm">
                     <div class="card-body">
                         <h3 class="card-title text-center mb-4">
                             <i class="fas fa-lock"></i> Admin Access Required
@@ -53,11 +51,11 @@ else if (!isAuthenticated)
 }
 else
 {
-    <div class="container-fluid">
-        <div class="row">
+    <div class="container-fluid g-0">
+        <div class="row g-0">
             <nav class="col-md-2 d-md-block sidebar">
                 <div class="position-sticky pt-3">
-                    <div class="text-center mb-4">
+                    <div class="text-center mb-4 px-2">
                         <h4><i class="fas fa-crown"></i> Amesa Admin</h4>
                         @{
                             var adminEmail = "";
@@ -79,25 +77,24 @@ else
                         </div>
                     </div>
                     <hr />
-                    <ul class="nav flex-column">
+                    <ul class="nav flex-column px-1">
                         @if (Can(AdminPermissionNames.DashboardRead))
                         {
                             <li class="nav-item">
-                                <a class="nav-link" href="">
+                                <a class="@NavClass("")" href="">
                                     <i class="fas fa-tachometer-alt me-2"></i> Dashboard
                                 </a>
                             </li>
                         }
                     </ul>
-                    <hr />
-                    <h6 class="sidebar-heading px-3 mt-4 mb-1 text-muted">
+                    <h6 class="sidebar-heading px-3 mt-4 mb-1">
                         <span>Management</span>
                     </h6>
-                    <ul class="nav flex-column">
+                    <ul class="nav flex-column px-1">
                         @if (Can(AdminPermissionNames.HousesRead))
                         {
                             <li class="nav-item">
-                                <a class="nav-link" href="houses">
+                                <a class="@NavClass("houses")" href="houses">
                                     <i class="fas fa-home me-2"></i> Houses
                                 </a>
                             </li>
@@ -105,7 +102,7 @@ else
                         @if (Can(AdminPermissionNames.UsersRead))
                         {
                             <li class="nav-item">
-                                <a class="nav-link" href="users">
+                                <a class="@NavClass("users")" href="users">
                                     <i class="fas fa-users me-2"></i> Users
                                 </a>
                             </li>
@@ -113,7 +110,7 @@ else
                         @if (Can(AdminPermissionNames.TicketsRead))
                         {
                             <li class="nav-item">
-                                <a class="nav-link" href="tickets">
+                                <a class="@NavClass("tickets")" href="tickets">
                                     <i class="fas fa-ticket-alt me-2"></i> Tickets
                                 </a>
                             </li>
@@ -121,7 +118,7 @@ else
                         @if (Can(AdminPermissionNames.DrawsRead))
                         {
                             <li class="nav-item">
-                                <a class="nav-link" href="draws">
+                                <a class="@NavClass("draws")" href="draws">
                                     <i class="fas fa-dice me-2"></i> Draws
                                 </a>
                             </li>
@@ -129,7 +126,7 @@ else
                         @if (Can(AdminPermissionNames.PaymentsRead))
                         {
                             <li class="nav-item">
-                                <a class="nav-link" href="payments">
+                                <a class="@NavClass("payments")" href="payments">
                                     <i class="fas fa-euro-sign me-2"></i> Payments
                                 </a>
                             </li>
@@ -137,7 +134,7 @@ else
                         @if (Can(AdminPermissionNames.TranslationsRead))
                         {
                             <li class="nav-item">
-                                <a class="nav-link" href="translations">
+                                <a class="@NavClass("translations")" href="translations">
                                     <i class="fas fa-language me-2"></i> Translations
                                 </a>
                             </li>
@@ -145,7 +142,7 @@ else
                         @if (Can(AdminPermissionNames.PromotionsRead) || Can(AdminPermissionNames.PromotionsWrite) || Can(AdminPermissionNames.SettingsManage) || Can(AdminPermissionNames.AuditRead))
                         {
                             <li class="nav-item">
-                                <a class="nav-link" href="promotions">
+                                <a class="@NavClass("promotions")" href="promotions">
                                     <i class="fas fa-tags me-2"></i> Promotions
                                 </a>
                             </li>
@@ -153,7 +150,7 @@ else
                         @if (Can(AdminPermissionNames.NotificationsRead) || Can(AdminPermissionNames.NotificationsSend) || Can(AdminPermissionNames.SettingsManage) || Can(AdminPermissionNames.AuditRead))
                         {
                             <li class="nav-item">
-                                <a class="nav-link" href="messaging">
+                                <a class="@NavClass("messaging")" href="messaging">
                                     <i class="fas fa-bullhorn me-2"></i> Messaging
                                 </a>
                             </li>
@@ -161,16 +158,16 @@ else
                         @if (Can(AdminPermissionNames.AuditRead))
                         {
                             <li class="nav-item">
-                                <a class="nav-link" href="audit">
+                                <a class="@NavClass("audit")" href="audit">
                                     <i class="fas fa-clipboard-list me-2"></i> Audit Logs
                                 </a>
                             </li>
                         }
                     </ul>
                     <hr />
-                    <ul class="nav flex-column">
+                    <ul class="nav flex-column px-1 mb-3">
                         <li class="nav-item">
-                            <a class="nav-link" href="logout">
+                            <a class="nav-link text-danger-soft" href="logout">
                                 <i class="fas fa-sign-out-alt me-2"></i> Logout
                             </a>
                         </li>
@@ -204,4 +201,22 @@ else
     }
 
     private bool Can(string permission) => permissions.Contains(permission);
+
+    private string NavClass(string route) =>
+        IsNavActive(route) ? "nav-link active" : "nav-link";
+
+    private bool IsNavActive(string route)
+    {
+        var path = NormalizePath(Navigation.Uri.Replace(Navigation.BaseUri, ""));
+        if (string.IsNullOrEmpty(route))
+        {
+            return path is "" or "dashboard";
+        }
+
+        return path.Equals(route, StringComparison.OrdinalIgnoreCase) ||
+               path.StartsWith(route + "/", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizePath(string path) =>
+        path.Trim('/').Split('?')[0];
 }

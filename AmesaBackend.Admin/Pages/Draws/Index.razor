@@ -6,17 +6,17 @@
 @inject IDrawsService DrawsService
 @inject IHousesService HousesService
 @inject IAdminPermissionService PermissionService
-@inject IJSRuntime JSRuntime
-
 <PageTitle>Draws - Amesa Admin</PageTitle>
 
 <div class="container-fluid">
-    <div class="row mb-4">
+    <PageAlert Message="@pageAlertMessage" Type="@pageAlertType" OnDismiss="ClearPageAlert" />
+
+    <header class="admin-page-header row align-items-center">
         <div class="col">
-            <h1 class="display-5">
+            <h1 class="admin-page-title">
                 <i class="fas fa-dice"></i> Draws Management
             </h1>
-            <p class="text-muted">View and conduct lottery draws</p>
+            <p class="admin-page-subtitle">View and conduct lottery draws</p>
         </div>
         <div class="col-auto">
             <AuthorizeView Policy="@AdminPermissionNames.DrawsConduct">
@@ -27,7 +27,7 @@
                 </Authorized>
             </AuthorizeView>
         </div>
-    </div>
+    </header>
 
     <!-- Filters -->
     <div class="card mb-4">
@@ -129,7 +129,7 @@
                                         }
                                     </td>
                                     <td>
-                                        <span class="badge bg-@GetStatusBadgeClass(draw.DrawStatus)">@draw.DrawStatus</span>
+                                        <StatusBadge Value="@draw.DrawStatus" Style="StatusBadgeStyle.Draw" />
                                     </td>
                                     <td>@draw.DrawMethod</td>
                                     <td>
@@ -374,6 +374,8 @@
     private DateTime rescheduleDrawDate = DateTime.UtcNow.AddDays(1);
     private string? rescheduleError;
     private string cancelDrawHouseTitle = string.Empty;
+    private string? pageAlertMessage;
+    private string pageAlertType = "info";
 
     protected override async Task OnInitializedAsync()
     {
@@ -405,7 +407,7 @@
         catch (Exception ex)
         {
             Console.WriteLine($"Error loading draws: {ex.Message}");
-            await JSRuntime.InvokeVoidAsync("alert", $"Error loading draws: {ex.Message}");
+            SetPageAlert($"Error loading draws: {ex.Message}", "danger");
         }
         finally
         {
@@ -419,16 +421,13 @@
         await LoadDraws();
     }
 
-    private string GetStatusBadgeClass(string status)
+    private void SetPageAlert(string message, string type)
     {
-        return status switch
-        {
-            "Pending" => "warning",
-            "Completed" => "success",
-            "Cancelled" => "danger",
-            _ => "secondary"
-        };
+        pageAlertMessage = message;
+        pageAlertType = type;
     }
+
+    private void ClearPageAlert() => pageAlertMessage = null;
 
     private void ShowConductDrawModal(Guid drawId, string houseTitle)
     {
@@ -519,7 +518,7 @@
         }
         catch (Exception ex)
         {
-            await JSRuntime.InvokeVoidAsync("alert", $"Error cancelling draw: {ex.Message}");
+            SetPageAlert($"Error cancelling draw: {ex.Message}", "danger");
         }
         finally
         {
@@ -581,14 +580,14 @@
             var conductedBy = await PermissionService.GetCurrentAdminUserIdAsync() ?? Guid.Empty;
             
             await DrawsService.ConductDrawAsync(selectedDrawId.Value, conductedBy);
-            await JSRuntime.InvokeVoidAsync("alert", "Draw conducted successfully!");
+            SetPageAlert("Draw conducted successfully!", "success");
             CloseConductDrawModal();
             await LoadDraws(); // Refresh the list
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error conducting draw: {ex.Message}");
-            await JSRuntime.InvokeVoidAsync("alert", $"Error conducting draw: {ex.Message}");
+            SetPageAlert($"Error conducting draw: {ex.Message}", "danger");
         }
         finally
         {

@@ -103,7 +103,7 @@
                                     <td><strong>@transaction.Currency @transaction.Amount.ToString("F2")</strong></td>
                                     <td>@transaction.Currency</td>
                                     <td>
-                                        <span class="badge bg-@GetStatusBadgeClass(transaction.Status)">@transaction.Status</span>
+                                        <StatusBadge Value="@transaction.Status" Style="StatusBadgeStyle.Payment" />
                                     </td>
                                     <td>@(transaction.Description ?? "-")</td>
                                     <td>@(transaction.ReferenceId ?? "-")</td>
@@ -265,18 +265,6 @@
     {
         currentPage = page;
         await LoadTransactions();
-    }
-
-    private string GetStatusBadgeClass(string status)
-    {
-        return status switch
-        {
-            "Pending" => "warning",
-            "Completed" => "success",
-            "Failed" => "danger",
-            "Refunded" => "info",
-            _ => "secondary"
-        };
     }
 
     private string GetTypeBadgeClass(string type)
